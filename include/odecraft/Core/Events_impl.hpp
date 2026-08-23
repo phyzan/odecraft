@@ -1,0 +1,411 @@
+#ifndef ODECRAFT_EVENTS_IMPL_HPP
+#define ODECRAFT_EVENTS_IMPL_HPP
+
+#include <odecraft/Core/Events.hpp>
+
+
+namespace ode{
+
+// EventBase implementations
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+EventBase<Derived, T, MaskFunc>::EventBase(std::string name, MaskFunc mask, bool delay_mask) : name_(std::move(name)), mask_(std::move(mask)), delay_mask_(delay_mask) {
+    if (name_.empty()){
+        throw std::runtime_error("Please provide a non-empty name when instanciating an Event class");
+    }
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+const std::string& EventBase<Derived, T, MaskFunc>::name() const{
+    return name_;
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+constexpr bool EventBase<Derived, T, MaskFunc>::is_masked() const{
+    if constexpr (std::is_same_v<MaskFunc, std::nullptr_t>){
+        return false;
+    } else if constexpr (std::is_pointer_v<MaskFunc>){
+        return mask_ != nullptr;
+    } else {
+        return true;
+    }
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+bool EventBase<Derived, T, MaskFunc>::mask_delayed() const{
+    return delay_mask_ && this->is_masked();
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+void EventBase<Derived, T, MaskFunc>::apply_mask(T* out, const T& t, const T* q) const{
+    assert(this->is_masked() && "Default mask() implementation requires that mask != nullptr");
+    if constexpr (std::is_same_v<MaskFunc, std::nullptr_t>){
+        assert(false && "apply_mask called when MaskFunc is std::nullptr_t");
+    } else {
+        mask_(out, t, q);
+    }
+}
+
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+size_t EventBase<Derived, T, MaskFunc>::nsys() const{
+    return worker.size();
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+size_t EventBase<Derived, T, MaskFunc>::counter() const{
+    return counter_;
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+std::unique_ptr<Event<T>> EventBase<Derived, T, MaskFunc>::clone() const{
+    return std::make_unique<Derived>(*THIS);
+}
+
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+int EventBase<Derived, T, MaskFunc>::direction() const{
+    return this->direction_;
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+bool EventBase<Derived, T, MaskFunc>::is_located() const{
+    return is_located_;
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+const T& EventBase<Derived, T, MaskFunc>::t_start() const{
+    return start_;
+}
+
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+void EventBase<Derived, T, MaskFunc>::setup(T t_start, size_t n_sys, int direction){
+    // checks that it has not been already setup
+    // no other modifiers can be called if setup has not been called yet
+    assert(!this->is_setup_ && "Setup takes place only once");
+    assert(abs(direction)==1 && "Invalid direction");
+    worker.resize(n_sys);
+    direction_ = direction;
+    is_setup_ = true;
+    start_ = t_start;
+}
+
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+template<StateInterp<T> Callable>
+bool EventBase<Derived, T, MaskFunc>::locate_state(T& out, State<T> before, State<T> after, Callable&& obj_fun){
+    assert(this->is_setup_ && "Call setup() method before trying to locate an event");
+    assert((sgn(before.t(), after.t()) == this->direction_) && "Invalid direction");
+    if (THIS->locate_impl(out, before, after, obj_fun)){
+        is_located_ = true;
+        return true;
+    }else {
+        is_located_ = false;
+        return false;
+    }
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+bool EventBase<Derived, T, MaskFunc>::locate(T& out, State<T> before, State<T> after, const EventInterp<T>& interp){
+    return this->locate_state(out, before, after, interp);
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+bool EventBase<Derived, T, MaskFunc>::lock(){
+    if (is_located_){
+        THIS->register_impl();
+        return true;
+    }else{
+        return false;
+    }
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+void EventBase<Derived, T, MaskFunc>::reset(int direction){
+    THIS->reset_impl(direction);
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+template<StateInterp<T> Callable>
+bool EventBase<Derived, T, MaskFunc>::locate_impl(T& /*t*/, State<T> /*before*/, State<T> /*after*/, Callable&& /*obj_fun*/) const{
+    static_assert(false, "static override");
+    return false;
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+void EventBase<Derived, T, MaskFunc>::register_impl(){
+    counter_++;
+}
+
+template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
+void EventBase<Derived, T, MaskFunc>::reset_impl(int direction){
+    counter_ = 0;
+    is_located_ = false;
+    direction_ = (direction == 0) ? direction_ : direction;
+}
+
+// PreciseEvent implementations
+
+template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc, typename Derived>
+PreciseEvent<T, Target, MaskFunc, Derived>::PreciseEvent(std::string name, Target when, T event_tol, int dir, MaskFunc mask, bool delay_mask) : Base(std::move(name), std::move(mask), delay_mask), target(std::move(when)), crossing_dir(dir), ftol(event_tol) {}
+
+template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc, typename Derived>
+T PreciseEvent<T, Target, MaskFunc, Derived>::obj_fun(const T& t, const T* q) const{
+    return target(t, q);
+}
+
+template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc, typename Derived>
+int PreciseEvent<T, Target, MaskFunc, Derived>::sign_change_dir() const{
+    return crossing_dir;
+}
+
+template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc, typename Derived>
+template<StateInterp<T> Callable>
+bool PreciseEvent<T, Target, MaskFunc, Derived>::locate_impl(T& t, State<T> before, State<T> after, Callable&& obj_fun) const{
+    T val1 = this->obj_fun(before.t(), before.vector());
+    T val2 = this->obj_fun(after.t(), after.vector());
+
+    int t_dir = this->direction();
+    int d = this->sign_change_dir();
+    if ( (((d == 0) && (val1*val2 < 0)) || (t_dir*d*val1 < 0 && 0 < t_dir*d*val2)) && (abs<T>(val1) > ftol)){
+        T* vec = this->worker.data();
+
+        auto obj_fun_scalar = [&](T t_dummy) NDSPAN_LAMBDA_INLINE{
+            obj_fun(vec, t_dummy); // interpolate the state vector at time t_dummy, and pass the value on vec
+            return this->obj_fun(t_dummy, vec);
+        };
+
+        t = bisect<T, RootPolicy::Right>(obj_fun_scalar, before.t(), after.t(), this->ftol);
+        return true;
+    }
+    return false;
+}
+
+// PeriodicEvent implementations
+
+template<typename T, OptionalRhsFunc<T> MaskFunc, typename Derived>
+PeriodicEvent<T, MaskFunc, Derived>::PeriodicEvent(std::string name, T period, MaskFunc mask, bool delay_mask) : Base(name, std::move(mask), delay_mask), period_(period) {}
+
+template<typename T, OptionalRhsFunc<T> MaskFunc, typename Derived>
+const T& PeriodicEvent<T, MaskFunc, Derived>::period() const{
+    return period_;
+}
+
+template<typename T, OptionalRhsFunc<T> MaskFunc, typename Derived>
+T PeriodicEvent<T, MaskFunc, Derived>::get_t(size_t n) const{
+    return this->t_start() + (this->direction()*n*this->period());
+}
+
+template<typename T, OptionalRhsFunc<T> MaskFunc, typename Derived>
+template<StateInterp<T> Callable>
+bool PeriodicEvent<T, MaskFunc, Derived>::locate_impl(T& t, State<T> before, State<T> after, Callable&& /*obj_fun*/) const{
+    n_aux_ = n_;
+    int d = this->direction();
+
+    while (get_t(++n_aux_)*d <= before.t()*d){}
+
+    if (get_t(n_aux_)*d <= after.t()*d){
+        t = get_t(n_aux_);
+        return true;
+    }else {
+        return false;
+    }
+}
+
+template<typename T, OptionalRhsFunc<T> MaskFunc, typename Derived>
+void PeriodicEvent<T, MaskFunc, Derived>::register_impl(){
+    Base::register_impl();
+    n_ = n_aux_;
+}
+
+template<typename T, OptionalRhsFunc<T> MaskFunc, typename Derived>
+void PeriodicEvent<T, MaskFunc, Derived>::reset_impl(int direction){
+    Base::reset_impl(direction);
+    n_ = n_aux_ = 0;
+}
+
+
+
+template<typename T>
+EventCollection<T>::EventCollection(EventList<T> evs) : events(evs.size()), event_times(evs.size()), detection_order(evs.size()), located(evs.size()) {
+
+    if (evs.size() == 0){return;}
+
+    for (size_t i=0; i<evs.size(); i++){
+        if (idx_of_name.find(evs[i]->name()) != idx_of_name.end()){
+            throw std::runtime_error("Duplicate Event name not allowed: " + evs[i]->name());
+        }
+        idx_of_name[evs[i]->name()] = static_cast<int>(i);
+        this->events[i] = std::move(evs[i]);
+    }
+}
+
+template<typename T>
+const Event<T>& EventCollection<T>::event(size_t event_idx) const{
+    return *events[event_idx].get_raw_pointer();
+}
+
+
+template<typename T>
+int EventCollection<T>::event_idx(const std::string& name) const{
+    auto it = idx_of_name.find(name);
+    if (it != idx_of_name.end()){
+        return int(it->second);
+    }
+    return -1;
+}
+
+template<typename T>
+size_t EventCollection<T>::size() const{
+    return events.size();
+}
+
+template<typename T>
+size_t EventCollection<T>::detection_size() const{
+    return detections;
+}
+
+template<typename T>
+void EventCollection<T>::setup(T t_start, size_t n_sys, int direction){
+    worker.resize(n_sys);
+    masked_data.masked_vector.resize(n_sys);
+    for (size_t i=0; i<this->size(); i++){
+        events[i]->setup(t_start, n_sys, direction);
+    }
+}
+
+template<typename T>
+template<StateInterp<T> Callable>
+bool EventCollection<T>::detect_all_between(State<T> before, State<T> after, Callable&& obj_fun) {
+    if (this->size() == 0){
+        return false;
+    }
+
+    detections = 0;
+    has_masked_state = false;
+    located.fill(false);
+
+    // Locate all events and record which ones were found
+    for (size_t i=0; i<this->size(); i++){
+        if (events[i]->locate(event_times[i], before, after, getEventInterp<T>(obj_fun))){
+            located[i] = true;
+            detection_order[detections++] = i;
+        }
+    }
+
+    if (detections == 0){
+        return false;
+    }
+
+    // Sort detected events by time (respecting integration direction), with index as tiebreaker
+    int dir = events[0]->direction();
+    std::sort(detection_order.data(), detection_order.data() + detections,
+        [&](size_t a, size_t b){
+            T ta = dir * event_times[a];
+            T tb = dir * event_times[b];
+            return (ta < tb) || (ta == tb && a < b);
+        });
+
+    // Remove simultaneous events, keeping only the first one (lowest index)
+    size_t write = 1;
+    for (size_t read = 1; read < detections; read++){
+        if (event_times[detection_order[read]] != event_times[detection_order[read - 1]]){
+            detection_order[write++] = detection_order[read];
+        } else {
+            // Discard this event - mark as not located
+            located[detection_order[read]] = false;
+        }
+    }
+
+    detections = write;
+
+    // Find the first masked event and truncate detections after it
+    size_t first_masked = detections;
+    for (size_t i=0; i<detections; i++){
+        size_t idx = detection_order[i];
+        if (events[idx]->is_masked()){
+            first_masked = i;
+            break;
+        }
+    }
+
+    // If a masked event was found, compute the masked state and truncate
+    if (first_masked < detections){
+        size_t masked_idx = detection_order[first_masked];
+        T t_mask = event_times[masked_idx];
+
+        // Interpolate state at mask time
+        obj_fun(worker.data(), t_mask);
+
+        // Apply the mask transformation
+        events[masked_idx]->apply_mask(masked_data.masked_vector.data(), t_mask, worker.data());
+        masked_data.time = t_mask;
+        masked_data.idx = masked_idx;
+        has_masked_state = true;
+
+        // Mark events after the masked event as not located
+        for (size_t i = first_masked + 1; i < detections; i++){
+            located[detection_order[i]] = false;
+        }
+
+        // Keep only events up to and including the first masked event
+        detections = first_masked + 1;
+    }
+
+    return true;
+}
+
+template<typename T>
+void EventCollection<T>::reset(int direction){
+
+    for (size_t i=0; i<this->size(); i++){
+        events[i]->reset(direction);
+        located[i] = false;
+    }
+
+    detections = 0;
+    has_masked_state = false;
+}
+
+
+
+template<typename T>
+std::vector<EventOptions> EventCollection<T>::validate_events(const std::vector<EventOptions>& options) const {
+    size_t Nevs = this->size();
+    std::vector<EventOptions> res(Nevs);
+    bool found;
+    for (size_t i=0; i<options.size(); i++) {
+        found = false;
+        for (size_t j=0; j<Nevs; j++){
+            if (this->event(j).name() == options[i].name){
+                found = true;
+                break;
+            }
+        }
+        if (!found){
+            throw std::logic_error("Event name \""+options[i].name+"\" is invalid");
+        }
+    }
+
+    for (size_t i=0; i<Nevs; i++){
+        found = false;
+        for (const auto& option : options){
+            if (option.name == this->event(i).name()){
+                found = true;
+                res[i] = option;
+                res[i].max_events = ndspan::max(option.max_events, -1);
+                break;
+            }
+        }
+        if (!found){
+            res[i] = {this->event(i).name()};
+        }
+    }
+    return res;
+}
+
+
+} // namespace ode
+
+#endif // ODECRAFT_EVENTS_IMPL_HPP

@@ -1,0 +1,6 @@
+#ifndef ODECRAFT_TESTS_LAZY_SCALAR_HPP
+#define ODECRAFT_TESTS_LAZY_SCALAR_HPP
+
+void test_lazy_scalar();
+
+#endif // ODECRAFT_TESTS_LAZY_SCALAR_HPP
