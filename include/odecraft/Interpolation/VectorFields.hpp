@@ -1,0 +1,61 @@
+#ifndef ODECRAFT_VECTOR_FIELDS_HPP
+#define ODECRAFT_VECTOR_FIELDS_HPP
+
+
+#include <odecraft/DenseOde/OdeInt.hpp>
+
+namespace ode::interp {
+
+
+struct VirtualVectorField {
+
+    virtual ~VirtualVectorField() = default;
+
+    virtual int ndim() const = 0;
+
+    virtual bool contains(const double* coords) const = 0;
+    
+    virtual pbox::Box<OdeResult<double>> streamline(const double* x0, double length, double rtol, double atol, double min_step, double max_step, double stepsize, int direction, Integrator method, bool normalized, const std::vector<double>& t_eval) const = 0;
+
+    virtual pbox::Box<OdeResult<double>> streamline(const double* x0, double length, double rtol, double atol, double min_step, double max_step, double stepsize, int direction, Integrator method, bool normalized) const = 0;
+
+    virtual pbox::Box<ODE<double>> get_streamline_ode(const double* x0, double rtol, double atol, double min_step, double max_step, double stepsize, int direction, Integrator method, bool normalized) const = 0;
+
+}; // class VirtualVectorField
+
+struct EmptyVectorField {};
+
+template<typename Derived, typename T, int NDIM, bool AS_VIRTUAL>
+class VectorField : public std::conditional_t<AS_VIRTUAL, VirtualVectorField, EmptyVectorField> {
+
+
+public:
+
+    // ============== Static Overrides ==================
+    bool interp(T* out, const T* coords) const;
+    int ndim() const;
+    bool contains(const T* coords) const;
+    // =================================================
+
+
+    void OdeFuncNorm(T* out, const T& t, const T* q) const;
+
+    void OdeFunc(T* out, const T& t, const T* q) const;
+
+    pbox::Box<OdeResult<T>> streamline(const T* x0, T length, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, Integrator method, bool normalized, const std::vector<double>& t_eval) const;
+
+    pbox::Box<OdeResult<T>> streamline(const T* x0, T length, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, Integrator method, bool normalized) const;
+
+    pbox::Box<ODE<T, NDIM>> get_streamline_ode(const T* x0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, Integrator method, bool normalized) const;
+
+protected:
+
+    VectorField() = default;
+
+    DEFAULT_RULE_OF_FOUR(VectorField)
+
+}; // class VectorField
+
+} // namespace ode::interp
+
+#endif // ODECRAFT_VECTOR_FIELDS_HPP

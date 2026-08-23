@@ -1,0 +1,6 @@
+#ifndef ODECRAFT_TESTS_SOLVERS_HPP
+#define ODECRAFT_TESTS_SOLVERS_HPP
+
+void test_solvers();
+
+#endif // ODECRAFT_TESTS_SOLVERS_HPP

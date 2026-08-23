@@ -1,0 +1,202 @@
+#ifndef ODECRAFT_RICH_BASE_HPP
+#define ODECRAFT_RICH_BASE_HPP
+
+/**
+ * @file RichBase.hpp
+ * @brief Extended ODE solver class with event detection and dense output interpolation.
+ *
+ * This file defines the RichSolver template class, which extends BaseSolver with
+ * additional functionality for event detection and continuous interpolation.
+ * RichSolver maintains a linked chain of interpolators that enables dense output
+ * across integration steps, and supports event-driven integration where the solver
+ * can detect and respond to user-defined events during integration.
+ *
+ * Key features beyond BaseSolver:
+ * - Event detection with configurable triggering conditions
+ * - Continuous dense output interpolation across multiple steps
+ * - Automatic handling of state discontinuities at events
+ */
+
+#include <odecraft/Core/BaseSolver.hpp>
+
+
+namespace ode{
+
+/**
+ * @brief Extended ODE solver with event detection and dense output capabilities.
+ *
+ * RichSolver extends BaseSolver to provide event-driven integration and continuous
+ * dense output interpolation. It maintains an internal collection of events that
+ * are monitored during integration, and builds a chain of interpolators that
+ * enables querying the solution at any time within the integration history.
+ *
+ * The solver automatically handles state discontinuities that may occur at events,
+ * and provides facilities for advancing to the next event or querying which events
+ * are currently active.
+ *
+ * @tparam Derived The derived solver class (CRTP pattern).
+ * @tparam T       Scalar type for computations (e.g., double, float).
+ * @tparam N       System size at compile time. Use 0 for runtime-sized systems.
+ * @tparam SP      Solver policy (must be RichStatic or RichVirtual for this class).
+ * @tparam RhsType Type of the right-hand side function.
+ * @tparam JacPolicy Type of the Jacobian function (or nullptr_t if not provided).
+ *
+ * @note This class uses static polymorphism (CRTP).
+ *       The solver policy must be RichStatic or RichVirtual for this class to be used.
+ */
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+class RichSolver : public BaseSolver<Derived, T, N, SP, OdeType>{
+
+    using Base = BaseSolver<Derived, T, N, SP, OdeType>;
+
+public:
+
+    // ACCESSORS
+    /**
+     * @brief Get a reference to the event collection.
+     * @return Const reference to the internal EventCollection.
+     */
+    const EventCollection<T>&   event_col() const;
+
+    bool                        at_event(int event_idx = -1) const;
+
+    EventState<T>               current_event() const{
+        if (this->at_event()){
+            return EventState<T>{
+                .event = &evt_col.event(current_idx),
+                .idx = current_idx,
+                .is_masked = is_at_canon_event,
+                .active = true};
+        } else {
+            return EventState<T>{.active = false};
+        }
+    }
+
+    /**
+     * @brief Get the index of a named event
+     * @param name Name of the event to find.
+     * @return Integer index of the event with the given name, or -1 if not found.
+     */
+    int                         event_idx(const std::string& name) const;
+
+    std::vector<size_t>         toEventIdx(const std::vector<std::string>& event_names) const;
+
+    /**
+     * @brief Print the current solver state to stdout.
+     *
+     * Includes event information in addition to the base state output.
+     *
+     * @param prec Number of decimal places for floating-point output.
+     */
+    void                        show_state(int prec=8) const;
+
+    // MODIFIERS
+
+    /**
+     * @brief Advance the solver until an event is detected.
+     *
+     * Repeatedly calls advance() until an event triggers or the solver
+     * stops (due to error or reaching a dead state).
+     *
+     * @param event_idx Optional indices of specific events to advance to. If empty (default), advances to the next event regardless of type.
+     * @return True if an event was reached, false if solver stopped for other reasons.
+     */
+    bool                        advance_to_event(const std::vector<size_t>& event_idx = {});
+
+    /// @brief Same as advance_to_event but with a maximum time limit.
+    bool                        advance_to_event(const T& tmax, const std::vector<size_t>& event_idx = {});
+
+    bool                        advance_to_event(const std::vector<std::string>& event_names);
+
+    bool                        advance_to_event(const T& tmax, const std::vector<std::string>& event_names);
+    /// @brief Check if the solver is currently at a canon event.
+    bool                        at_canon_event() const;
+
+    // VIRTUAL INTERFACE ALIASES (inline overrides to avoid virtual calls)
+    // Accessors
+    const EventCollection<T>&   get_event_col() const { return event_col(); }
+    int                         get_event_idx(const std::string& name) const { return event_idx(name); }
+    bool                        get_at_event(int event_idx = -1) const { return at_event(event_idx); }
+    EventState<T>               get_current_event() const { return current_event(); }
+    bool                        get_at_canon_event() const { return at_canon_event(); }
+    // Modifiers
+    bool                        do_advance_to_event(const std::vector<size_t>& event_idx = {}) { return advance_to_event(event_idx); }
+    bool                        do_advance_to_event(const T& tmax, const std::vector<size_t>& event_idx = {}) { return advance_to_event(tmax, event_idx); }
+    bool                        do_advance_to_event(const std::vector<std::string>& event_names) { return advance_to_event(event_names); }
+    bool                        do_advance_to_event(const T& tmax, const std::vector<std::string>& event_names) { return advance_to_event(tmax, event_names); }
+
+    /// @brief Reset implementation hook. Resets events and stops interpolation.
+    void                        Reset();
+
+    RichSolver() = delete;
+
+protected:
+
+    /**
+     * @brief Protected constructor for derived classes.
+     * @param events Vector of event pointers to monitor during integration.
+     * @see SOLVER_CONSTRUCTOR macro for other parameter details.
+     */
+    RichSolver(SOLVER_CONSTRUCTOR(T), EventList<T> evs = {});
+
+    DEFAULT_RULE_OF_FOUR(RichSolver)
+
+    ~RichSolver() = default;
+
+    /// @brief Advance implementation with event detection.
+    template<typename... Args>
+    bool        Adv_Impl(Args&&... args);
+
+    /**
+     * @brief Re-adjustment hook for state changes at events.
+     * @param new_vector New state vector values (size Nsys).
+     */
+    void ReAdjust(const T* new_vector);
+
+    struct Accessor : Base::Accessor {};
+    
+    //================= STATIC OVERRIDES ======================
+
+    bool    RequestTimeFloor(T& out);
+    //=========================================================
+
+private:
+
+    /// @brief Returns true if the queue was successfully advanced to the next event, updating flags, and false nothing happened.
+    bool push_event_queue();
+
+    /// @brief Collection of events being monitored.
+    EventCollection<T>                      evt_col;
+    size_t                                  current_idx = 0; //index of the currently triggered event. If not at an event, this should not be accessed.
+    int                                     detection_idx = -1; //index of the currently triggered event in the detection order. At the start of an event detection this is -1, at the end of the iteration it is equal to the number of detections - 1.
+    bool                                    is_at_event = false;
+    bool                                    is_at_canon_event = false;
+    bool                                    is_event_waiting = false;
+
+};
+
+
+namespace detail{
+
+/**
+ * @brief Type alias that selects between BaseSolver and RichSolver based on policy.
+ *
+ * If the solver policy is RichStatic or RichVirtual, this resolves to RichSolver
+ * (with event detection and dense output). Otherwise, it resolves to BaseSolver.
+ *
+ * @tparam Derived The derived solver class (CRTP pattern).
+ * @tparam T       Scalar type for computations.
+ * @tparam N       System size at compile time (0 for runtime-sized).
+ * @tparam SP      Solver policy controlling which base class is selected.
+ * @tparam RhsType Type of the right-hand side function.
+ * @tparam JacPolicy Type of the Jacobian function.
+ */
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+using BaseDispatcher = std::conditional_t<(SP == SolverPolicy::RichStatic || SP == SolverPolicy::RichVirtual), RichSolver<Derived, T, N, SP, OdeType>, BaseSolver<Derived, T, N, SP, OdeType>>;
+
+} // namespace ode::detail
+
+} // namespace ode
+
+
+#endif // ODECRAFT_RICH_BASE_HPP

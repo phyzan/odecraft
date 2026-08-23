@@ -1,0 +1,571 @@
+#ifndef ODECRAFT_BDF_IMPL_HPP
+#define ODECRAFT_BDF_IMPL_HPP
+
+
+#include <odecraft/Integrators/BDF.hpp>
+#include <odecraft/Tools.hpp>
+
+namespace ode{
+
+
+template<typename T, size_t N>
+LUResult<T, N>::LUResult(size_t Nsys) : LU(Nsys, Nsys), piv(Nsys) {}
+
+template<typename T, size_t N>
+void LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
+    size_t n = A_input.Nrows();
+    JacMat<T, N>& A = LU;
+
+    // Copy input to output
+    ndspan::copy_array(A.data(), A_input.data(), A_input.size());
+
+    // Initialize pivot array as identity
+    for (size_t i = 0; i < n; ++i) {
+        piv[i] = i;
+    }
+
+    for (size_t k = 0; k < n - 1; ++k) {
+        // Find pivot row
+        size_t p = k;
+        T max_val = abs<T>(A(k, k));
+        for (size_t i = k + 1; i < n; ++i) {
+            if (abs<T>(A(i, k)) > max_val) {
+                max_val = abs<T>(A(i, k));
+                p = i;
+            }
+        }
+
+        // Check singular
+        if (max_val < 1e-15) {
+            throw std::runtime_error("Matrix is singular or nearly singular");
+        }
+
+        // Record and apply pivot
+        if (p != k) {
+            std::swap(piv[k], piv[p]);  // Record which row k was swapped with
+            for (size_t c = 0; c < n; c++) {
+                std::swap(A(k, c), A(p, c));
+            }
+        }
+
+        // Eliminate below pivot
+        for (size_t i = k + 1; i < n; ++i) {
+            A(i, k) /= A(k, k);
+            for (size_t j = k + 1; j < n; ++j) {
+                A(i, j) -= A(i, k) * A(k, j);
+            }
+        }
+    }
+}
+
+template<typename T, size_t N>
+void LUResult<T, N>::lu_solve(T* x, const T* b) const{
+    size_t n = piv.size();
+
+    // Apply permutation: x = P*b
+    for (size_t i = 0; i < n; ++i) {
+        x[i] = b[piv[i]];
+    }
+
+    // Forward substitution: L * y = P*b
+    for (size_t i = 0; i < n; ++i) {
+        for (size_t j = 0; j < i; ++j) {
+            x[i] -= LU(i, j) * x[j];
+        }
+    }
+
+    // Backward substitution: U * x = y
+    for (size_t i = n; i-- > 0; ) {
+        for (size_t j = i + 1; j < n; ++j) {
+            x[i] -= LU(i, j) * x[j];
+        }
+        x[i] /= LU(i, i);
+    }
+}
+
+template<typename T>
+Array1D<T> arange(size_t a, size_t b){
+    Array1D<T> res(b-a);
+    #pragma omp simd
+    for (size_t i=0; i<(b-a); i++){
+        res[i] = a+i;
+    }
+    return res;
+}
+
+template<typename T>
+void cumprod(T* res, const T* x, size_t size){
+    res[0] = x[0];
+    for (size_t i=1; i<size; i++){
+        res[i] = res[i-1]*x[i];
+    }
+}
+
+template<typename T>
+BDFCONSTS<T>::BDFCONSTS(){
+    KAPPA = {0, -T(185)/1000, -T(1)/9, -T(823)/10000, -T(415)/10000, 0};
+    GAMMA[0] = 0;
+    T cumulative = 0;
+    for (size_t i = 1; i < BDF_MAX_ORDER+1; ++i) {
+        cumulative += T(1) / i;
+        GAMMA[i] = cumulative;
+    }
+
+    for (size_t i=0; i<BDF_MAX_ORDER+1; i++){
+        ALPHA[i] = (1-KAPPA[i])*GAMMA[i];
+        ERR_CONST[i] = KAPPA[i]*GAMMA[i] + T(1)/T(1UL+i);
+    }
+}
+
+template<typename T>
+void compute_R(T* R, size_t order, T factor) {
+    size_t n = order+1;
+    // Initialize first row to 1
+    for (size_t j=0; j<n; j++){
+        R[j] = 1;
+    }
+
+    // Compute M[i,j] = (i-1 - factor*j) / i for i,j >= 1, then cumulative product
+    for (size_t i = 1; i < n; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            R[i*n+j] = R[(i-1)*n + j]*(i-1 - factor * j) / i;
+        }
+    }
+}
+
+template<typename T>
+void bdf_interp(T* result, const T& t, const T& t2, const T& h, const T* D, size_t order, size_t size){
+    for (size_t i=0; i<size; i++){
+        T p = 1;
+        T sum = 0;
+        for (size_t j=0; j<order; j++){
+            p *= (t - (t2 - h*j))/(h*(1+j));
+            sum += D[(j+1)*size+i] * p;
+        }
+        result[i] = D[i] + sum;
+    }
+}
+
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+template<typename... Type>
+BDF<T, N, SP, OdeType, Derived>::BDF(private_tag, MAIN_CONSTRUCTOR(T), Type&&... extras) : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::forward<Type>(extras)...), _J(q0.size(), q0.size()), _B(q0.size(), q0.size()), _LU(q0.size()), _R((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _U((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _RU((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _f(q0.size()), _dy(q0.size()), _b(q0.size()), _scale(q0.size()), _ypred(q0.size()), _psi(q0.size()), _d(q0.size()), _error(q0.size()), _error_m(q0.size()), _error_p(q0.size()) {
+    
+    if (rtol == 0){
+        rtol = 100*std::numeric_limits<T>::epsilon();
+#ifndef DPK_NO_WARN
+        this->cerr(GetStr("Warning: rtol=0 not allowed in the BDF method. Setting rtol = ", rtol));
+#endif
+    }
+    _newton_tol = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol, ndspan::min<T>(T(3)/100, pow(rtol, T(1)/T(2))));
+
+    if (!this->is_dead() && q0.data() != nullptr){
+        if (this->validate_ics_impl(t0, q0.data())){
+            this->_reset_impl_alone();
+        }else{
+            this->kill("Initial Jacobian contains nan or inf");
+        }
+    }
+}
+
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void BDF<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector) {
+    Base::ReAdjust(new_vector);
+    ndspan::copy_array(_D[2].data(), _D[_idx_D].data(), this->nsys());
+    _D[0].fill(0);
+    _D[1].fill(0);
+    ndspan::copy_array(_D[0].data(), new_vector, this->nsys());
+    this->rhs(_D[0].data()+this->nsys(), this->t(), new_vector);
+    for (size_t i=0; i<this->nsys(); i++){
+        _D[0][i+this->nsys()] *= this->stepsize() * this->direction();
+    }
+    this->jac(_J.data(), this->t(), new_vector);
+    _order = 1;
+    _n_eq_steps = 0;
+    _valid_LU = false;
+    _idx_D = 0;
+    interp_idx = 2;
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+bool BDF<T, N, SP, OdeType, Derived>::validate_ics_impl(T t0, const T* q0) const{
+
+    // use _B as it is a dummy variable
+    if (Base::validate_ics_impl(t0, q0)){
+        this->jac(_B.data(), t0, q0);
+        return all_are_finite(_B.data(), _B.size());
+    }else {
+        return false;
+    }
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+Integrator BDF<T, N, SP, OdeType, Derived>::method() const {
+    return Integrator::BDF;
+}
+
+
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void BDF<T, N, SP, OdeType, Derived>::Reset(){
+    Base::Reset();
+    this->_reset_impl_alone();
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void BDF<T, N, SP, OdeType, Derived>::_reset_impl_alone(){
+    T t0 = this->ics().t();
+    T h0 = this->ics().habs() * this->direction();
+    const T* q0 = this->ics().vector();
+    Array1D<T, N> f(this->nsys());
+    this->rhs(f.data(), t0, q0);
+
+    for (size_t k = 0; k<_D.size(); k++){
+        _D[k] = Dlike(BDF_MAX_ORDER+3, this->nsys());
+        for (size_t j=0; j<this->nsys(); j++){
+            _D[k](0, j) = q0[j];
+            _D[k](1, j) = f[j] * h0;
+        }
+    }
+    this->jac(_J.data(), t0, q0);
+    _order = 1;
+    _n_eq_steps = 0;
+    _valid_LU = false;
+    _idx_D = 0;
+    interp_idx = 0;
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
+    const T& h_min = this->min_step();
+    const T& max_step = this->max_step();
+    const T& atol = this->atol();
+    const T& rtol = this->rtol();
+
+    const T& t = state[0];
+    const T& stepsize = state[1];
+    size_t nsys = this->nsys();
+
+    T& t_new = res[0] = state[0];
+    T& habs = res[1];
+    T* y_new = res+2;
+
+    ndspan::copy_array(y_new, state+2, nsys);
+
+    T safety, max_factor, factor, c;
+    int delta_order;
+    bool converged;
+    bool currentjac = false;
+    bool step_accepted = false;
+    NewtConv conv_result;
+
+    if (stepsize > max_step){
+        habs = max_step;
+        _change_D(max_step/stepsize);
+    }
+    else if (stepsize < h_min){
+        habs = h_min;
+        _change_D(h_min/stepsize);
+    }
+    else{
+        habs = stepsize;
+    }
+
+    while(!step_accepted){
+
+        // Checks go at the top so that continue statements inside the loop will still trigger them.
+        if (habs < h_min){
+            return StepResult::MIN_STEP_ERROR; // TODO: The algorithm does not work properly when we go below min_step.
+        }else if (habs > max_step){
+            _change_D(max_step/habs);
+            habs = max_step;
+            interp_idx = int(_idx_D);
+            return StepResult::Success; // The step is acceptet, but the stepsize is limited by max_step.
+        }else if (habs < this->MIN_STEP){
+            return StepResult::TINY_STEP_ERROR;
+        }
+        
+        t_new = t + habs * this->direction();
+
+        _set_prediction(_ypred.data());
+        #pragma omp simd
+        for (size_t i=0; i<nsys; i++){
+            _scale[i] = atol + rtol * abs<T>(_ypred[i]);
+        }
+        _set_psi(_psi.data());
+
+        converged = false;
+        c = habs * this->direction() / BDF_COEFS.ALPHA[_order];
+        while (!converged){
+            if (!_valid_LU){
+                for (size_t i=0; i<nsys; i++){
+                    for (size_t j=0; j<nsys; j++){
+                        if (i == j){
+                            _B(i, j) = 1 - c*_J(i, j);
+                        }else{
+                            _B(i, j) = -c*_J(i, j);
+                        }
+                    }
+                }
+                _LU.lu_factor(_B);
+                _valid_LU = true;
+            }
+
+            conv_result = _solve_bdf_system(y_new, _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
+            if (conv_result.flag != StepResult::Success){
+                return conv_result.flag;
+            }
+            converged = conv_result.converged;
+
+            if (!converged){
+                if (currentjac){
+                    break;
+                }
+                this->jac(_J.data(), t_new, _ypred.data());
+                _valid_LU = false;
+                currentjac = true;
+            }
+        }
+
+        if (!converged){
+            factor = T(1)/2;
+            habs *= factor;
+            _change_D(factor);
+            _valid_LU = false;
+            continue;
+        }
+
+        safety = T(9)/10 * T(2UL * NEWTON_MAXITER + 1UL)/(2UL * NEWTON_MAXITER + conv_result.n_iter);
+        #pragma omp simd
+        for (size_t i=0; i<nsys; i++){
+            _scale[i] = atol + rtol * abs<T>(y_new[i]);
+            _error[i] = BDF_COEFS.ERR_CONST[_order] * _d[i];
+        }
+        _error_norms[1] = rms_norm(_error.data(), _scale.data(), nsys);
+        if (_error_norms[1] > 1){
+            factor = max<T>(this->MIN_FACTOR, safety * pow(_error_norms[1], T(-1)/(_order+1)));
+            habs *= factor;
+            _change_D(factor);
+        }
+        else{
+            step_accepted = true;
+        }
+    }
+
+    _n_eq_steps++;
+
+    T* D = _D[_idx_D].data();
+    for (size_t i=0; i<nsys; i++){
+        D[(_order+2)*nsys + i] = _d[i] - D[(_order+1)*nsys + i];
+        D[(_order+1)*nsys + i] = _d[i];
+    }
+
+    for (size_t i = _order + 1; i -- > 0;) {
+        #pragma omp simd
+        for (size_t j=0; j<nsys; j++){
+            D[i*nsys + j] += D[(i+1)*nsys + j];
+        }
+    }
+
+    if (_n_eq_steps < _order + 1){
+        interp_idx = int(_idx_D);
+        return StepResult::Success;
+    }
+
+    if (_order > 1){
+        for (size_t i=0; i<nsys; i++){
+            _error_m[i] = BDF_COEFS.ERR_CONST[_order-1] * D[_order*nsys + i];
+        }
+        _error_norms[0] = rms_norm(_error_m.data(), _scale.data(), nsys);
+    }
+    else{
+        _error_norms[0] = inf<T>();
+    }
+
+
+    if (_order < BDF_MAX_ORDER){
+        for (size_t i=0; i<nsys; i++){
+            _error_p[i] = BDF_COEFS.ERR_CONST[_order+1] * D[(_order+2)*nsys + i];
+        }
+        _error_norms[2] = rms_norm(_error_p.data(), _scale.data(), nsys);
+    }
+    else{
+        _error_norms[2] = inf<T>();
+    }
+
+    delta_order = -1;
+    max_factor = pow(_error_norms[0], T(-1)/(_order));
+    for (size_t i=1; i<3; i++){
+        T tmp = pow(_error_norms[i], T(-1)/(_order+i));
+        if (tmp > max_factor){
+            max_factor = tmp;
+            delta_order = int(i) - 1;
+        }
+    }
+
+    _order += delta_order;
+    auto candidate_factor = safety * max_factor;
+    factor = std::min<T>(this->MAX_FACTOR, candidate_factor);
+    habs *= factor;
+    _change_D(factor);
+    _valid_LU = false;
+    interp_idx = int(_idx_D);
+    return StepResult::Success;
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+auto BDF<T, N, SP, OdeType, Derived>::local_interp() const{
+    return [D=_D[interp_idx], order=_order, t2=this->interp_new_state_ptr()[0], n=this->nsys(), h = this->stepsize()*this->direction()](T* out, const T& t){
+        bdf_interp<T>(out, t, t2, h, D.data(), order, n);
+    };
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+ void BDF<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
+    bdf_interp<T>(result, t, this->interp_new_state_ptr()[0], this->stepsize()*this->direction(), _D[interp_idx].data(), _order, this->nsys());
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+NewtConv BDF<T, N, SP, OdeType, Derived>::_solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale){
+    d.fill(0);
+    size_t n = this->nsys();
+    ndspan::copy_array(y, y_pred, n);
+    T dy_norm = 0;
+    T dy_norm_old = 0;
+    T rate = 0;
+    bool converged = false;
+    size_t j=0;
+    StepResult flag = StepResult::Success;
+    for (size_t k=0; k<NEWTON_MAXITER; k++){
+        this->rhs(_f.data(), t_new, y);
+
+        #pragma omp simd
+        for (size_t i=0; i<n; i++){
+            _b[i] = c * _f[i] - psi[i] - d[i];
+        }
+        LU.lu_solve(_dy.data(), _b.data());
+        dy_norm = rms_norm(_dy.data(), scale.data(), n);
+
+        if (dy_norm_old == 0){
+            rate = 0;
+        }
+        else{
+            rate = dy_norm/dy_norm_old;
+        }
+
+        if (rate != 0 && (rate >= 1 || (pow(rate, NEWTON_MAXITER-k)*dy_norm > _newton_tol * (1-rate)))){
+            break;
+        }
+
+        #pragma omp simd
+        for (size_t i=0; i<n; i++){
+            y[i] += _dy[i];
+            d[i] += _dy[i];
+        }
+
+        if (!all_are_finite(y, n)){
+            flag = StepResult::INF_ERROR;
+            break;
+        }else if (dy_norm == 0 || ((rate != 0) && (rate * dy_norm < _newton_tol * (1-rate)))){
+            converged = true;
+            break;
+        }
+
+        dy_norm_old = dy_norm;
+        j++;
+    }
+
+    return {.converged = converged, .n_iter = j+1, .flag = flag};
+
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void BDF<T, N, SP, OdeType, Derived>::_change_D(const T& factor){
+    T* R = _R.data();
+    T* U = _U.data();
+    T* RU = _RU.data();
+    size_t n = _order+1;
+    size_t nsys = this->nsys();
+    compute_R(_R.data(), _order, factor);
+    compute_R(_U.data(), _order, T(1));
+
+    for (size_t i=0; i<_RU.size(); i++){
+        RU[i]=0;
+    }
+
+    for (size_t i=0; i<n; i++){
+        for (size_t k=0; k<n; k++){
+            T p =  R[i*n+k];
+            #pragma omp simd
+            for (size_t j=0; j<n; j++){
+                RU[i * n+j] += p*U[k*n+j];
+            }
+        }
+    }
+
+    Dlike& D_new = _D[1-_idx_D];
+    const Dlike& D = _D[_idx_D];
+
+    for (size_t i=0; i<n; i++){
+        for (size_t j=0; j< nsys; j++){
+            T sum = 0;
+            for (size_t k=0; k<n; k++){
+                sum += RU[k*n+i]*D[k*nsys+j];
+            }
+            D_new[i*nsys+j] = sum;
+        }
+    }
+
+    _idx_D = 1 - _idx_D;
+    _n_eq_steps = 0;
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void BDF<T, N, SP, OdeType, Derived>::_set_prediction(T* y){
+    size_t n=this->nsys();
+    T* D = _D[_idx_D].data();
+
+    for (size_t j=0; j < n; j++){
+        y[j] = 0;
+    }
+
+    for (size_t i=0; i < _order+1; i++){
+        #pragma omp simd
+        for (size_t j=0; j < n; j++){
+            y[j] += D[i * n + j];
+        }
+    }
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void BDF<T, N, SP, OdeType, Derived>::_set_psi(T* psi){
+    size_t n = this->nsys();
+    const T* D = _D[_idx_D].data();
+    const T* g = BDF_COEFS.GAMMA.data();
+    const T& a = BDF_COEFS.ALPHA[_order];
+
+    for (size_t j=0; j < n; j++){
+        psi[j] = 0;
+    }
+    for (size_t i=1; i<_order+1; i++){
+        //optimize
+        #pragma omp simd
+        for (size_t j=0; j<n; j++){
+            psi[j] += D[i * n + j] * g[i] / a;
+        }
+    }
+}
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+bool BDF<T, N, SP, OdeType, Derived>::_resize_step(T& factor, const T& min_step, const T& max_step){
+    //factor should be positive
+    bool res = resize_step(factor, min_step, max_step); //automatically changes factor if needed
+    _change_D(factor);
+    return res;
+}
+
+
+} // namespace ode
+
+#endif // ODECRAFT_BDF_IMPL_HPP
