@@ -33,25 +33,11 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* jm, const T& t, const T* q, 
     if constexpr (JP == JacPolicy::Approx){
         return this->jac_approx(jm, t, q, dt);
     } else if constexpr (JP == JacPolicy::Autodiff){
-        // TODO : maybe use only the second branch for both cases
-        // (for large N, the compiler might explode from the double template recursion)
         decltype(auto) scratch_duals = this->scratch_.duals();
-        if constexpr (N > 0){
-            NDSPAN_FOR_LOOP(I, N,
-                scratch_duals[I+N] = DualType(q[I], {.axis=I});
-            );
-            ode_.Rhs(scratch_duals.data(), t, scratch_duals.data()+N);
-            const DualType* rhs = scratch_duals.data();
-            NDSPAN_FOR_LOOP(I, N,
-                NDSPAN_FOR_LOOP(J, N,
-                    jm[I + J*N] = rhs[I].get_diff_wrt(J);
-                );
-            );
-            return;
-        } else {
+        MutView<T, Layout::F, N, N> jacmat = this->jac_view(jm);
+
+        DualType::with_default_nvars(this->nsys(), [&](){
             const size_t nsys = this->nsys();
-            const size_t nvars_default = DualType::get_default_nvars();
-            DualType::set_default_nvars(nsys);
             for (size_t i=0; i<nsys; i++){
                 scratch_duals[i + nsys] = DualType(q[i], {.axis=int(i)});
             }
@@ -59,11 +45,10 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* jm, const T& t, const T* q, 
             const DualType* rhs = scratch_duals.data();
             for (size_t i=0; i<nsys; i++){
                 for (size_t j=0; j<nsys; j++){
-                    jm[i + j*nsys] = rhs[i].get_diff_wrt(j);
+                    jacmat(i, j) = rhs[i].get_diff_wrt(j);
                 }
             }
-            DualType::set_default_nvars(nvars_default);
-        }
+        });
     } else {
         ode_.Jac(jm, t, q);
     }

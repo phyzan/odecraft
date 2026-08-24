@@ -83,12 +83,20 @@ public:
 
     const OdeType& ode() const;
 
+    constexpr size_t nsys_main() const {
+        if constexpr (N > 0){
+            return N;
+        } else {
+            return nsys_;
+        }
+    }
+
 private:
     OdeType ode_;
-    mutable Array1D<DualType, 2*N> diff_worker;
-    mutable Array1D<VarDualType, 2*N> jac_worker;
-    mutable Array2D<T, N, N, ndspan::Allocation::Auto, ndspan::Layout::F> jm;
-    size_t nsys = N; // Size of the original system, without the variational equations (not the augmented system)
+    mutable Array1D<DualType, 2*N> diff_worker_;
+    mutable Array1D<VarDualType, 2*N> jac_worker_;
+    mutable Array2D<T, N, N, ndspan::Allocation::Auto, ndspan::Layout::F> jm_;
+    size_t nsys_ = N; // Size of the original system, without the variational equations (not the augmented system)
 };
 
 
