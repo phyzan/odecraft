@@ -7,59 +7,44 @@
 namespace ode::chaos{
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
-VariationalOdeSys<T, N, OdeType>::VariationalOdeSys(OdeType ode, size_t ode_nsys) : ode_(std::move(ode)), diff_worker(2*ode_nsys), jac_worker(2*ode_nsys), jm(ode_nsys, ode_nsys), nsys(ode_nsys) {
+VariationalOdeSys<T, N, OdeType>::VariationalOdeSys(OdeType ode, size_t ode_nsys) : ode_(std::move(ode)), diff_worker_(2*ode_nsys), jac_worker_(2*ode_nsys), jm_(ode_nsys, ode_nsys), nsys_(ode_nsys) {
     if constexpr (N > 0){
         assert(N==ode_nsys && "Incorrect number of equations in VariationalOdeSys");
     }
 }
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
 void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const{
-    const T* delta_q = q + nsys;
+
+    const size_t n = this->nsys_main();
+    const T* delta_q = q + n;
 
     if constexpr (JP == JacPolicy::Autodiff){
-        if constexpr (N > 0){
-            DualType* rhs = diff_worker.data();
-            DualType* y = diff_worker.data() + N;
-            NDSPAN_FOR_LOOP(I, N,
-                y[I] = DualType(q[I], {.axis=I});
-            );
-
-            ode_.Rhs(rhs, t, y);
-
-            std::fill(out+nsys, out+2*nsys, 0);
-            NDSPAN_FOR_LOOP(J, N,
-                out[J] = rhs[J].value();
-                NDSPAN_FOR_LOOP(I, N,
-                    out[I+N] += rhs[I].get_diff_wrt(J) * delta_q[J];
-                );
-            );
-        } else {
-            const size_t nvars_default = DualType::get_default_nvars();
-            DualType::set_default_nvars(nsys);
-            DualType* rhs = diff_worker.data();
-            DualType* y = diff_worker.data() + nsys;
-            for (size_t i=0; i<nsys; i++){
-                y[i] = DualType(q[i], {.axis=int(i)});
-            }
-            ode_.Rhs(rhs, t, y);
-            std::fill(out+nsys, out+2*nsys, 0);
-            for (size_t j=0; j<nsys; j++){
-                out[j] = rhs[j].value();
-                for (size_t i=0; i<nsys; i++){
-                    out[i+nsys] += rhs[i].get_diff_wrt(j) * delta_q[j];
+        DualType::with_default_nvars(n, 
+            [&](){
+                DualType* rhs = diff_worker_.data();
+                DualType* y = diff_worker_.data() + n;
+                for (size_t i=0; i<n; i++){
+                    y[i] = DualType(q[i], {.axis=int(i)});
+                }
+                ode_.Rhs(rhs, t, y);
+                std::fill(out+n, out+2*n, 0);
+                for (size_t j=0; j<n; j++){
+                    out[j] = rhs[j].value();
+                    for (size_t i=0; i<n; i++){
+                        out[i+n] += rhs[i].get_diff_wrt(j) * delta_q[j];
+                    }
                 }
             }
-            DualType::set_default_nvars(nvars_default);
-        }
+        );
     } else {
         ode_.Rhs(out, t, q); //fills the first half (nsys) entries
         // fills jm with the jacobian of the original system at (t, q)
         // this should not call Base::jac_approx since we have demanded that the base solver has an exact jacobian for the original system
-        ode_.Jac(jm.data(), t, q);
-        for (size_t i=0; i<nsys; i++){
-            out[i+nsys] = 0;
-            for (size_t j=0; j<nsys; j++){
-                out[i+nsys] += jm(i, j) * q[nsys+j];
+        ode_.Jac(jm_.data(), t, q);
+        for (size_t i=0; i<n; i++){
+            out[i+n] = 0;
+            for (size_t j=0; j<n; j++){
+                out[i+n] += jm_(i, j) * q[n+j];
             }
         }
     }
@@ -71,58 +56,33 @@ void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q, const
 
     assert(dt == nullptr && "VariationalSolver overrides Jacobian computation for templated r.h.s functions and uses autodiff, so passing the `dt` argument is not used and should be nullptr");
 
-    if constexpr (N > 0){
-        VarDualType* rhs = jac_worker.data();
-        VarDualType* y = jac_worker.data() + N;
+    const size_t n = this->nsys_main();
 
-        // copy the input state vector to the worker
-        for (size_t i=0; i<N; i++){
-            y[i] = VarDualType(q[i], {.axis=i});
-        }
+    VarDualType::with_default_nvars(n,
+        [&](){
+            VarDualType* rhs = jac_worker_.data();
+            VarDualType* y = jac_worker_.data() + n;
 
-        // compute the jacobian using autodiff
-        ode_.Rhs(rhs, t, y);
+            for (size_t i=0; i<n; i++){
+                y[i] = VarDualType(q[i], {.axis=int(i)});
+            }
 
-        // extract the jacobian matrix from the autodiff output
-        ndspan::MutView<T, ndspan::Layout::F, 2*N, 2*N> m(out);
-        NDSPAN_FOR_LOOP(I, N,
-            NDSPAN_FOR_LOOP(J, N,
-                m(I, J) = m(I+N, J+N) = rhs[I].get_diff_wrt(J);
-                m(I, J+N) = 0;
-                //the bottom left block now
-                T sum = 0;
-                for (size_t K=0; K<N; K++){
-                    sum += rhs[I].get_diff_wrt(K, J) * q[N+K];
+            ode_.Rhs(rhs, t, y);
+
+            ndspan::MutView<T, ndspan::Layout::F> m(out, 2*n, 2*n);
+            for (size_t i=0; i<n; i++){
+                for (size_t j=0; j<n; j++){
+                    m(i, j) = m(i+n, j+n) = rhs[i].get_diff_wrt(j);
+                    m(i, j+n) = 0;
+                    T sum = 0;
+                    for (size_t k=0; k<n; k++){
+                        sum += rhs[i].get_diff_wrt(k, j) * q[n+k];
+                    }
+                    m(i+n, j) = sum;
                 }
-                m(I+N, J) = sum;
-            );
-        );
-    } else {
-        const size_t nvars_default = VarDualType::get_default_nvars();
-        VarDualType::set_default_nvars(nsys);
-        VarDualType* rhs = jac_worker.data();
-        VarDualType* y = jac_worker.data() + nsys;
-
-        for (size_t i=0; i<nsys; i++){
-            y[i] = VarDualType(q[i], {.axis=i});
-        }
-
-        ode_.Rhs(rhs, t, y);
-
-        ndspan::MutView<T, ndspan::Layout::F> m(out, 2*nsys, 2*nsys);
-        for (size_t i=0; i<nsys; i++){
-            for (size_t j=0; j<nsys; j++){
-                m(i, j) = m(i+nsys, j+nsys) = rhs[i].get_diff_wrt(j);
-                m(i, j+nsys) = 0;
-                T sum = 0;
-                for (size_t k=0; k<nsys; k++){
-                    sum += rhs[i].get_diff_wrt(k, j) * q[nsys+k];
-                }
-                m(i+nsys, j) = sum;
             }
         }
-        VarDualType::set_default_nvars(nvars_default);
-    }
+    );
 }
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>

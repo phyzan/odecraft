@@ -13,7 +13,7 @@ namespace ode{
 namespace detail{
 
 template<typename T>
-void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n){
+XDIFF_FORCEINLINE void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n){
     // The Nstages+1 stage rows are no longer one contiguous block: row 0 is K0, rows
     // 1..Nstages-1 live in K, and the final (FSAL) row is KF.
     for (size_t i = 0; i < n; i++){
@@ -74,7 +74,7 @@ private:
 
 
 template<typename T, typename StepFn>
-StepResult rk_adapt_step(T* res, const T* state, size_t n,
+XDIFF_FORCEINLINE StepResult rk_adapt_step(T* res, const T* state, size_t n,
                           const T& min_step, const T& max_step, const T& min_step_abs,
                           const T& safety, const T& max_factor, const T& min_factor,
                           const T& err_exp, const T& inc_exp, const T& min_err,
@@ -114,7 +114,7 @@ StepResult rk_adapt_step(T* res, const T* state, size_t n,
 }
 
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-ODECRAFT_STEP_ATTR T rk23_step_impl(T* result, const T* state, const T& h, size_t nsys,
+XDIFF_FORCEINLINE T rk23_step_impl(T* result, const T* state, const T& h, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
                  const T& rtol, const T& atol,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs){
@@ -155,7 +155,7 @@ ODECRAFT_STEP_ATTR T rk23_step_impl(T* result, const T* state, const T& h, size_
 }
 
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-ODECRAFT_STEP_ATTR T rk45_step_impl(T* result, const T* state, const T& h, size_t nsys,
+XDIFF_FORCEINLINE T rk45_step_impl(T* result, const T* state, const T& h, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
                  const T& rtol, const T& atol,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs){

@@ -3,6 +3,7 @@
 
 //https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method
 
+#include "xdiff/tools.hpp"
 #include <odecraft/Core/RichBase.hpp>
 
 
@@ -65,44 +66,9 @@ using CoefTable = std::conditional_t<std::is_arithmetic_v<T>, StaticCoefTable<T,
 template<typename T>
 void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n);
 
-/// @brief One Dormand-Prince 5(4) stage sweep, free of any solver state. Writes t+h and the
-/// new state into `result` ([0] = t+h, [2..] = q_new), stages K1..K5 into `K` (Nstages-1 rows
-/// of n) and the final FSAL stage into `KF`; `K0` is the derivative at the start of the step
-/// and `r` is scratch of length n. Returns the scaled error norm. It lives outside the class
-/// so the dense-output coefficients can replay a finished step's stages without duplicating
-/// the tableau arithmetic.
-// Whether the stage sweep below should be forced into its caller. The two compilers want
-// opposite things here, and the difference is large, so it is measured rather than guessed
-// (harmonic oscillator, N=2, 3.06M steps, -O3 -march=native):
-//
-//                       out-of-line     always_inline
-//        gcc 13.3          74.5 ms         141.4 ms
-//        clang 18.1       147.5 ms         104.4 ms
-//
-// gcc keeps the call site tight and re-derives the constants across it; forcing the sweep in
-// bloats the retry loop and it spills. clang does not propagate into the out-of-line call and
-// only gets there by inlining. Define ODECRAFT_FORCE_INLINE_STEP=0/1 to override.
-#ifndef ODECRAFT_FORCE_INLINE_STEP
-    #if defined(__clang__)
-        #define ODECRAFT_FORCE_INLINE_STEP 1
-    #else
-        #define ODECRAFT_FORCE_INLINE_STEP 0
-    #endif
-#endif
 
-#if ODECRAFT_FORCE_INLINE_STEP
-    #define ODECRAFT_STEP_ATTR [[gnu::always_inline]]
-#else
-    #define ODECRAFT_STEP_ATTR
-#endif
-
-/// NSYS is the solver's compile-time system size (0 when it is only known at run time).
-/// It is a template parameter rather than just the `nsys` argument so that the stage loops
-/// keep a constant trip count even when the compiler chooses not to inline this function -
-/// without it, a compiler that leaves the call out of line loses the size and emits full
-/// vector + epilogue paths for all seven loops.
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-ODECRAFT_STEP_ATTR T rk45_step_impl(T* result, const T* state, const T& h, size_t nsys,
+T rk45_step_impl(T* result, const T* state, const T& h, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
                  const T& rtol, const T& atol,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs);
@@ -111,7 +77,7 @@ ODECRAFT_STEP_ATTR T rk45_step_impl(T* result, const T* state, const T& h, size_
 /// stages K1..K2 (Nstages-1 rows of n), `KF` the final FSAL stage, `K0` the derivative at the
 /// start of the step. Returns the scaled error norm.
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-ODECRAFT_STEP_ATTR T rk23_step_impl(T* result, const T* state, const T& h, size_t nsys,
+T rk23_step_impl(T* result, const T* state, const T& h, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
                  const T& rtol, const T& atol,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs);
