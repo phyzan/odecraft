@@ -28,14 +28,15 @@ using GetDerived = std::conditional_t<(std::is_same_v<derived, void>), cls, deri
 
 // USEFUL ALIASES
 
-template<typename T>
-using RhsFunc = void(*)(T*, const T&, const T*); // f(t, q) -> array
-
-template<typename T>
-using ObjFun = T(*)(const T&, const T*); // f(t, q) -> scalar
-
 template<typename T, size_t N, size_t Order>
 using DualType = std::conditional_t<(N > 0), xdiff::Dual<T, N, Order, xdiff::Layout::Flat>, xdiff::Dual<T, 0, Order, xdiff::Layout::Nested>>;
+
+
+template<typename T, size_t N>
+using JacMat = Array2D<T, N, N, Allocation::Auto, Layout::F>;
+
+
+using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 template<typename F, typename T>
 concept isRhsFunc = 
@@ -46,6 +47,28 @@ requires(F f, T* out, T t, const T* q){
 
 template<typename F, typename T>
 concept OptionalRhsFunc = std::same_as<F, std::nullptr_t> || isRhsFunc<F, T>;
+
+// Check if F has a callable Rhs (static or non-static, non-template)
+template<typename F, typename T>
+concept hasRhsFunc =
+    requires(F f, T* out, T t, const T* q) {
+        { f.Rhs(out, t, q) } -> std::same_as<void>;
+        { f.Rhs(out, std::as_const(t), q) } -> std::same_as<void>;
+    };
+
+// Check if F has a callable Jac (static or non-static, non-template)
+template<typename F, typename T>
+concept hasJacFunc =
+    requires(F f, T* out, T t, const T* q) {
+        { f.Jac(out, t, q) } -> std::same_as<void>;
+        { f.Jac(out, std::as_const(t), q) } -> std::same_as<void>;
+    };
+
+template<typename F, typename T>
+concept hasRhsOnly = hasRhsFunc<F, T> && !hasJacFunc<F, T>;
+
+template<typename F, typename T>
+concept hasRhsAndJac = hasRhsFunc<F, T> && hasJacFunc<F, T>;
 
 template<typename F, typename T>
 concept isObjFun =
@@ -65,21 +88,29 @@ requires(F f, T t, const T* q, const T* t_ptr){
 template<typename F, typename T>
 concept OptionalObserver = std::is_same_v<F, std::nullptr_t> || Observer<F, T>;
 
+
+// Check if F has a callable templated Rhs (static or non-static)
+template<typename F, typename T, size_t N>
+concept supportsDualRhs =
+    requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
+        { f.Rhs(out, t, q) } -> std::same_as<void>;
+        { f.Rhs(out, std::as_const(t), q) } -> std::same_as<void>;
+    };
+
+// Check if F has a callable templated Jac (static or non-static)
+template<typename F, typename T, size_t N>
+concept supportsDualJac =
+    requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
+        { f.Jac(out, t, q) } -> std::same_as<void>;
+        { f.Jac(out, std::as_const(t), q) } -> std::same_as<void>;
+    };
+
+
 template<typename F, typename T>
 concept StateInterp = requires(F f, T* out, T t){
     { f(out, t) } -> std::same_as<void>;
     { f(out, std::as_const(t)) } -> std::same_as<void>;
 };
-
-
-
-
-template<typename T, size_t N>
-using JacMat = Array2D<T, N, N, Allocation::Auto, Layout::F>;
-
-using VoidType = void(*)();
-
-using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 enum class RootPolicy : std::uint8_t { Left, Middle, Right};
 
@@ -288,8 +319,6 @@ T detLU_row_major(T* mat, size_t N) {
 }
 
 
-
-
 template<typename T, size_t N>
 struct SolverState{
     
@@ -404,45 +433,6 @@ OdeData(RHS) -> OdeData<RHS>;
 
 template<typename RHS, typename JAC>
 OdeData(RHS, JAC) -> OdeData<RHS, JAC>;
-
-
-// Check if F has a callable Rhs (static or non-static, non-template)
-template<typename F, typename T>
-concept hasRhsFunc =
-    requires(F f, T* out, T t, const T* q) {
-        { f.Rhs(out, t, q) } -> std::same_as<void>;
-        { f.Rhs(out, std::as_const(t), q) } -> std::same_as<void>;
-    };
-
-// Check if F has a callable Jac (static or non-static, non-template)
-template<typename F, typename T>
-concept hasJacFunc =
-    requires(F f, T* out, T t, const T* q) {
-        { f.Jac(out, t, q) } -> std::same_as<void>;
-        { f.Jac(out, std::as_const(t), q) } -> std::same_as<void>;
-    };
-
-// Check if F has a callable templated Rhs (static or non-static)
-template<typename F, typename T, size_t N>
-concept supportsDualRhs =
-    requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
-        { f.Rhs(out, t, q) } -> std::same_as<void>;
-        { f.Rhs(out, std::as_const(t), q) } -> std::same_as<void>;
-    };
-
-// Check if F has a callable templated Jac (static or non-static)
-template<typename F, typename T, size_t N>
-concept supportsDualJac =
-    requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
-        { f.Jac(out, t, q) } -> std::same_as<void>;
-        { f.Jac(out, std::as_const(t), q) } -> std::same_as<void>;
-    };
-
-template<typename F, typename T>
-concept hasRhsOnly = hasRhsFunc<F, T> && !hasJacFunc<F, T>;
-
-template<typename F, typename T>
-concept hasRhsAndJac = hasRhsFunc<F, T> && hasJacFunc<F, T>;
 
 
 enum class JacPolicy : std::uint8_t{
@@ -575,7 +565,7 @@ bool resize_step(T& factor, T& habs, const T& min_step, const T& max_step){
 
 template <typename T>
 inline bool isfinite(const T& value) {
-#ifndef DPK_NO_NAN_CHECK
+#ifndef ODECRAFT_NO_NAN_CHECK
     if constexpr (!std::is_integral_v<T>) {
         #ifdef __FAST_MATH__
         // When -ffast-math is enabled, std::isfinite may not work correctly
@@ -589,7 +579,7 @@ inline bool isfinite(const T& value) {
         return true; // Integral types are always finite
     }
 #else
-    return true; // If DPK_NO_NAN_CHECK is defined, assume all values are finite
+    return true; // If ODECRAFT_NO_NAN_CHECK is defined, assume all values are finite
 #endif
 }
 
@@ -617,7 +607,7 @@ T norm(const T* x, size_t size){
 
 template<typename T>
 NDSPAN_INLINE bool all_are_finite(const T* data, size_t n){
-#ifndef DPK_NO_NAN_CHECK
+#ifndef ODECRAFT_NO_NAN_CHECK
     for (size_t i=0; i<n; i++){
         if (!isfinite(data[i])){
             return false;

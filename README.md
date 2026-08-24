@@ -230,9 +230,9 @@ CMake options that toggle preprocessor macros across the library, its bundled de
 
 | CMake Option | Macro | Effect |
 |--------------|-------|--------|
-| `DPK_DENSE_RK4` | `RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, at the cost of additional memory usage and slightly slower performance. |
-| `DPK_NO_WARN` | `NO_ODE_WARN` | Disable ODE solver console warnings. |
-| `DPK_NO_NAN_CHECK` | `DPK_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
+| `ODECRAFT_DENSE_RK4` | `RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, at the cost of additional memory usage and slightly slower performance. |
+| `ODECRAFT_NO_WARN` | `NO_ODE_WARN` | Disable ODE solver console warnings. |
+| `ODECRAFT_NO_NAN_CHECK` | `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
 | `DEBUG` | — | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
 | `ODECRAFT_BUILD_TESTS` | — | Build the `odecraft_tests` executable from `tests/src/*.cpp`. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
 

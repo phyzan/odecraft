@@ -97,12 +97,12 @@ bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& 
                     this->interp_impl(worker.data(), t);
                     return std::get<I>(obj).func(t, worker.data());
                 }, this->t_old(), this->t_new(), std::get<I>(obj).ftol);
-                my_floor = this->minimum_time(my_floor, values[I]);
+                my_floor = this->nearest_time(my_floor, values[I]);
             }
         }
     );
     if (base_floor){
-        out = this->minimum_time(my_floor, out);
+        out = this->nearest_time(my_floor, out);
     } else {
         out = my_floor;
     }
