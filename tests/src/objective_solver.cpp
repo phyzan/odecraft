@@ -22,8 +22,8 @@ void test_single_objective(){
 
     T y0[2] = {1.0, 0.0};
 
-    ObjectiveSolver<RK45, T, 2, SolverPolicy::Static, OdeData<RhsFunc<T>, std::nullptr_t>, ObjFun> solver(
-        {obj_data},
+    auto solver = getObjectiveSolver<RK45, T, 2>(
+        std::tuple{obj_data},
         OdeData{.Rhs = rhs},
         0.0,              // t0
         View1D<T, 2>{y0}, // q0
@@ -83,13 +83,13 @@ void test_two_objectives(){
 
     T y0[2] = {0.0, 1.0};
 
-    ObjectiveSolver<RK45, T, 2, SolverPolicy::Static, OdeData<RhsFunc<T>, std::nullptr_t>, ObjFun0, ObjFun1> solver(
-        {data0, data1},
+    auto solver = getObjectiveSolver<RK45, T, 2>(
+        std::tuple{data0, data1},
         OdeData{.Rhs = rhs},
-        0.0,
+        T{0.0},              // t0
         View1D<T, 2>{y0}, // q0
         1e-10, 1e-10,  // rtol, atol
-        0.0, 0.1, 0.0, // min_step, max_step, stepsize
+        T{0.0}, T{0.1}, T{0.0}, // min_step, max_step, stepsize
         1             // direction
     );
 

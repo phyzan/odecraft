@@ -184,7 +184,7 @@ bool RichSolver<Derived, T, N, SP, OdeType>::RequestTimeFloor(T& out) {
     }))){
         // is_event_waiting has been set to true, preparing the push_event_queue for the first event
         if (Base::RequestTimeFloor(out)){
-            out = this->minimum_time(out, evt_col.get_time(0));
+            out = this->nearest_time(out, evt_col.get_time(0));
         } else {
             out = evt_col.get_time(0);
         }

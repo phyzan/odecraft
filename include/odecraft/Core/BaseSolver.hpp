@@ -604,13 +604,10 @@ protected:
         }
     }
 
-    template<typename U, typename... Args>
-    T    minimum_time(const U& item, const Args&... args) const{
-        if constexpr (sizeof...(Args) > 0){
-            return minimum_time_helper(item, args...);
-        } else {
-            return item;
-        }
+    template<typename... U>
+    T   nearest_time(const U&... t) const{
+        static_assert(sizeof...(U) > 0, "BaseSolver::nearest_time requires at least one argument");
+        return nearest_time_priv(t...);
     }
 
     // ================================================================================
@@ -641,21 +638,31 @@ private:
     bool                    validate_it(StepResult result, const T* state);
     void                    set_state(const T& time, T* state);
 
-    template<typename A, typename B, typename... Args>
-    const T&    minimum_time_helper(const A& a, const B& b, Args&&... args) const{
-        if constexpr (sizeof...(args) > 0){
-            return minimum_time_helper(min_of(a, b), args...);
+
+    template<typename A, typename... Rest>
+    const T&    nearest_time_priv(const A& t_a, const Rest&... t_rest) const{
+        if constexpr (sizeof...(Rest) > 0){
+            return nearest_time_helper(t_a, t_rest...);
+        } else {
+            return t_a;
+        }
+    }
+
+    template<typename A, typename B, typename... Rest>
+    const T&    nearest_time_helper(const A& t_a, const B& t_b, const Rest&... t_rest) const{
+        if constexpr (sizeof...(Rest) > 0){
+            return nearest_time_helper(nearest_of(t_a, t_b), t_rest...);
         }else{
-            return min_of(a, b);
+            return nearest_of(t_a, t_b);
         }
     }
 
     template<typename A, typename B>
-    const T& min_of(const A& a, const B& b) const{
+    const T& nearest_of(const A& t_a, const B& t_b) const{
         if (this->direction() == 1){
-            return (a < b ? a : b);
+            return (t_a < t_b ? t_a : t_b);
         }else{
-            return (a > b ? a : b);
+            return (t_a > t_b ? t_a : t_b);
         }
     }
 

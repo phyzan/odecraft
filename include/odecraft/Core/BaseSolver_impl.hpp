@@ -449,7 +449,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::set_ics(T t0, const T* y0, T stepsi
         THIS->Reset();
         return true;
     }else {
-#ifndef DPK_NO_WARN
+#ifndef ODECRAFT_NO_WARN
         this->cerr("Tried to set invalid initial conditions");
 #endif
         return false;
@@ -544,7 +544,7 @@ template<typename... Args>
 bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
     const int d = this->direction();
     if constexpr (sizeof...(Args) > 0){
-        T time_floor = minimum_time(args...);
+        T time_floor = nearest_time(args...);
         if (this->is_at_new_state() && (time_floor*d <= t_new()*d)){
             return false;
         } else if (this->is_at_new_state()){
@@ -563,7 +563,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
                 T new_floor;
                 if (ODECRAFT_CALL_DERIVED(RequestTimeFloor, new_floor)){
                     assert((new_floor*d > t_old()*d && new_floor*d <= t_new()*d) && "Invalid floor requested, with additional requests");
-                    time_floor = minimum_time(new_floor, time_floor);
+                    time_floor = nearest_time(new_floor, time_floor);
                 }
                 
                 if (time_floor*d < t_new()*d){
@@ -652,14 +652,14 @@ void BaseSolver<Derived, T, N, SP, OdeType>::set_message(const std::string& text
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::warn_paused() const{
-#ifndef DPK_NO_WARN
+#ifndef ODECRAFT_NO_WARN
     this->cerr("\nSolver has paused integrating. Resume before advancing.");
 #endif
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::warn_dead() const{
-#ifndef DPK_NO_WARN
+#ifndef ODECRAFT_NO_WARN
     this->cerr("\nSolver has permanently stopped integrating. Termination cause:\n\t" + this->msg_);
 #endif
 }
@@ -709,12 +709,12 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::is_at_new_state() const{
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 MutView<T, Layout::F, N, N> BaseSolver<Derived, T, N, SP, OdeType>::jac_view(T* j) const{
-    //returns a high level view of the jacobian matrix, so that its elements
-    //can be accessed using matrix(i, j). This function simply simplifies
-    //the process of constructing the correct object that can safely view the jacobian matrix
-    //by doing
-    // auto matrix = solver->jac_view(jac_ptr);
-    // matrix(i, j) = ...
+    /*
+    returns a high level view of the jacobian matrix, so that its elements
+    can be accessed using matrix(i, j). May be used as follows:
+    auto matrix = solver->jac_view(jac_ptr);
+    matrix(i, j) = ...
+    */
     return MutView<T, Layout::F, N, N>(j, this->nsys(), this->nsys());
 }
 
@@ -812,7 +812,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::move_state(const T& time){
     if (time != this->t_new()) {
         set_state(time, true_state_.data());
         is_at_new_state_ = false;
-    }else if (! is_at_new_state()){
+    }else if (!this->is_at_new_state()){
         // update the true state to the new state, because time is exactly at t_new
         is_at_new_state_ = true;
         true_state_ = new_state_;

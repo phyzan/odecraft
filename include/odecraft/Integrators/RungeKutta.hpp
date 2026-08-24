@@ -6,7 +6,7 @@
 
 namespace ode{
 
-// Compile with DPK_DENSE_RK4 to use rk4 steps for interpolation instead of the default Hermite polynomials
+// Compile with ODECRAFT_DENSE_RK4 to use rk4 steps for interpolation instead of the default Hermite polynomials
 // This increases accuracy at the cost of performance and memory
 
 template<typename T, typename RhsType>
@@ -46,8 +46,8 @@ protected:
 
     void        set_interp_data() const;
 
-    // 4 stages of size N, plus one auxiliary array. if DPK_DENSE_RK4, K has 4 extra stages for dense output. So visually K = [k1, k2, k3, k4, aux | k1, k2, l3, k4 ]
-#ifdef DPK_DENSE_RK4
+    // 4 stages of size N, plus one auxiliary array. if ODECRAFT_DENSE_RK4, K has 4 extra stages for dense output. So visually K = [k1, k2, k3, k4, aux | k1, k2, l3, k4 ]
+#ifdef ODECRAFT_DENSE_RK4
     mutable Array2D<T, 9, N>    K;
 #else
     mutable Array2D<T, 5, N>    K;

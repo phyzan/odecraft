@@ -153,7 +153,7 @@ BDF<T, N, SP, OdeType, Derived>::BDF(private_tag, MAIN_CONSTRUCTOR(T), Type&&...
     
     if (rtol == 0){
         rtol = 100*std::numeric_limits<T>::epsilon();
-#ifndef DPK_NO_WARN
+#ifndef ODECRAFT_NO_WARN
         this->cerr(GetStr("Warning: rtol=0 not allowed in the BDF method. Setting rtol = ", rtol));
 #endif
     }

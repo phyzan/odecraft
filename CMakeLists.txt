@@ -15,15 +15,15 @@ target_include_directories(odecraft INTERFACE
 
 # ----------- Add interface for macros ---------------
 
-option(DPK_DENSE_RK4 "Enable accurate RK4 dense output for the RK4 solver (extra memory, slightly slower performance)" OFF)
-option(DPK_NO_WARN "Disable ODE solver console warnings" OFF)
-option(DPK_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
+option(ODECRAFT_DENSE_RK4 "Enable accurate RK4 dense output for the RK4 solver (extra memory, slightly slower performance)" OFF)
+option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
+option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
 option(DEBUG "Enable debug build (-O0 -g3, asserts enabled) instead of the optimized release build" OFF)
 
 target_compile_definitions(odecraft INTERFACE
-    $<$<BOOL:${DPK_DENSE_RK4}>:RK4_DENSE>
-    $<$<BOOL:${DPK_NO_WARN}>:NO_ODE_WARN>
-    $<$<BOOL:${DPK_NO_NAN_CHECK}>:DPK_NO_NAN_CHECK>
+    $<$<BOOL:${ODECRAFT_DENSE_RK4}>:RK4_DENSE>
+    $<$<BOOL:${ODECRAFT_NO_WARN}>:NO_ODE_WARN>
+    $<$<BOOL:${ODECRAFT_NO_NAN_CHECK}>:ODECRAFT_NO_NAN_CHECK>
 )
 
 if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
