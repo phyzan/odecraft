@@ -15,14 +15,14 @@ target_include_directories(odecraft INTERFACE
 
 # ----------- Add interface for macros ---------------
 
-option(ODECRAFT_DENSE_RK4 "Enable accurate RK4 dense output for the RK4 solver (extra memory, slightly slower performance)" OFF)
+option(ODECRAFT_RK4_DENSE "Enable accurate RK4 dense output for the RK4 solver (extra memory, slightly slower performance)" OFF)
 option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
 option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
 option(DEBUG "Enable debug build (-O0 -g3, asserts enabled) instead of the optimized release build" OFF)
 
 target_compile_definitions(odecraft INTERFACE
-    $<$<BOOL:${ODECRAFT_DENSE_RK4}>:RK4_DENSE>
-    $<$<BOOL:${ODECRAFT_NO_WARN}>:NO_ODE_WARN>
+    $<$<BOOL:${ODECRAFT_RK4_DENSE}>:ODECRAFT_RK4_DENSE>
+    $<$<BOOL:${ODECRAFT_NO_WARN}>:ODECRAFT_NO_WARN>
     $<$<BOOL:${ODECRAFT_NO_NAN_CHECK}>:ODECRAFT_NO_NAN_CHECK>
 )
 

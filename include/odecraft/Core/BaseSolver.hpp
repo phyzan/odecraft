@@ -21,14 +21,6 @@
 #include <odecraft/Core/VirtualBase.hpp>
 
 
-#define MAIN_DEFAULT_CONSTRUCTOR(T) OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=inf<T>(), T stepsize=0, int dir=1
-
-#define MAIN_CONSTRUCTOR(T) OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir
-
-#define SOLVER_CONSTRUCTOR(T) OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir
-
-#define ODE_CONSTRUCTOR(T) MAIN_DEFAULT_CONSTRUCTOR(T), EventList<T> events={}, Integrator method = Integrator::RK45
-
 
 // For non-template member functions: use pointer-to-member (standard-compliant)
 #define ODECRAFT_ACCESSOR(NAME) \
@@ -264,10 +256,10 @@ public:
     /// @brief Get the number of successful integration steps taken.
     size_t              step_count() const;
 
-    /// @brief Check if the solver is currently running (not paused or dead).
+    /// @brief Check if the solver is currently running.
     bool                is_running() const;
 
-    /// @brief Check if the solver has permanently terminated.
+    /// @brief Returns !is_running()
     bool                is_dead() const;
 
     /// @brief Check if the solution has diverged (contains inf/nan).
@@ -290,11 +282,12 @@ public:
     */
     bool                validate_ics(T t0, const T* q0) const;
 
+    bool                has_valid_ics() const;
+
     /**
      * @brief Interpolate the solution at a time within the last step interval.
      * @param[out] out Output array for interpolated state (size Nsys).
      * @param[in]  t      Time to interpolate at (must be in [t_old, t_new]).
-     * @throws std::runtime_error If t is outside the valid interpolation range.
     */
     void                interp(T* out, const T& t) const;
 
@@ -331,7 +324,7 @@ public:
 
     /**
      * @brief Advance the solver by one integration step.
-     * @return True if the step was successful, false if paused or dead.
+     * @return True if the step was successful, false if otherwise
      */
     bool                advance();
 
@@ -366,7 +359,7 @@ public:
     /**
      * @brief Advance the solver by a specified time interval (along the integration direction).
      * @param interval Time interval to advance by (must be positive).
-     * @return True if the interval was successfully integrated, false if paused or dead.
+     * @return True if the interval was successfully integrated, false otherwise
      * @note This is a convenience method equivalent to advance_until(t() + interval*direction()).
      *      The is not a single step advance; the solver will take as many steps as needed to reach the target time,
      *      and use interpolation to end exactly at the target time.
@@ -374,47 +367,20 @@ public:
     bool                advance_by(T interval);
 
     /**
-     * @brief Set new initial conditions via a setter function.
-     *
-     * @tparam Setter Function type with signature: void(T* q) that fills the state vector.
-     * @param t0      New initial time.
-     * @param func    Function that writes the initial state to the provided pointer, whose data are the solver's initial conditions, NOT the current state.
-     * @param stepsize Initial step size (0 = auto-compute).
-     */
-    template<typename Setter>
-    auto                apply_ics_setter(T t0, Setter&& func, T stepsize = 0);
-
-    /// @brief Same as apply_ics_setter, but the setter function receives the current state as an argument to modify. Then e.g. new_vector[i] += 1 would increment the i-th component of the current state by 1 before restarting, and works as expected.
-    template<typename Setter>
-    auto                restart_from_modified_state(T t0, Setter&& func, T stepsize = 0);
-    /**
      * @brief Set new initial conditions without reallocating memory.
      * @param t0      New initial time.
      * @param y0      New initial state vector (size Nsys).
      * @param stepsize Initial step size (0 = auto-compute).
      * @param direction Integration direction for the new ICs (+1 forward, -1 backward, 0 for unchanged).
-     * @return True if ICs were valid and set successfully. Otherwise returns false and stops the solver. Simply call resume() to continue.
-     * @throws std::runtime_error If stepsize is negative.
+     * @return True if ICs were valid and set successfully. Otherwise returns false and nothing happens.
      */
     bool                set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0);
 
     /**
-     * @brief Pause the solver (can be resumed later).
-     * @param text Optional message describing why the solver was stopped.
-     */
-    void                stop(const std::string& text = "");
-
-    /**
-     * @brief Permanently terminate the solver (cannot be resumed).
+     * @brief Permanently terminate the solver.
      * @param text Optional message describing why the solver was killed.
      */
-    void                kill(const std::string& text = "");
-
-    /**
-     * @brief Resume a paused solver.
-     * @return True if resumed successfully, false if solver is dead.
-     */
-    bool                resume();
+    void                kill(std::string message = "");
 
     /// @brief Reset implementation hook. Derived should call base first.
     void                Reset();
@@ -455,6 +421,7 @@ public:
     bool                get_diverges() const { return diverges(); }
     const std::string&  get_status() const { return status(); }
     bool                get_validate_ics(T t0, const T* q0) const { return validate_ics(t0, q0); }
+    bool                get_has_valid_ics() const { return has_valid_ics(); }
     Integrator          get_method() const { return method(); }
     void                get_interp(T* result, const T& t) const { interp(result, t); }
     size_t              get_rhs_eval_count() const { return rhs_eval_count_; }
@@ -471,9 +438,7 @@ public:
     bool                do_observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer, View1D<T> extra_steps) { return observe_until(time, observer, extra_steps); }
     BoxedInterp<T, N>   do_interp_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer = [](const auto&, const auto*, const auto*){return true;}) { return interp_until(time, observer); }
     void                do_reset() { THIS->Reset(); }
-    bool                do_resume() { return resume(); }
-    void                do_stop(const std::string& text = "") { stop(text); }
-    void                do_kill(const std::string& text = "") { kill(text); }
+    void                do_kill(std::string message = "") { kill(std::move(message)); }
     bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) { return set_ics(t0, y0, stepsize, direction); }
 
     // =================== STATIC OVERRIDES (NECESSARY) ===============================
@@ -584,9 +549,6 @@ protected:
     /// @brief Get pointer to the correct new state for interpolation
     const T*    interp_new_state_ptr() const;
 
-    /// @brief Print a warning that the solver is paused.
-    void        warn_paused() const;
-
     /// @brief Print a warning that the solver is dead.
     void        warn_dead() const;
 
@@ -610,16 +572,26 @@ protected:
         return nearest_time_priv(t...);
     }
 
-    // ================================================================================
+    // ================== Constructors ==================
 
-    DEFAULT_RULE_OF_FOUR(BaseSolver)
-
-    /**
-     * @brief Protected constructor for derived classes.
-     * @see SOLVER_CONSTRUCTOR macro for parameter details.
-     */
-    BaseSolver(SOLVER_CONSTRUCTOR(T));
+    BaseSolver(const BaseSolver&) = default;
+    BaseSolver(BaseSolver&&) noexcept = default;
+    BaseSolver& operator=(const BaseSolver&) = default;
+    BaseSolver& operator=(BaseSolver&&) noexcept = default;
     ~BaseSolver() = default;
+
+    // Main protected constructor
+    BaseSolver(OdeType ode,
+        T t0,
+        View1D<T, N> q0,
+        T rtol,
+        T atol,
+        T min_step,
+        T max_step,
+        T stepsize,
+        int dir);
+
+    // ==================================================
 
     /// @brief Maximum step size increase factor per step.
     T                                   MAX_FACTOR = 10;
@@ -668,26 +640,22 @@ private:
 
     /// @brief Only use inside Adv_Impl (so that if the state here is updated, all derived classes are aware). Move the current state to a new time between the current time and the most recently adapted state. This is a lowlevel operation, so use carefully or the intended bahavior might break.
     void                    move_state(const T& time);
-
-    template<typename Setter>
-    auto                    priv_apply_ics_setter(T* ics, T t0, Setter&& func, T stepsize);
-
     
     detail::ScratchState<T, N> ics_state_, old_state_, new_state_, true_state_, interp_state_;
     T rtol_, atol_, min_step_, max_step_;
     detail::SolverScratchSpace<T, N> scratch_;
-    OdeType                                             ode_;
-    size_t                                              nsys_ = N;
-    size_t                                              step_count_ = 0;
-    mutable size_t                                      rhs_eval_count_ = 0;
-    mutable size_t                                      jac_eval_count_ = 0;
-    std::string                                         msg_ = "Running";
-    int                                                 direction_ = 1;
-    bool                                                is_dead_ = false;
-    bool                                                diverges_ = false;
-    bool                                                is_running_ = true;
-    bool                                                use_new_state_ = true; //for interpolation purposes
-    bool                                                is_at_new_state_ = true;
+    OdeType         ode_;
+    size_t          nsys_ = N;
+    size_t          step_count_ = 0;
+    mutable size_t  rhs_eval_count_ = 0;
+    mutable size_t  jac_eval_count_ = 0;
+    std::string     msg_ = "Running";
+    int             direction_ = 1;
+    bool            diverges_ = false;
+    bool            is_running_ = true;
+    bool            ics_is_valid_ = false;
+    bool            use_new_state_ = true; //for interpolation purposes
+    bool            is_at_new_state_ = true;
 };
 
 

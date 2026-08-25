@@ -6,7 +6,7 @@
 
 namespace ode{
 
-// Compile with ODECRAFT_DENSE_RK4 to use rk4 steps for interpolation instead of the default Hermite polynomials
+// Compile with ODECRAFT_RK4_DENSE to use rk4 steps for interpolation instead of the default Hermite polynomials
 // This increases accuracy at the cost of performance and memory
 
 template<typename T, typename RhsType>
@@ -24,7 +24,7 @@ class RK4 : public detail::BaseDispatcher<GetDerived<RK4<T, N, SP, OdeType, Deri
 public:
 
     template<typename... Type>
-    RK4(MAIN_DEFAULT_CONSTRUCTOR(T), Type&&... extras);
+    RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, Type&&... extras);
 
     Integrator method() const;
 
@@ -46,8 +46,8 @@ protected:
 
     void        set_interp_data() const;
 
-    // 4 stages of size N, plus one auxiliary array. if ODECRAFT_DENSE_RK4, K has 4 extra stages for dense output. So visually K = [k1, k2, k3, k4, aux | k1, k2, l3, k4 ]
-#ifdef ODECRAFT_DENSE_RK4
+    // 4 stages of size N, plus one auxiliary array. if ODECRAFT_RK4_DENSE, K has 4 extra stages for dense output. So visually K = [k1, k2, k3, k4, aux | k1, k2, l3, k4 ]
+#ifdef ODECRAFT_RK4_DENSE
     mutable Array2D<T, 9, N>    K;
 #else
     mutable Array2D<T, 5, N>    K;

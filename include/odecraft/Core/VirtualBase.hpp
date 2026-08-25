@@ -50,6 +50,7 @@ public:
     virtual bool                get_diverges() const = 0;
     virtual const std::string&  get_status() const = 0;
     virtual bool                get_validate_ics(T t0, const T* q0) const = 0;
+    virtual bool                get_has_valid_ics() const = 0;
     virtual Integrator          get_method() const = 0;
     virtual void                get_interp(T* result, const T& t) const = 0;
     virtual size_t              get_rhs_eval_count() const = 0;
@@ -68,9 +69,7 @@ public:
     virtual bool                do_observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer, View1D<T> extra_steps) = 0;
     virtual BoxedInterp<T, N>   do_interp_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer = [](const auto&, const auto*, const auto*){return true;}) = 0;
     virtual void                do_reset() = 0;
-    virtual bool                do_resume() = 0;
-    virtual void                do_stop(const std::string& text = "") = 0;
-    virtual void                do_kill(const std::string& text = "") = 0;
+    virtual void                do_kill(std::string message = "") = 0;
     virtual bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) = 0;
 
 protected:

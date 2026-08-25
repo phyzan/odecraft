@@ -41,7 +41,7 @@ void test_variational_solver(){
         1e-9,
         1e-12,
         0.0,
-        inf<T>(),
+        0.0,
         0.0,
         1
     );

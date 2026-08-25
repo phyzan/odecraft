@@ -22,7 +22,7 @@ void run(const char* label){
     const double rtol = 1e-10;
     const double atol = 1e-10;
     const double min_step = 0;
-    const auto max_step = ode::inf<double>();
+    const double max_step = 0;
     const double stepsize = 0.0001;
 
     const size_t nsys = 2;

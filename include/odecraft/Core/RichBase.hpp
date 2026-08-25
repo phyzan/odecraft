@@ -99,7 +99,7 @@ public:
      * stops (due to error or reaching a dead state).
      *
      * @param event_idx Optional indices of specific events to advance to. If empty (default), advances to the next event regardless of type.
-     * @return True if an event was reached, false if solver stopped for other reasons.
+     * @return True if an event was reached, false if the solver stopped for other reasons.
      */
     bool                        advance_to_event(const std::vector<size_t>& event_idx = {});
 
@@ -125,7 +125,7 @@ public:
     bool                        do_advance_to_event(const std::vector<std::string>& event_names) { return advance_to_event(event_names); }
     bool                        do_advance_to_event(const T& tmax, const std::vector<std::string>& event_names) { return advance_to_event(tmax, event_names); }
 
-    /// @brief Reset implementation hook. Resets events and stops interpolation.
+    /// @brief Resets the solver to its initial state, clearing any event detections.
     void                        Reset();
 
     RichSolver() = delete;
@@ -137,7 +137,7 @@ protected:
      * @param events Vector of event pointers to monitor during integration.
      * @see SOLVER_CONSTRUCTOR macro for other parameter details.
      */
-    RichSolver(SOLVER_CONSTRUCTOR(T), EventList<T> evs = {});
+    RichSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> evs = {});
 
     DEFAULT_RULE_OF_FOUR(RichSolver)
 

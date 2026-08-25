@@ -85,8 +85,7 @@ inline UnaryInterp<T, std::decay_t<Callable>> getEventInterp(Callable&& func){
  * @brief Abstract interface for ODE integration events.
  *
  * Events are triggered during integration when certain conditions are met.
- * They can modify the state (masking), stop the solver, or simply record
- * that a condition occurred.
+ * They record when an event has occurred, and can optionally transform the state vector at the event time.
  *
  * @tparam T Scalar type for computations.
  */
@@ -299,14 +298,13 @@ public:
     /**
      * @brief Construct a zero-crossing event.
      * @param name      Unique event name.
-     * @param when      Objective function: triggers when this crosses zero.
+     * @param objfun    Objective function: triggers when this crosses zero.
+     * @param event_tol Tolerance for bisection root finding.
      * @param dir       Crossing direction: +1 (increasing), -1 (decreasing), 0 (any).
      * @param mask      Optional mask function to transform state at trigger.
      * @param delay_mask If true, delay the application of the mask, showing the unfiltered state until the event has been processed.
-     * @param event_tol Tolerance for bisection root finding.
-     * @param obj       Optional user object pointer for callbacks.
      */
-    PreciseEvent(std::string name, Target when, T event_tol=1e-20, int dir=0, MaskFunc mask=nullptr, bool delay_mask=false);
+    PreciseEvent(std::string name, Target objfun, T event_tol=1e-20, int dir=0, MaskFunc mask=nullptr, bool delay_mask=false);
 
     /// @brief Evaluate the objective function at given time and state.
     T    obj_fun(const T& t, const T* q) const;

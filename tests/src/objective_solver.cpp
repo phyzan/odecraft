@@ -30,7 +30,7 @@ void test_single_objective(){
         1e-10,            // rtol
         1e-10,            // atol
         0.0,              // min_step
-        0.1,              // max_step
+        0.0,              // max_step (0.0 translates to unbounded for max_step)
         0.0,              // stepsize (auto)
         1                // direction (forward)
     );
@@ -89,7 +89,7 @@ void test_two_objectives(){
         T{0.0},              // t0
         View1D<T, 2>{y0}, // q0
         1e-10, 1e-10,  // rtol, atol
-        T{0.0}, T{0.1}, T{0.0}, // min_step, max_step, stepsize
+        T{0.0}, T{0.0}, T{0.0}, // min_step, max_step, first step
         1             // direction
     );
 
