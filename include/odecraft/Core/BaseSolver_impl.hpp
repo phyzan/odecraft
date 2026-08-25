@@ -728,7 +728,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::validate_it(StepResult result, cons
         case StepResult::Success:
             break;
         case StepResult::INF_ERROR:
-            this->set_message("ODE solution diverges (inf or nan encountered)");
+            this->kill("ODE solution diverges (inf or nan encountered)");
             this->diverges_ = true;
             success = false;
             break;
