@@ -174,15 +174,13 @@ public:
      * @brief Compute the Jacobian matrix of the ODE system.
      * 
      * Uses the exact Jacobian if provided, otherwise falls back to
-     * finite difference approximation via jac_approx().
+     * finite difference approximation
      *
      * @param[out] jm Output array for Jacobian in column-major order (size Nsys x Nsys).
      * @param[in]  t  Current time.
      * @param[in]  q  Current state vector (size Nsys).
-     * @param[in]  dt Optional step sizes for finite difference (size Nsys). If nullptr,
-     *                step sizes are computed automatically.
     */
-    void                 Jac(T* jm, const T& t, const T* q, const T* dt = nullptr) const;
+    void                 Jac(T* jm, const T& t, const T* q) const;
 
     /**
      * @brief Approximate the Jacobian using central finite differences.
@@ -191,7 +189,7 @@ public:
      * @param[in]  q  Current state vector (size Nsys).
      * @param[in]  dt Step sizes for each component (size Nsys). If nullptr, computed automatically.
     */
-    void                 jac_approx(T* out, const T& t, const T* q, const T* dt) const;
+    void                 Jac(T* out, const T& t, const T* q, const T* dt) const;
 
     /**
      * @brief Get a matrix view of a Jacobian array.
@@ -396,9 +394,9 @@ public:
 
     // VIRTUAL INTERFACE ALIASES (inline overrides to avoid virtual calls)
     // Accessors
-    void                get_rhs(T* dq_dt, const T& t, const T* q) const { Rhs(dq_dt, t, q); }
-    void                get_jac(T* jm, const T& t, const T* q, const T* dt = nullptr) const { Jac(jm, t, q, dt); }
-    void                get_jac_approx(T* j, const T& t, const T* q, const T* dt) const { jac_approx(j, t, q, dt); }
+    void                get_rhs(T* out, const T& t, const T* q) const { Rhs(out, t, q); }
+    void                get_jac(T* out, const T& t, const T* q) const { Jac(out, t, q); }
+    void                get_jac(T* out, const T& t, const T* q, const T* dt) const { Jac(out, t, q, dt); }
     const T&            get_time() const { return t(); }
     const T&            get_new_time() const { return t_new(); }
     const T&            get_old_time() const { return t_old(); }
@@ -529,7 +527,7 @@ protected:
     void        rhs(T* dq_dt, const T& t, const T* q) const;
 
     /// @brief Same as this->Jac, but increments the Jacobian evaluation counter.
-    void        jac(T* jm, const T& t, const T* q, const T* dt = nullptr) const;
+    void        jac(T* jm, const T& t, const T* q) const;
 
     /// @brief Get pointer to the initial conditions state data.
     const T*    ics_ptr() const;

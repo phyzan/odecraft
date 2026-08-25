@@ -42,7 +42,7 @@ public:
     // ACCESSORS
     virtual void    get_rhs_main(T* out, const T& t, const T* q) const = 0;
 
-    virtual void    get_jac_main(T* out, const T& t, const T* q, const T* dt = nullptr) const = 0;
+    virtual void    get_jac_main(T* out, const T& t, const T* q) const = 0;
 
     virtual T       get_elapsed_time() const = 0;
 
@@ -78,8 +78,8 @@ public:
 
     void    Rhs(T* out, const T& t, const T* q) const;
 
-    // Only provided if it does not require finite differences, otherwise the base solver will automatically use jac_approx to compute the jacobian of the full system.
-    void    Jac(T* out, const T& t, const T* q, const T* dt = nullptr) const requires (JP == JacPolicy::Autodiff);
+    // Only provided if it does not require finite differences, otherwise the base solver will automatically use the appropriate overload to compute the jacobian of the full system.
+    void    Jac(T* out, const T& t, const T* q) const requires (JP == JacPolicy::Autodiff);
 
     const OdeType& ode() const;
 
@@ -143,11 +143,11 @@ public:
 
     void    RhsMain(T* out, const T& t, const T* q) const;
 
-    void    JacMain(T* out, const T& t, const T* q, const T* dt = nullptr) const;
+    void    JacMain(T* out, const T& t, const T* q) const;
 
     // VIRTUAL INTERFACE ALIASES (inline overrides to avoid virtual calls)
     void    get_rhs_main(T* out, const T& t, const T* q) const { RhsMain(out, t, q); }
-    void    get_jac_main(T* out, const T& t, const T* q, const T* dt = nullptr) const { JacMain(out, t, q, dt); }
+    void    get_jac_main(T* out, const T& t, const T* q) const { JacMain(out, t, q); }
     T       get_elapsed_time() const { return elapsed_time(); }
     T       get_kick() const { return kick(); }
     T       get_period() const { return period(); }

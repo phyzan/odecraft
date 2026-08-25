@@ -55,7 +55,9 @@ public:
 
     void                        Rhs(T* out, const T& t, const T* q) const;
 
-    void                        Jac(T* out, const T& t, const T* q, const T* dt = nullptr) const;
+    void                        Jac(T* out, const T& t, const T* q) const;
+
+    void                        Jac(T* out, const T& t, const T* q, const T* dt) const;
 
     virtual std::unique_ptr<ODE<T, N>>  clone() const;
 
@@ -108,7 +110,7 @@ protected:
     OrbitData<T> orbit_data_;
     EventData<T> event_data_;
     std::vector<size_t> cached_idx_;
-    double _runtime = 0;
+    double runtime_ = 0;
 
     template<hasRhsFunc<T> OdeType>
     void                                        init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events={}, Integrator method = Integrator::RK45);

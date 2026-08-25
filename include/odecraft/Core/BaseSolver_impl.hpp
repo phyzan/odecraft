@@ -28,10 +28,10 @@ void BaseSolver<Derived, T, N, SP, OdeType>::rhs(T* dq_dt, const T& t, const T* 
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* jm, const T& t, const T* q, const T* dt) const{
+void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* jm, const T& t, const T* q) const{
     
     if constexpr (JP == JacPolicy::Approx){
-        return this->jac_approx(jm, t, q, dt);
+        return this->Jac(jm, t, q, nullptr);
     } else if constexpr (JP == JacPolicy::Autodiff){
         decltype(auto) scratch_duals = this->scratch_.duals();
         MutView<T, Layout::F, N, N> jacmat = this->jac_view(jm);
@@ -56,13 +56,13 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* jm, const T& t, const T* q, 
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::jac(T* jm, const T& t, const T* q, const T* dt) const{
-    this->Jac(jm, t, q, dt);
+void BaseSolver<Derived, T, N, SP, OdeType>::jac(T* jm, const T& t, const T* q) const{
+    this->Jac(jm, t, q);
     this->jac_eval_count_++;
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::jac_approx(T* out, const T& t, const T* q, const T* dt) const{
+void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* out, const T& t, const T* q, const T* dt) const{
     const size_t n = this->nsys();
 
     decltype(auto) scratch = this->scratch_.four_state_cache();
