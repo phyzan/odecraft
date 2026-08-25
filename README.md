@@ -15,11 +15,78 @@
 
 ---
 
-## Overview
+# OdeCraft
 
-OdeCraft is a modern, object-oriented C++ header library for solving **Ordinary Differential Equations (ODEs)**. Originally inspired by Alan Hindmarsh's classic Fortran77 library, this implementation brings a fresh, template-based design heavily influenced by SciPy's ODE solver interface.
+**OdeCraft** is a modern, object-oriented C++ library for solving **Ordinary Differential Equations (ODEs)**.
 
-## Features:
+The library implements standard integration algorithms, but utilizes a **template-based design** to allow for arbitrary precision, automatic differentiation, and lazy evaluation,
+while offering a clean interface for defining and integrating ODE systems.
+
+It also provides a flexible event detection system for runtime or compile-time event handling.
+
+# Getting Started
+
+## Requirements
+- C++20 compatible compiler
+
+For the optional arbitrary precision support, install the prebuilt **mpfr** and **gmp** libraries:
+```bash
+sudo apt install libmpfr-dev libgmp-dev
+```
+
+**OdeCraft** can be cloned using:
+```bash
+git clone --recursive https://github.com/phyzan/odecraft.git
+```
+which will also pull all of its submodule dependencies. If you have already cloned the repository without the `--recursive` flag, you can initialize the submodules with:
+```bash
+git submodule update --init --recursive
+```
+
+Submodules can be updated via
+```bash
+git submodule update --recursive
+```
+
+## C++ / CMake
+
+### Macros
+
+CMake options that toggle preprocessor macros across the library, its bundled dependencies, and the `odecraft_tests` executable:
+
+| CMake Option | Macro | Effect |
+|--------------|-------|--------|
+| `ODECRAFT_RK4_DENSE` | `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, at the cost of additional memory usage and slightly slower performance. |
+| `ODECRAFT_NO_WARN` | `ODECRAFT_NO_WARN` | Disable ODE solver console warnings. |
+| `ODECRAFT_NO_NAN_CHECK` | `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
+| `DEBUG` | — | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
+| `ODECRAFT_BUILD_TESTS` | — | Build the `odecraft_tests` executable from `tests/src/*.cpp`. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
+
+See useful [macros](https://github.com/phyzan/xdiff#macros) for the `xdiff` submodule.
+
+## Linking via CMake
+
+```cmake
+add_subdirectory(path/to/odecraft)
+target_link_libraries(your_target PRIVATE odecraft::odecraft)
+```
+This gives you `<odecraft/...>`, `<xdiff/...>` etc. includes, the required C++20 standard, and [macros](#macros) (toggle with e.g. `-D<MACRO_NAME>=ON`)
+
+**Building and running the test suite:**
+```bash
+cmake -S . -B build
+cmake --build build
+./build/odecraft_tests
+```
+or, with some macros enabled at configure time:
+```bash
+cmake -S . -B build -DDEBUG=ON
+cmake --build build
+```
+
+---
+
+# Features:
 
 - **Header-only**: No compilation needed, just include and use
 - **Event system**: Detect and respond to user-defined conditions during integration
@@ -32,7 +99,7 @@ OdeCraft is a modern, object-oriented C++ header library for solving **Ordinary 
 
 ---
 
-## Solvers
+# Integrators
 
 The library focuses on integrating systems of ODEs through objects that once instantiated, preallocate memory for any process that might be encountered,
 and can be advanced in time while only updating their state in-place, without storing any integration history (if not requested).
@@ -55,7 +122,7 @@ where:
 - `SP` is the solver policy (see below)
 - `OdeType` is the type of the ODE function (must satisfy `hasRhsFunc<T>` concept)
 
-### SolverPolicy (SP) template parameter
+## SolverPolicy (SP) template parameter
 
 The `SolverPolicy` template parameter controls inheritance and feature availability:
 
@@ -67,7 +134,7 @@ The `SolverPolicy` template parameter controls inheritance and feature availabil
 | `RichVirtual` | Yes | Yes | Full flexibility at runtime |
 
 
-### OdeType template parameter
+## OdeType template parameter
 
 The `OdeType` template parameter must satisfy the `hasRhsFunc<T>` concept, which requires the ODE type to expose an `Rhs` member computing dq/dt:
 
@@ -105,9 +172,9 @@ void                Jac(T* J, const T& t, const T* q) const; // Compute the Jaco
 const T&            t() const; // Get the current time
 View1D<T, N>        vector() const; // Get the current state vector
 State<T>            ics() const; // Get the initial conditions
-bool                is_running() const; // Check if the solver is still running
+bool                is_running() const; // Check if the solver can still advance (e.g. has no NaNs/Infs)
 bool                is_dead() const; // Returns !is_running()
-bool                diverges() const; // Check if the solver has diverged (nan/inf detected)
+bool                diverges() const; // Check if the solver has diverged (NaN/Inf detected)
 void                interp(T* out, const T& t) const; // Interpolate the solution at a given time within the old and new step interval
 const std::string&  status() const; // Get the solver's status message
 
@@ -120,7 +187,7 @@ void                Reset(); // Reset the solver to its initial state
 BoxedInterp<T, N>   interpolate_until(const T& time, const Callable& observer = nullptr); // Advance the solver until a specified time is reached, returning an interpolator over the integration interval
 ```
 
-### Available Solvers
+### Available methods
 
 Currently, the following solver classes are provided, overriding the proper `BaseSolver` methods for their respective algorithms:
 
@@ -133,7 +200,7 @@ Currently, the following solver classes are provided, overriding the proper `Bas
 | `BDF` | Implicit | 1-5 | Backward Differentiation Formula for stiff problems |
 | `RK4` | Explicit | 4 | Classic Runge-Kutta method with fixed step size |
 
-## Event Detection
+# Event Detection
 
 One main component of the library is the event detection system, which allows users to define conditions that trigger during integration. This feature was mainly developed for accurately detecting crossings in a *Poincaré surface of section* in dynamical systems, but it can be used for any situation where you need to detect when a certain condition is met during the integration of a system of ODE's.
 
@@ -143,7 +210,7 @@ One main component of the library is the event detection system, which allows us
 is provided, which requires that the solver is declared with `ode::SolverPolicy::RichVirtual` or `RichStatic`.
 See the relevant [example](tutorials/RuntimeEvents.cpp) for examples of how to use the runtime event system.
 
-## Arbitrary Precision Support
+# Arbitrary Precision Support
 
 All classes are templated, and the `T` template parameter can be any numeric type, including arbitrary precision:
 ```cpp
@@ -202,66 +269,8 @@ For instance, this [example](tutorials/CompileTimeEvents.cpp) demonstrates the p
 Note that as the number of requested bits of precision increases, the performance difference diminishes,
 and the overhead of algebraic evaluations dominates.
 
-# Installation
 
-
-## Prerequisites
-
-The prebuilt mpfr and gmp libraries are required for arbitrary precision support. These must be installed separately:
-
-```bash
-sudo apt install libmpfr-dev libgmp-dev
-```
-
-The rest of the external header-only dependencies are included as submodules in the `external/` directory, and they must be initialized and updated with the following command:
-
-```bash
-git submodule update --init --recursive
-```
-
-**Requirements:**
-- C++20 compatible compiler
-
-## C++ / CMake
-
-### Macros
-
-CMake options that toggle preprocessor macros across the library, its bundled dependencies, and the `odecraft_tests` executable:
-
-| CMake Option | Macro | Effect |
-|--------------|-------|--------|
-| `ODECRAFT_RK4_DENSE` | `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, at the cost of additional memory usage and slightly slower performance. |
-| `ODECRAFT_NO_WARN` | `ODECRAFT_NO_WARN` | Disable ODE solver console warnings. |
-| `ODECRAFT_NO_NAN_CHECK` | `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
-| `DEBUG` | — | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
-| `ODECRAFT_BUILD_TESTS` | — | Build the `odecraft_tests` executable from `tests/src/*.cpp`. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
-
-See useful [macros](https://github.com/phyzan/xdiff#macros) for the `xdiff` submodule.
-
-## Linking via CMake
-
-```cmake
-add_subdirectory(path/to/odecraft)
-target_link_libraries(your_target PRIVATE odecraft::odecraft)
-```
-This gives you `<odecraft/...>`, `<xdiff/...>` etc. includes, the required C++20 standard, and [macros](#macros) (toggle with e.g. `-D<MACRO_NAME>=ON`)
-
-**Building and running the test suite:**
-```bash
-cmake -S . -B build
-cmake --build build
-./build/odecraft_tests
-```
-or, with some macros enabled at configure time:
-```bash
-cmake -S . -B build -DDEBUG=ON
-cmake --build build
-```
-
----
-
-
-## Architecture
+# Architecture
 
 The library uses a **two-tier architecture** combining static and dynamic polymorphism via CRTP (Curiously Recurring Template Pattern):
 
