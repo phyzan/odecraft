@@ -19,13 +19,13 @@ template<typename T, size_t N=0>
 class OdeSolver{
 
 public:
-    
+
     virtual ~OdeSolver() = default;
 
     // ODE PROPERTIES
-    virtual void                get_rhs(T* dq_dt, const T& t, const T* q) const = 0;
-    virtual void                get_jac(T* jm, const T& t, const T* q, const T* dt = nullptr) const = 0;
-    virtual void                get_jac_approx(T* j, const T& t, const T* q, const T* dt) const = 0;
+    virtual void                get_rhs(T* out, const T& t, const T* q) const = 0;
+    virtual void                get_jac(T* out, const T& t, const T* q) const = 0;
+    virtual void                get_jac(T* out, const T& t, const T* q, const T* dt) const = 0;
 
     // ACCESSORS
     virtual const T&            get_time() const = 0;
@@ -75,8 +75,10 @@ public:
 protected:
 
     OdeSolver() = default;
-
-    DEFAULT_RULE_OF_FOUR(OdeSolver)
+    OdeSolver(const OdeSolver&) = default;
+    OdeSolver(OdeSolver&&) noexcept = default;
+    OdeSolver& operator=(const OdeSolver&) = default;
+    OdeSolver& operator=(OdeSolver&&) noexcept = default;
 
 };
 

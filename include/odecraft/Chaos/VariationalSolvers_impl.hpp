@@ -39,7 +39,8 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
     } else {
         ode_.Rhs(out, t, q); //fills the first half (nsys) entries
         // fills jm with the jacobian of the original system at (t, q)
-        // this should not call Base::jac_approx since we have demanded that the base solver has an exact jacobian for the original system
+        // this should not call Base::Jac(out, t, q, dt), meaning
+        // the approximate overload, since we have demanded that the base solver has an exact jacobian for the original system
         ode_.Jac(jm_.data(), t, q);
         for (size_t i=0; i<n; i++){
             out[i+n] = 0;
@@ -50,11 +51,9 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
     }
 }
 
-// Only provided if it does not require finite differences, otherwise the base solver will automatically use jac_approx to compute the jacobian of the full system.
+// Only provided if it does not require finite differences, otherwise the base solver will automatically use the appropriate overload to compute the jacobian of the full system.
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
-void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q, const T* dt) const requires (JP == JacPolicy::Autodiff) {
-
-    assert(dt == nullptr && "VariationalSolver overrides Jacobian computation for templated r.h.s functions and uses autodiff, so passing the `dt` argument is not used and should be nullptr");
+void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const requires (JP == JacPolicy::Autodiff) {
 
     const size_t n = this->nsys_main();
 
@@ -165,14 +164,14 @@ void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::RhsMain(T* out, cons
 }
 
 template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::JacMain(T* out, const T& t, const T* q, const T* dt) const{
+void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::JacMain(T* out, const T& t, const T* q) const{
     if constexpr (hasJacFunc<OdeType, T>){
         this->ode().ode().Jac(out, t, q);
         return;
     } else {
         jac_approx<T>([this](T* jm, const T& t_dummy, const T* q_dummy){
             this->RhsMain(jm, t_dummy, q_dummy);
-        }, out, worker.data(), t, q, dt, this->atol(), this->nsys()/2);
+        }, out, worker.data(), t, q, nullptr, this->atol(), this->nsys()/2);
     }
 }
 

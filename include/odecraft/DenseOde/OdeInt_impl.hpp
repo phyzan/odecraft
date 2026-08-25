@@ -77,6 +77,11 @@ void ODE<T, N>::Rhs(T* out, const T& t, const T* q) const{
 }
 
 template<typename T, size_t N>
+void ODE<T, N>::Jac(T* out, const T& t, const T* q) const{
+    solver_->get_jac(out, t, q);
+}
+
+template<typename T, size_t N>
 void ODE<T, N>::Jac(T* out, const T& t, const T* q, const T* dt) const{
     solver_->get_jac(out, t, q, dt);
 }
@@ -230,7 +235,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const
 
     TimePoint       TIME_END = Clock::now();
     double          duration = Clock::as_duration(TIME_START, TIME_END);
-    _runtime +=     duration;
+    runtime_ +=     duration;
     if (out){
         EventData<T>    event_res(this->event_data_, cached_idx_);
         OdeResult<T, N> res(orbit_data_, event_res, t_start_idx, solver_->get_diverges(), success, duration, terminate_message);
@@ -293,7 +298,7 @@ const OrbitData<T>& ODE<T, N>::event_data(const std::string& event) const{
 
 template<typename T, size_t N>
 double ODE<T, N>::runtime()const{
-    return _runtime;
+    return runtime_;
 }
 
 template<typename T, size_t N>
@@ -311,7 +316,7 @@ void ODE<T, N>::clear(){
 
 template<typename T, size_t N>
 void ODE<T, N>::reset(){
-    _runtime = 0;
+    runtime_ = 0;
     solver_->do_reset();
     this->clear();
 }
