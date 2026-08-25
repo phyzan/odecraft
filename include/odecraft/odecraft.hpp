@@ -38,7 +38,7 @@
  *
  * @note Make sure to include this file in your project to utilize odecraft's
  *       functionalities.
- * @note Compile with -DNO_ODE_WARN to turn off unnecessary warnings that the solvers may throw on the console
+ * @note Compile with -DODECRAFT_NO_WARN to turn off unnecessary warnings that the solvers may throw on the console
  */
 
 #endif // ODECRAFT_HPP

@@ -86,13 +86,13 @@ inline ReturnType choose_integrator_case(Integrator method, Callable&& callable,
 
 template<ODECRAFT_TEMPLATE typename Solver, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (is_rich<SP>)
-inline Solver<T, N, SP, OdeType, void> getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=inf<T>(), T stepsize=0, int dir=1, EventList<T> events = {}) {
+inline Solver<T, N, SP, OdeType, void> getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) {
     return Solver<T, N, SP, OdeType, void>(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
 }
 
 template<ODECRAFT_TEMPLATE typename Solver, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (!is_rich<SP>)
-inline Solver<T, N, SP, OdeType, void> getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=inf<T>(), T stepsize=0, int dir=1) {
+inline Solver<T, N, SP, OdeType, void> getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) {
     return Solver<T, N, SP, OdeType, void>(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir);
 }
 

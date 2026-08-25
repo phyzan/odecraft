@@ -52,8 +52,8 @@ void rk4_interp(T* out, const T& t, const T& t1, const T& t2, const T* y1, const
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 template<typename... Type>
-RK4<T, N, SP, OdeType, Derived>::RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, Type&&... extras) : Base(ode, t0, q0, rtol, atol, 0, inf<T>(), stepsize, dir, std::forward<Type>(extras)...),
-#ifdef ODECRAFT_DENSE_RK4
+RK4<T, N, SP, OdeType, Derived>::RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, Type&&... extras) : Base(ode, t0, q0, rtol, atol, 0, 0, stepsize, dir, std::forward<Type>(extras)...),
+#ifdef ODECRAFT_RK4_DENSE
 K(9, q0.size())
 #else
 K(5, q0.size())
@@ -70,11 +70,12 @@ Integrator RK4<T, N, SP, OdeType, Derived>::method() const{
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto RK4<T, N, SP, OdeType, Derived>::local_interp() const{
     size_t nsys = this->nsys();
-#ifdef ODECRAFT_DENSE_RK4
-    return [solver=*this](T* out, const T& t){
-            rk4_step([&solver](T* out, const T& tt, const T* y) NDSPAN_LAMBDA_INLINE{
-            solver.rhs(out, tt, y);
-        }, out, solver.t_old(), t - solver.t_old(), solver.old_state_ptr()+2, solver.K.data()+5*nsys, nsys, solver.K.data() + 4*nsys);
+#ifdef ODECRAFT_RK4_DENSE
+    return [solver=*this, nsys](T* out, const T& t){
+            rk4_step([&solver](T* out_, const T& t_, const T* y_){
+                solver.rhs(out_, t_, y_);
+            },
+            out, solver.t_old(), t - solver.t_old(), solver.old_state_ptr()+2, solver.K.data()+5*nsys, nsys, solver.K.data() + 4*nsys);
     };
 #else
     set_interp_data();
@@ -116,7 +117,7 @@ StepResult RK4<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void RK4<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
     size_t nsys = this->nsys();
-#ifdef ODECRAFT_DENSE_RK4    
+#ifdef ODECRAFT_RK4_DENSE    
     rk4_step([this](T* out, const T& tt, const T* y) NDSPAN_LAMBDA_INLINE{
         this->rhs(out, tt, y);
     }, result, this->t_old(), t - this->t_old(), this->old_state_ptr()+2, K.data()+5*nsys, nsys, K.data() + 4*nsys);

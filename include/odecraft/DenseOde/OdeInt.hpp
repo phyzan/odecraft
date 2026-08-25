@@ -47,7 +47,7 @@ class ODE{
 public:
 
     template<hasRhsFunc<T> OdeType>
-    ODE(ODE_CONSTRUCTOR(T));
+    ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events={}, Integrator method=Integrator::RK45);
 
     DEFAULT_RULE_OF_FOUR(ODE)
 
@@ -111,7 +111,7 @@ protected:
     double _runtime = 0;
 
     template<hasRhsFunc<T> OdeType>
-    void                                        init(ODE_CONSTRUCTOR(T));
+    void                                        init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events={}, Integrator method = Integrator::RK45);
 
     virtual void                                register_state();
 

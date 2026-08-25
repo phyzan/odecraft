@@ -106,9 +106,9 @@ public:
     static constexpr int    ERR_EST_ORDER = 2;
     static constexpr bool   IS_IMPLICIT   = false;
 
-    RK23(MAIN_DEFAULT_CONSTRUCTOR(T)) requires (!is_rich<SP>);
+    RK23(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) requires (!is_rich<SP>);
 
-    RK23(MAIN_DEFAULT_CONSTRUCTOR(T), EventList<T> events = {}) requires (is_rich<SP>);
+    RK23(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) requires (is_rich<SP>);
 
     DEFAULT_RULE_OF_FOUR(RK23)
 
@@ -176,9 +176,9 @@ public:
     static constexpr int    ERR_EST_ORDER = 4;
     static constexpr bool   IS_IMPLICIT   = false;
 
-    RK45(MAIN_DEFAULT_CONSTRUCTOR(T)) requires (!is_rich<SP>);
+    RK45(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) requires (!is_rich<SP>);
 
-    RK45(MAIN_DEFAULT_CONSTRUCTOR(T), EventList<T> events = {}) requires (is_rich<SP>);
+    RK45(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) requires (is_rich<SP>);
 
     DEFAULT_RULE_OF_FOUR(RK45)
 

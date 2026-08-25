@@ -149,7 +149,7 @@ void bdf_interp(T* result, const T& t, const T& t2, const T& h, const T* D, size
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 template<typename... Type>
-BDF<T, N, SP, OdeType, Derived>::BDF(private_tag, MAIN_CONSTRUCTOR(T), Type&&... extras) : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::forward<Type>(extras)...), _J(q0.size(), q0.size()), _B(q0.size(), q0.size()), _LU(q0.size()), _R((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _U((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _RU((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _f(q0.size()), _dy(q0.size()), _b(q0.size()), _scale(q0.size()), _ypred(q0.size()), _psi(q0.size()), _d(q0.size()), _error(q0.size()), _error_m(q0.size()), _error_p(q0.size()) {
+BDF<T, N, SP, OdeType, Derived>::BDF(private_tag, OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, Type&&... extras) : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::forward<Type>(extras)...), _J(q0.size(), q0.size()), _B(q0.size(), q0.size()), _LU(q0.size()), _R((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _U((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _RU((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _f(q0.size()), _dy(q0.size()), _b(q0.size()), _scale(q0.size()), _ypred(q0.size()), _psi(q0.size()), _d(q0.size()), _error(q0.size()), _error_m(q0.size()), _error_p(q0.size()) {
     
     if (rtol == 0){
         rtol = 100*std::numeric_limits<T>::epsilon();
@@ -159,7 +159,7 @@ BDF<T, N, SP, OdeType, Derived>::BDF(private_tag, MAIN_CONSTRUCTOR(T), Type&&...
     }
     _newton_tol = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol, ndspan::min<T>(T(3)/100, pow(rtol, T(1)/T(2))));
 
-    if (!this->is_dead() && q0.data() != nullptr){
+    if (this->is_running() && q0.data() != nullptr){
         if (this->validate_ics_impl(t0, q0.data())){
             this->_reset_impl_alone();
         }else{

@@ -63,9 +63,9 @@ public:
     static constexpr int    ERR_EST_ORDER  = DOP_COEFS<T>::ERR_EST_ORDER;  // 7
     static constexpr bool   IS_IMPLICIT    = false;
 
-    DOP853(MAIN_DEFAULT_CONSTRUCTOR(T)) requires (!is_rich<SP>);
+    DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) requires (!is_rich<SP>);
 
-    DOP853(MAIN_DEFAULT_CONSTRUCTOR(T), EventList<T> events = {}) requires (is_rich<SP>);
+    DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) requires (is_rich<SP>);
 
     DEFAULT_RULE_OF_FOUR(DOP853)
 

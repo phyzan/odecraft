@@ -148,7 +148,7 @@ void EventBase<Derived, T, MaskFunc>::reset_impl(int direction){
 // PreciseEvent implementations
 
 template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc, typename Derived>
-PreciseEvent<T, Target, MaskFunc, Derived>::PreciseEvent(std::string name, Target when, T event_tol, int dir, MaskFunc mask, bool delay_mask) : Base(std::move(name), std::move(mask), delay_mask), target(std::move(when)), crossing_dir(dir), ftol(event_tol) {}
+PreciseEvent<T, Target, MaskFunc, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir, MaskFunc mask, bool delay_mask) : Base(std::move(name), std::move(mask), delay_mask), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {}
 
 template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc, typename Derived>
 T PreciseEvent<T, Target, MaskFunc, Derived>::obj_fun(const T& t, const T* q) const{

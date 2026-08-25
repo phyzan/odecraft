@@ -62,7 +62,7 @@ size_t EventCounter<T, N>::total()const{
 // ODE implementations
 template<typename T, size_t N>
 template<hasRhsFunc<T> OdeType>
-ODE<T, N>::ODE(MAIN_CONSTRUCTOR(T), EventList<T> events, Integrator method) : ODE(q0.size()){
+ODE<T, N>::ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Integrator method) : ODE(q0.size()){
     init(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events), method);
 }
 
@@ -135,7 +135,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const
             *out = OdeResult<T, N>({}, {this->nsys()}, solver_->get_diverges(), 0, false, 0, solver_->get_status());
         }
         return false;
-    }else if (t_max*solver_->get_direction() < solver_->get_time()*solver_->get_direction()){
+    } else if (t_max*solver_->get_direction() < solver_->get_time()*solver_->get_direction()){
         if (out){
             *out = OdeResult<T, N>({}, {this->nsys()}, 0, false, false, 0, "Cannot integrate in opposite direction");
         }
@@ -147,7 +147,6 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const
         assert(interpolate == false && "Explicit step storage is enabled only for non-interpolating integration");
     }
     // ------------------------------ IMPLEMENTATION --------------------------------------
-    solver_->do_resume();
     const T         t0 = solver_->get_time();
     const bool      first_eval_t0 = (t_store.size() > 0 && t_store[0] == t0);
     const char*     terminate_message = nullptr;
@@ -319,7 +318,7 @@ void ODE<T, N>::reset(){
 
 template<typename T, size_t N>
 template<hasRhsFunc<T> OdeType>
-void ODE<T, N>::init(MAIN_CONSTRUCTOR(T), EventList<T> events, Integrator method){
+void ODE<T, N>::init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Integrator method){
     solver_ = make_solver<UtilPolicy::RichVirtual>(method, std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
     const EventCollection<T>& event_coll = this->solver_->get_event_col();
     cached_idx_.resize(event_coll.size(), 0);

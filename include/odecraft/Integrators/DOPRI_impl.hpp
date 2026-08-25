@@ -219,7 +219,7 @@ XDIFF_FORCEINLINE T rk45_step_impl(T* result, const T* state, const T& h, size_t
 // ============================================================================
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-RK23<T, N, SP, OdeType, Derived>::RK23(MAIN_CONSTRUCTOR(T)) requires (!is_rich<SP>)
+RK23<T, N, SP, OdeType, Derived>::RK23(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir) requires (!is_rich<SP>)
     : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir),
       scratch_space(q0.size()), K0_(q0.size()), KF_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
     if (q0.data() != nullptr){
@@ -228,7 +228,7 @@ RK23<T, N, SP, OdeType, Derived>::RK23(MAIN_CONSTRUCTOR(T)) requires (!is_rich<S
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-RK23<T, N, SP, OdeType, Derived>::RK23(MAIN_CONSTRUCTOR(T), EventList<T> events) requires (is_rich<SP>)
+RK23<T, N, SP, OdeType, Derived>::RK23(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events) requires (is_rich<SP>)
     : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)),
       scratch_space(q0.size()), K0_(q0.size()), KF_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
     if (q0.data() != nullptr){
@@ -364,7 +364,7 @@ constexpr typename RK23<T, N, SP, OdeType, Derived>::Ptype RK23<T, N, SP, OdeTyp
 // ============================================================================
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-RK45<T, N, SP, OdeType, Derived>::RK45(MAIN_CONSTRUCTOR(T)) requires (!is_rich<SP>)
+RK45<T, N, SP, OdeType, Derived>::RK45(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir) requires (!is_rich<SP>)
     : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir),
     scratch_space(q0.size()),
     K0_(q0.size()),
@@ -375,7 +375,7 @@ RK45<T, N, SP, OdeType, Derived>::RK45(MAIN_CONSTRUCTOR(T)) requires (!is_rich<S
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-RK45<T, N, SP, OdeType, Derived>::RK45(MAIN_CONSTRUCTOR(T), EventList<T> events) requires (is_rich<SP>)
+RK45<T, N, SP, OdeType, Derived>::RK45(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events) requires (is_rich<SP>)
     : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)),
       scratch_space(q0.size()),
       K0_(q0.size()),

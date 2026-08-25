@@ -22,9 +22,9 @@ public:
     Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int dir=1, EventList<T> events = {}) requires (is_rich<SP>);
 
     // Constructor signature that follows the main constructor pattern.
-    Euler(MAIN_DEFAULT_CONSTRUCTOR(T)) requires (!is_rich<SP>);
+    Euler(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) requires (!is_rich<SP>);
 
-    Euler(MAIN_DEFAULT_CONSTRUCTOR(T), EventList<T> events = {}) requires (is_rich<SP>);
+    Euler(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) requires (is_rich<SP>);
 
     Integrator method() const;
 
