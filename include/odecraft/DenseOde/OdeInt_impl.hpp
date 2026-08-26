@@ -102,12 +102,28 @@ bool ODE<T, N>::integrate_until(OdeResult<T, N>* out, T time, const std::vector<
 }
 
 template<typename T, size_t N>
+bool ODE<T, N>::integrate(OdeResult<T, N>* out, T interval, const std::vector<T>& t_eval, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
+    if (interval < 0){
+        throw std::runtime_error("Integration interval must be non-negative");
+    }
+    return this->integrate_until(out, interval + solver_->get_time()*solver_->get_direction(), t_eval, event_options, max_progress_reports, std::move(observer));
+}
+
+template<typename T, size_t N>
 bool ODE<T, N>::rich_integrate_until(OdeSolution<T, N>& out, T time, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
     if (observer == nullptr){
         return this->priv_integrate_until(&out, time, nullptr, event_options, nullptr, max_progress_reports, true);
     } else {
         return this->priv_integrate_until(&out, time, nullptr, event_options, std::move(observer), max_progress_reports, true);
     }
+}
+
+template<typename T, size_t N>
+bool ODE<T, N>::rich_integrate(OdeSolution<T, N>& out, T interval, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
+    if (interval < 0){
+        throw std::runtime_error("Integration interval must be non-negative");
+    }
+    return this->rich_integrate_until(out, interval + solver_->get_time()*solver_->get_direction(), event_options, max_progress_reports, std::move(observer));
 }
 
 template<typename T, size_t N>
@@ -147,7 +163,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
         if constexpr (store_explicit_steps){
             return View1D<T>{t_store.data() + first_eval_t0, t_store.size() - first_eval_t0};
         } else {
-            View1D<T>{nullptr, size_t{0}};
+            return View1D<T>{nullptr, size_t{0}};
         }
     }();
     
