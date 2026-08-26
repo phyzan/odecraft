@@ -1,8 +1,8 @@
 #ifndef ODECRAFT_DOP853_IMPL_HPP
 #define ODECRAFT_DOP853_IMPL_HPP
 
-#include <odecraft/Integrators/DOP853.hpp>
-#include <odecraft/Integrators/DOPRI_impl.hpp>
+#include <odecraft/Steppers/DOP853.hpp>
+#include <odecraft/Steppers/DOPRI_impl.hpp>
 
 namespace ode{
 
@@ -381,8 +381,8 @@ DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Integrator DOP853<T, N, SP, OdeType, Derived>::method() const{
-    return Integrator::DOP853;
+Stepper DOP853<T, N, SP, OdeType, Derived>::method() const{
+    return Stepper::DOP853;
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>

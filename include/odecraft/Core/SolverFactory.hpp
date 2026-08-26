@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <odecraft/Core/Events.hpp>
 
-#define ODECRAFT_TEMPLATE template<typename T, size_t, SolverPolicy, hasRhsFunc<T>, typename>
 
 namespace ode {
 
@@ -20,8 +19,7 @@ template<typename T, size_t N>
 class OdeRichSolver;
 
 
-enum class Integrator : uint8_t{
-    Custom,
+enum class Stepper : uint8_t{
     Euler,
     RK4,
     RK23,
@@ -47,7 +45,7 @@ struct SolverBoxSelector<T, N, UtilPolicy::Virtual>{
     using type = pbox::Box<OdeSolver<T, N>>;
 };
 
-template<Integrator M, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
 struct SolverTypeGetter{
     using type = void;
 };
@@ -65,56 +63,56 @@ constexpr bool is_rich = (SP == SolverPolicy::RichStatic || SP == SolverPolicy::
 
 
 template<typename ReturnType, typename Callable, typename... Args>
-inline ReturnType choose_integrator_case(Integrator method, Callable&& callable, Args&&... args){
+inline ReturnType choose_integrator_case(Stepper method, Callable&& callable, Args&&... args){
     switch (method){
-        case Integrator::Euler:
-            return callable.template operator()<Integrator::Euler>(std::forward<Args>(args)...);
-        case Integrator::RK4:
-            return callable.template operator()<Integrator::RK4>(std::forward<Args>(args)...);
-        case Integrator::RK23:
-            return callable.template operator()<Integrator::RK23>(std::forward<Args>(args)...);
-        case Integrator::RK45:
-            return callable.template operator()<Integrator::RK45>(std::forward<Args>(args)...);
-        case Integrator::DOP853:
-            return callable.template operator()<Integrator::DOP853>(std::forward<Args>(args)...);
-        case Integrator::BDF:
-            return callable.template operator()<Integrator::BDF>(std::forward<Args>(args)...);
+        case Stepper::Euler:
+            return callable.template operator()<Stepper::Euler>(std::forward<Args>(args)...);
+        case Stepper::RK4:
+            return callable.template operator()<Stepper::RK4>(std::forward<Args>(args)...);
+        case Stepper::RK23:
+            return callable.template operator()<Stepper::RK23>(std::forward<Args>(args)...);
+        case Stepper::RK45:
+            return callable.template operator()<Stepper::RK45>(std::forward<Args>(args)...);
+        case Stepper::DOP853:
+            return callable.template operator()<Stepper::DOP853>(std::forward<Args>(args)...);
+        case Stepper::BDF:
+            return callable.template operator()<Stepper::BDF>(std::forward<Args>(args)...);
         default:
             throw std::runtime_error("Unknown integrator enum value");
     }
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
+template<Stepper S, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (is_rich<SP>)
-inline Solver<T, N, SP, OdeType, void> getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) {
-    return Solver<T, N, SP, OdeType, void>(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
+inline auto getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) {
+    return typename detail::SolverTypeGetter<S, T, N, SP, OdeType, void>::type(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
+template<Stepper S, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (!is_rich<SP>)
-inline Solver<T, N, SP, OdeType, void> getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) {
-    return Solver<T, N, SP, OdeType, void>(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir);
+inline auto getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) {
+    return typename detail::SolverTypeGetter<S, T, N, SP, OdeType, void>::type(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir);
 }
 
 
 template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-inline BoxedSolver<T, N, UP> make_solver(Integrator method, OdeType ode, T t0, View1D<T, N> q0, Args&&... args) {
+inline BoxedSolver<T, N, UP> make_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, Args&&... args) {
     constexpr SolverPolicy SP = UP == UtilPolicy::RichVirtual ? SolverPolicy::RichVirtual : SolverPolicy::Virtual;
     return choose_integrator_case<BoxedSolver<T, N, UP>>(method,
-        [&]<Integrator M>(){
-            using Solver = typename detail::SolverTypeGetter<M, T, N, SP, OdeType>::type;
+        [&]<Stepper S>(){
+            using Solver = typename detail::SolverTypeGetter<S, T, N, SP, OdeType>::type;
             return pbox::make_box<Solver>(std::move(ode), t0, q0, std::forward<Args>(args)...);
         }
     );
 }
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-inline BoxedSolver<T, N, UtilPolicy::Virtual> make_vsolver(Integrator method, OdeType ode, T t0, View1D<T, N> q0, Args&&... args) {
+inline BoxedSolver<T, N, UtilPolicy::Virtual> make_vsolver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, Args&&... args) {
     return make_solver<UtilPolicy::Virtual>(method, std::move(ode), t0, q0, std::forward<Args>(args)...);
 }
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-inline BoxedSolver<T, N, UtilPolicy::RichVirtual> make_rich_vsolver(Integrator method, OdeType ode, T t0, View1D<T, N> q0, Args&&... args) {
+inline BoxedSolver<T, N, UtilPolicy::RichVirtual> make_rich_vsolver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, Args&&... args) {
     return make_solver<UtilPolicy::RichVirtual>(method, std::move(ode), t0, q0, std::forward<Args>(args)...);
 }
 

@@ -5,7 +5,7 @@
 #include <odecraft/DenseOde/OdeInt.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/Core/VirtualTraits.hpp>
-#include <odecraft/Integrators/Solvers.hpp>
+#include <odecraft/Steppers/Steppers.hpp>
 
 
 namespace ode::chaos {
@@ -28,9 +28,9 @@ template<typename T, size_t N, UtilPolicy UP>
 class ChaoticSolver;
 
 template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Integrator method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
+pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
 class VariationalSolver;
 
 
@@ -100,8 +100,8 @@ private:
 };
 
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-class VariationalSolver : public ::ode::detail::SolverTypeGetter<Solver, T, 2*N, SP, VariationalOdeSys<T, N, OdeType>, GetDerived<VariationalSolver<Solver, T, N, SP, OdeType, Derived>, Derived>>::type {
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, T, 2*N, SP, VariationalOdeSys<T, N, OdeType>, GetDerived<VariationalSolver<S, T, N, SP, OdeType, Derived>, Derived>>::type {
 
     /**
     This solvers integrates the coupled / augmented ODE system consisting of the original system and the variational equations. The state vector is of size 2*N, where the first N entries correspond to the state of the original system and the last N entries correspond to the deviation vector. The deviation vector is renormalized every "period" time units, and log_ksi keeps track of the logarithm of the stretching factor since the last renormalization. The user can retrieve the current value of the largest Lyapunov exponent using lyapunov_exponent(), which is computed as log_ksi divided by the elapsed time since the beginning of the integration.
@@ -120,7 +120,7 @@ class VariationalSolver : public ::ode::detail::SolverTypeGetter<Solver, T, 2*N,
 
     */
 
-    using Base = typename ::ode::detail::SolverTypeGetter<Solver, T, 2*N, SP, VariationalOdeSys<T, N, OdeType>, GetDerived<VariationalSolver<Solver, T, N, SP, OdeType, Derived>, Derived>>::type;
+    using Base = typename ::ode::detail::SolverTypeGetter<S, T, 2*N, SP, VariationalOdeSys<T, N, OdeType>, GetDerived<VariationalSolver<S, T, N, SP, OdeType, Derived>, Derived>>::type;
 
 public:
 
@@ -190,7 +190,7 @@ public:
     using Base = ODE<T, N>;
 
     template<hasRhsFunc<T> OdeType>
-    VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T> events = {}, Integrator method = Integrator::RK45);
+    VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T> events = {}, Stepper method = Stepper::RK45);
 
     std::unique_ptr<ODE<T, N>> clone() const override;
 
@@ -223,15 +223,15 @@ private:
 
 
 template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Integrator method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
+pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
 
 
-template<SolverPolicy SP, Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType>
+template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (!is_rich<SP>)
 auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1);
 
 
-template<SolverPolicy SP, Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType>
+template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (is_rich<SP>)
 auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
 
@@ -240,14 +240,14 @@ auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta
 
 namespace ode::traits{
 
-template<Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType, typename DerivedVS, size_t NBase>
-struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<Solver, T, N, SolverPolicy::Virtual, OdeType, DerivedVS>, T, NBase, SolverPolicy::Virtual> {
+template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, typename DerivedVS, size_t NBase>
+struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, N, SolverPolicy::Virtual, OdeType, DerivedVS>, T, NBase, SolverPolicy::Virtual> {
     using type = chaos::ChaoticSolver<T, N, UtilPolicy::Virtual>;
 };
 
 
-template<Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType, typename DerivedVS, size_t NBase>
-struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<Solver, T, N, SolverPolicy::RichVirtual, OdeType, DerivedVS>, T, NBase, SolverPolicy::RichVirtual> {
+template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, typename DerivedVS, size_t NBase>
+struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, N, SolverPolicy::RichVirtual, OdeType, DerivedVS>, T, NBase, SolverPolicy::RichVirtual> {
     using type = chaos::ChaoticSolver<T, N, UtilPolicy::RichVirtual>;
 };
 

@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_DOPRI_IMPL_HPP
 #define ODECRAFT_DOPRI_IMPL_HPP
 
-#include <odecraft/Integrators/DOPRI.hpp>
+#include <odecraft/Steppers/DOPRI.hpp>
 #include <ndspan/ndtools.hpp>
 
 namespace ode{
@@ -237,8 +237,8 @@ RK23<T, N, SP, OdeType, Derived>::RK23(OdeType ode, T t0, View1D<T, N> q0, T rto
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Integrator RK23<T, N, SP, OdeType, Derived>::method() const{
-    return Integrator::RK23;
+Stepper RK23<T, N, SP, OdeType, Derived>::method() const{
+    return Stepper::RK23;
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -386,8 +386,8 @@ RK45<T, N, SP, OdeType, Derived>::RK45(OdeType ode, T t0, View1D<T, N> q0, T rto
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Integrator RK45<T, N, SP, OdeType, Derived>::method() const{
-    return Integrator::RK45;
+Stepper RK45<T, N, SP, OdeType, Derived>::method() const{
+    return Stepper::RK45;
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>

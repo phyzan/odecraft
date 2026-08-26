@@ -14,7 +14,7 @@ static void rhs(double* out, const double& /*t*/, const double* q){
     out[1] = mu * (1 - x*x) * xdot - x;
 }
 
-template<ODECRAFT_TEMPLATE typename Solver>
+template<Stepper S>
 void run(const char* label){
     // declare ics
     const double t0 = 0;
@@ -30,11 +30,11 @@ void run(const char* label){
     std::cout << "\n---------- Testing " << label << " method------------------\n" << std::endl;
 
     // Stack allocated solver (nsys is passed as a compile-time parameter)
-    auto solver_1 = getSolver<Solver, SolverPolicy::Static>(
+    auto solver_1 = getSolver<S, SolverPolicy::Static>(
         OdeData{.Rhs=rhs}, t0, View1D<double, nsys>{q0.data()}, rtol, atol, min_step, max_step, stepsize, 1);
 
     // Heap allocated solver (nsys is passed as a runtime parameter)
-    auto solver_2 = getSolver<Solver, SolverPolicy::Static>(
+    auto solver_2 = getSolver<S, SolverPolicy::Static>(
         OdeData{.Rhs=rhs}, t0, View1D{q0.data(), nsys}, rtol, atol, min_step, max_step, stepsize, 1);
 
     
@@ -58,11 +58,11 @@ void run(const char* label){
 
 void test_solvers(){
 
-    run<ode::Euler>("Euler");
-    run<ode::RK23>("RK23");
-    run<ode::RK45>("RK45");
-    run<ode::DOP853>("DOP853");
-    run<ode::BDF>("BDF");
-    run<ode::RK4>("RK4");
+    run<Stepper::Euler>("Euler");
+    run<Stepper::RK23>("RK23");
+    run<Stepper::RK45>("RK45");
+    run<Stepper::DOP853>("DOP853");
+    run<Stepper::BDF>("BDF");
+    run<Stepper::RK4>("RK4");
 
 }

@@ -62,7 +62,7 @@ size_t EventCounter<T, N>::total()const{
 // ODE implementations
 template<typename T, size_t N>
 template<hasRhsFunc<T> OdeType>
-ODE<T, N>::ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Integrator method) : ODE(q0.size()){
+ODE<T, N>::ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Stepper method) : ODE(q0.size()){
     init(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events), method);
 }
 
@@ -429,7 +429,7 @@ void ODE<T, N>::reset(){
 
 template<typename T, size_t N>
 template<hasRhsFunc<T> OdeType>
-void ODE<T, N>::init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Integrator method){
+void ODE<T, N>::init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Stepper method){
     solver_ = make_solver<UtilPolicy::RichVirtual>(method, std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
     const EventCollection<T>& event_coll = this->solver_->get_event_col();
     cached_idx_.resize(event_coll.size(), 0);

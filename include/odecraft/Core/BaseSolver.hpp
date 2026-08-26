@@ -435,7 +435,7 @@ public:
     const std::string&  get_status() const { return status(); }
     bool                get_validate_ics(T t0, const T* q0) const { return validate_ics(t0, q0); }
     bool                get_has_valid_ics() const { return has_valid_ics(); }
-    Integrator          get_method() const { return method(); }
+    Stepper             get_method() const { return method(); }
     void                get_interp(T* result, const T& t) const { interp(result, t); }
     size_t              get_rhs_eval_count() const { return rhs_eval_count_; }
     size_t              get_jac_eval_count() const { return jac_eval_count_; }
@@ -480,7 +480,7 @@ public:
     // =================== STATIC OVERRIDES (NECESSARY) ===============================
     // Derived classes MUST implement these methods / attributes.
 
-    Integrator method() const {
+    Stepper method() const {
         return THIS->method();
     }
 

@@ -229,7 +229,7 @@ int main(){
     
     // Let's create a solver for the simple harmonic oscillator using the RK45 method
     pbox::Box<OdeSolver<T, 2>> solver = make_vsolver(
-        Integrator::RK45,
+        Stepper::RK45,
         OdeData{
             .Rhs=[](auto* dq_dt, const auto& t, const auto* q){
                 dq_dt[0] = q[1];
@@ -363,8 +363,8 @@ odecraft/
 │       │   ├── SolverFactory.hpp    # Factory for solver instantiation
 │       │   └── *_impl.hpp           # Implementation files
 │       │
-│       ├── Integrators/             # Concrete solver implementations
-│       │   ├── Solvers.hpp          # Common solver includes
+│       ├── Steppers/                # Concrete solver implementations
+│       │   ├── Steppers.hpp         # Common solver includes
 │       │   ├── Euler.hpp            # Simple Euler method (1st order)
 │       │   ├── RungeKutta.hpp       # Generic Runge-Kutta framework
 │       │   ├── DOPRI.hpp            # Runge-Kutta RK23, RK45 (adaptive)

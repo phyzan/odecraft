@@ -2,7 +2,7 @@
 #define ODECRAFT_BDF_IMPL_HPP
 
 
-#include <odecraft/Integrators/BDF.hpp>
+#include <odecraft/Steppers/BDF.hpp>
 #include <odecraft/Tools.hpp>
 
 namespace ode{
@@ -201,8 +201,8 @@ bool BDF<T, N, SP, OdeType, Derived>::validate_ics_impl(T t0, const T* q0) const
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Integrator BDF<T, N, SP, OdeType, Derived>::method() const {
-    return Integrator::BDF;
+Stepper BDF<T, N, SP, OdeType, Derived>::method() const {
+    return Stepper::BDF;
 }
 
 

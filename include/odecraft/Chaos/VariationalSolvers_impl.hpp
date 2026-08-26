@@ -89,9 +89,9 @@ const OdeType& VariationalOdeSys<T, N, OdeType>::ode() const{
     return ode_;
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 template<typename... Args>
-VariationalSolver<Solver, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, Args&&... extra) : Base(VariationalOdeSys<T, N, OdeType>(ode, q0.size()), t0,
+VariationalSolver<S, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, Args&&... extra) : Base(VariationalOdeSys<T, N, OdeType>(ode, q0.size()), t0,
     !q0.data() || !delta_q0.data() ?
     View1D<T, 2*N>{nullptr, 2*q0.size()} :
     View1D<T, 2*N>{
@@ -115,39 +115,39 @@ VariationalSolver<Solver, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType
 
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<Solver, T, N, SP, OdeType, Derived>::elapsed_time() const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+T VariationalSolver<S, T, N, SP, OdeType, Derived>::elapsed_time() const{
     return this->t() - this->ics_ptr()[0];
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<Solver, T, N, SP, OdeType, Derived>::stretching_number() const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+T VariationalSolver<S, T, N, SP, OdeType, Derived>::stretching_number() const{
     const size_t nsys = this->nsys()/2;
     return log(norm(this->true_state_ptr()+2+nsys, nsys));
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<Solver, T, N, SP, OdeType, Derived>::kick() const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+T VariationalSolver<S, T, N, SP, OdeType, Derived>::kick() const{
     return stretching_number()/(this->t() - t_last_);
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<Solver, T, N, SP, OdeType, Derived>::period() const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+T VariationalSolver<S, T, N, SP, OdeType, Derived>::period() const{
     return period_;
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<Solver, T, N, SP, OdeType, Derived>::log_ksi() const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+T VariationalSolver<S, T, N, SP, OdeType, Derived>::log_ksi() const{
     return logksi_ + this->stretching_number();
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<Solver, T, N, SP, OdeType, Derived>::lyapunov_exponent() const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+T VariationalSolver<S, T, N, SP, OdeType, Derived>::lyapunov_exponent() const{
     return np == 0 ? T{0} : T(log_ksi()/elapsed_time());
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::Reset(){
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void VariationalSolver<S, T, N, SP, OdeType, Derived>::Reset(){
     Base::Reset();
     ndspan::copy_array(tmp_state_.data(), this->ics().vector(), this->nsys());
     t_last_ = this->ics_ptr()[0];
@@ -158,13 +158,13 @@ void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::Reset(){
     logksi_last_ = 0;
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::RhsMain(T* out, const T& t, const T* q) const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void VariationalSolver<S, T, N, SP, OdeType, Derived>::RhsMain(T* out, const T& t, const T* q) const{
     this->ode().ode().Rhs(out, t, q); //fills the first half (nsys) entries
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::JacMain(T* out, const T& t, const T* q) const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void VariationalSolver<S, T, N, SP, OdeType, Derived>::JacMain(T* out, const T& t, const T* q) const{
     if constexpr (hasJacFunc<OdeType, T>){
         this->ode().ode().Jac(out, t, q);
         return;
@@ -175,14 +175,14 @@ void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::JacMain(T* out, cons
     }
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::ReAdjust(const T* /*new_vector*/){
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void VariationalSolver<S, T, N, SP, OdeType, Derived>::ReAdjust(const T* /*new_vector*/){
     assert(false && "ReAdjust is not supported in VariationalSolver because it would interfere with the renormalization process. If you need to re-adjust the state at intermediate times, consider using a different solver or implementing a custom solution.");
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 template<typename... Args>
-bool VariationalSolver<Solver, T, N, SP, OdeType, Derived>::Adv_Impl(Args&&... args) {
+bool VariationalSolver<S, T, N, SP, OdeType, Derived>::Adv_Impl(Args&&... args) {
     if (flagged){
         Base::ReAdjust(tmp_state_.data());
         flagged = false;
@@ -207,8 +207,8 @@ bool VariationalSolver<Solver, T, N, SP, OdeType, Derived>::Adv_Impl(Args&&... a
     }
 }
 
-template<Integrator Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Array1D<T, 2*N> VariationalSolver<Solver, T, N, SP, OdeType, Derived>::join_arrays(View1D<T, N> q0, View1D<T, N> delta_q0){
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+Array1D<T, 2*N> VariationalSolver<S, T, N, SP, OdeType, Derived>::join_arrays(View1D<T, N> q0, View1D<T, N> delta_q0){
     assert(q0.size() == delta_q0.size() && "q0 and delta_q0 must have the same size");
     Array1D<T, 2*N> tmp(2*q0.size());
     ndspan::copy_array(tmp.data(), q0.data(), q0.size());
@@ -234,7 +234,7 @@ void normalized(T* out, const T* src, size_t nsys){
 
 template<typename T, size_t N>
 template<hasRhsFunc<T> OdeType>
-VariationalODE<T, N>::VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Integrator method) : Base(2*q0.size()){
+VariationalODE<T, N>::VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Stepper method) : Base(2*q0.size()){
     assert(q0.size() == delta_q0.size() && "q0 and delta_q0 must have the same size in VariationalODE");
     // Must create solver BEFORE register_state(), since it accesses solver_
     this->solver_ = make_variational_solver<UtilPolicy::RichVirtual>(method, ode, t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
@@ -299,15 +299,15 @@ void VariationalODE<T, N>::register_state(){
 
 
 template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Integrator method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args){
+pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args){
 
     constexpr SolverPolicy SP = UP == UtilPolicy::Virtual ? SolverPolicy::Virtual : SolverPolicy::RichVirtual;
 
     return choose_integrator_case<pbox::Box<ChaoticSolver<T, 2*N, UP>>>(method,
-        [&]<Integrator M>(){
-            using Solver = typename ::ode::detail::SolverTypeGetter<M, T, N, SP, OdeType>::type;
+        [&]<Stepper S>(){
+            using Solver = typename ::ode::detail::SolverTypeGetter<S, T, N, SP, OdeType>::type;
             return pbox::make_box<VariationalSolver<
-                M,
+                S,
                 typename Solver::value_type,
                 Solver::NSYS,
                 SP,
@@ -317,17 +317,17 @@ pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Integrator method, 
 }
 
 
-template<SolverPolicy SP, Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType>
+template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (!is_rich<SP>)
 auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int direction){
-    return VariationalSolver<Solver, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction);
+    return VariationalSolver<S, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction);
 }
 
 
-template<SolverPolicy SP, Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType>
+template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (is_rich<SP>)
 auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events){
-    return VariationalSolver<Solver, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction, std::move(events));
+    return VariationalSolver<S, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction, std::move(events));
 }
 
 } // namespace ode
