@@ -684,6 +684,9 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
     Callable&& observer,
     ArrayLike&& checkpoints){
 
+    static_assert(isObserver<Callable, T> || std::is_same_v<std::decay_t<Callable>, std::nullptr_t>, "Callable must be an observer or nullptr");
+    static_assert(isArray<ArrayLike, T> || std::is_same_v<std::decay_t<ArrayLike>, std::nullptr_t>, "ArrayLike must be an array or nullptr");
+
     if (this->is_dead()){
         this->warn_dead();
         return false;

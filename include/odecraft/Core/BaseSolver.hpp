@@ -448,11 +448,31 @@ public:
     bool                do_advance_by(T interval) { return advance_by(interval); }
 
     bool                do_advance_until(T time) { return advance_until(time); }
-    bool                do_advance_until(T time, observer_t<T> observer) { return advance_until(time, observer); }
-    bool                do_advance_until(T time, observer_t<T> observer, View1D<T> checkpoints) { return advance_until(time, observer, checkpoints); }
+
+    bool                do_advance_until(T time, observer_t<T> observer) {
+        if (observer == nullptr){
+            return advance_until(time);
+        } else {
+            return advance_until(time, std::move(observer));
+        }
+    }
+
+    bool                do_advance_until(T time, observer_t<T> observer, View1D<T> checkpoints) {
+        if (observer == nullptr){
+            return generic_advance_until(time, nullptr, std::move(checkpoints));
+        } else {
+            return generic_advance_until(time, std::move(observer), std::move(checkpoints));
+        }
+    }
 
     BoxedInterp<T, N>   do_interpolate_until(T time) { return interpolate_until(time); }
-    BoxedInterp<T, N>   do_interpolate_until(T time, observer_t<T> observer) { return interpolate_until(time, observer); }
+    BoxedInterp<T, N>   do_interpolate_until(T time, observer_t<T> observer) {
+        if (observer == nullptr){
+            return interpolate_until(time);
+        } else {
+            return interpolate_until(time, std::move(observer));
+        }
+    }
     void                do_reset() { THIS->Reset(); }
     void                do_kill(std::string message = "") { kill(std::move(message)); }
     bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) { return set_ics(t0, y0, stepsize, direction); }

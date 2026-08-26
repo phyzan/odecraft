@@ -49,24 +49,70 @@ void VectorField<Derived, NDIM, AS_VIRTUAL>::OdeFunc(double* out, double /*t*/, 
 
 
 template<typename Derived, int NDIM, bool AS_VIRTUAL>
-pbox::Box<OdeResult<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::streamline(const double* x0, double length, double rtol, double atol, double min_step, double max_step, double stepsize, int direction, Integrator method, bool normalized, const std::vector<double>& t_eval) const{
+pbox::Box<OdeResult<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::streamline(
+    const double* x0,
+    double length,
+    double rtol,
+    double atol,
+    double min_step,
+    double max_step,
+    double stepsize,
+    int direction,
+    Integrator method,
+    bool normalized,
+    const std::vector<double>& t_eval) const{
+
     pbox::Box<ODE<double, NDIM>> ode = this->get_streamline_ode(x0, rtol, atol, min_step, max_step, stepsize, direction, method, normalized);
     pbox::Box<OdeResult<double, NDIM>> result = pbox::make_box<OdeResult<double, NDIM>>();
-    ode->integrate_until(result.get_raw_pointer(), length, t_eval);
+    ode->integrate(
+        result.get_raw_pointer(),
+        length,
+        {},
+        0,
+        nullptr,
+        t_eval
+    );
     return result;
 }
 
 template<typename Derived, int NDIM, bool AS_VIRTUAL>
-pbox::Box<OdeResult<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::streamline(const double* x0, double length, double rtol, double atol, double min_step, double max_step, double stepsize, int direction, Integrator method, bool normalized) const{
+pbox::Box<OdeResult<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::streamline(
+    const double* x0,
+    double length,
+    double rtol,
+    double atol,
+    double min_step,
+    double max_step,
+    double stepsize,
+    int direction,
+    Integrator method,
+    bool normalized) const{
+
     pbox::Box<ODE<double, NDIM>> ode = this->get_streamline_ode(x0, rtol, atol, min_step, max_step, stepsize, direction, method, normalized);
     pbox::Box<OdeResult<double, NDIM>> result = pbox::make_box<OdeResult<double, NDIM>>();
-    ode->integrate_until(result.get_raw_pointer(), length);
+    ode->integrate(
+        result.get_raw_pointer(),
+        length,
+        {},
+        0,
+        nullptr
+    );
     return result;
 }
 
 
 template<typename Derived, int NDIM, bool AS_VIRTUAL>
-pbox::Box<ODE<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::get_streamline_ode(const double* x0, double rtol, double atol, double min_step, double max_step, double stepsize, int direction, Integrator method, bool normalized) const{
+pbox::Box<ODE<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::get_streamline_ode(
+    const double* x0,
+    double rtol,
+    double atol,
+    double min_step,
+    double max_step,
+    double stepsize,
+    int direction,
+    Integrator method,
+    bool normalized) const{
+
     if (normalized){
         return pbox::make_box<ODE<double, NDIM>>(
             OdeData{
