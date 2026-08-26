@@ -14,7 +14,7 @@ namespace ode{
 
 // EventCounter implementations
 template<typename T, size_t N>
-EventCounter<T, N>::EventCounter(const std::vector<EventOptions>& options) : _options(options), _counter(options.size(), 0), _period_counter(options.size(), 0) {
+EventCounter<T, N>::EventCounter(std::vector<EventOptions> options) : _options(std::move(options)), _counter(options.size(), 0), _period_counter(options.size(), 0) {
     for (const auto & option : options){
         if (option.period < 1){
             throw std::runtime_error("The period argument in event options must be at least 1.");
@@ -97,44 +97,22 @@ size_t ODE<T, N>::nsys() const{
 }
 
 template<typename T, size_t N>
-template<OptionalObserver<T> Callable>
-bool ODE<T, N>::integrate(OdeResult<T, N>* out, const T& interval, const std::vector<T>& t_array, const std::vector<EventOptions>& event_options, Callable&& observer, int max_prints){
-    if (interval < 0){
-        throw std::runtime_error("Integration interval must be positive");
+bool ODE<T, N>::integrate_until(OdeResult<T, N>* out, T time, const std::vector<T>& t_eval, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
+    return this->priv_integrate_until(out, time, t_eval, event_options, std::move(observer), max_progress_reports, false);
+}
+
+template<typename T, size_t N>
+bool ODE<T, N>::rich_integrate_until(OdeSolution<T, N>& out, T time, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
+    if (observer == nullptr){
+        return this->priv_integrate_until(&out, time, nullptr, event_options, nullptr, max_progress_reports, true);
+    } else {
+        return this->priv_integrate_until(&out, time, nullptr, event_options, std::move(observer), max_progress_reports, true);
     }
-    return this->priv_integrate_until(out, solver_->get_time()+interval*solver_->get_direction(), t_array, event_options, std::forward<Callable>(observer), max_prints);
 }
 
 template<typename T, size_t N>
-template<OptionalObserver<T> Callable>
-bool ODE<T, N>::integrate(OdeResult<T, N>* out, const T& interval, const std::vector<EventOptions>& event_options, Callable&& observer, int max_prints){
-    if (interval < 0){
-        throw std::runtime_error("Integration interval must be positive");
-    }
-    return this->priv_integrate_until(out, solver_->get_time()+interval*solver_->get_direction(), EmptyArr<T>{}, event_options, std::forward<Callable>(observer), max_prints);
-}
-
-template<typename T, size_t N>
-template<OptionalObserver<T> Callable>
-bool ODE<T, N>::integrate_until(OdeResult<T, N>* out, const T& t, const std::vector<EventOptions>& event_options, Callable&& observer, int max_prints){
-    return this->priv_integrate_until(out, t, EmptyArr<T>{}, event_options, std::forward<Callable>(observer), max_prints);
-}
-
-template<typename T, size_t N>
-template<OptionalObserver<T> Callable>
-bool ODE<T, N>::integrate_until(OdeResult<T, N>* out, const T& t, const std::vector<T>& t_eval, const std::vector<EventOptions>& event_options, Callable&& observer, int max_prints){
-    return this->priv_integrate_until(out, t, t_eval, event_options, std::forward<Callable>(observer), max_prints);
-}
-
-template<typename T, size_t N>
-template<OptionalObserver<T> Callable>
-bool ODE<T, N>::rich_integrate(OdeSolution<T, N>& out, const T& interval, const std::vector<EventOptions>& event_options, Callable&& observer, int max_prints){
-    return this->priv_integrate_until(&out, solver_->get_time()+interval*solver_->get_direction(), EmptyArr<T>{}, event_options, std::forward<Callable>(observer), max_prints, true);
-}
-
-template<typename T, size_t N>
-template<typename ArrayType, OptionalObserver<T> Callable>
-bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const ArrayType& t_store, const std::vector<EventOptions>& event_options, Callable&& observer, int max_prints, bool interpolate){
+template<typename ArrayType, typename Callable>
+bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, ArrayType&& t_store, const std::vector<EventOptions>& event_options, Callable&& observer, int max_progress_reports, bool interpolate){
     if (solver_->get_is_dead()){
         if (out){
             *out = OdeResult<T, N>({}, {this->nsys()}, solver_->get_diverges(), 0, false, 0, solver_->get_status());
@@ -147,26 +125,38 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const
         return false; //cannot integrate in opposite direction
     }
     TimePoint TIME_START = Clock::now();
-    constexpr bool store_explicit_steps = !std::is_same_v<std::decay_t<ArrayType>, EmptyArr<T>>;
+    constexpr bool store_explicit_steps = !std::is_same_v<std::decay_t<ArrayType>, std::nullptr_t>;
     if constexpr (store_explicit_steps){
         assert(interpolate == false && "Explicit step storage is enabled only for non-interpolating integration");
     }
     // ------------------------------ IMPLEMENTATION --------------------------------------
     const T         t0 = solver_->get_time();
-    const bool      first_eval_t0 = (t_store.size() > 0 && t_store[0] == t0);
+    const bool      first_eval_t0 = [&](){
+        if constexpr (store_explicit_steps){
+            return (t_store.size() > 0 && t_store[0] == t0);
+        } else {
+            return false;
+        }
+    }();
+
     const char*     terminate_message = nullptr;
     const bool      include_first = (!store_explicit_steps || first_eval_t0);
     const size_t    t_start_idx = orbit_data_.t.size() - include_first;
     int             prints = 0;
-    View1D<T>       t_eval(t_store.data() + first_eval_t0, t_store.size() - first_eval_t0);
+    View1D<T>       t_eval = [&](){
+        if constexpr (store_explicit_steps){
+            return View1D<T>{t_store.data() + first_eval_t0, t_store.size() - first_eval_t0};
+        } else {
+            View1D<T>{nullptr, size_t{0}};
+        }
+    }();
     
     for (size_t i=0; i < event_data_.size(); i++){
         cached_idx_[i] = event_data_.data(i).size();
     }
 
     //check that all names in max_events are valid
-    const std::vector<EventOptions> options = this->solver()->get_event_col().validate_events(event_options);
-    EventCounter<T, N>              event_counter(options);
+    EventCounter<T, N> event_counter = this->solver()->get_event_col().validate_events(event_options);
 
     auto event_state_valid = [&]()NDSPAN_LAMBDA_INLINE{
         bool res = false;
@@ -197,12 +187,12 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const
         }
 
         // =========================== Manage console output ==========================
-        if (max_prints > 0){
+        if (max_progress_reports > 0){
             T percentage = (solver_->get_time() - t0)/(t_max-t0);
-            if (percentage*max_prints >= prints){
+            if (percentage*max_progress_reports >= prints){
                 #pragma omp critical
                 {
-                    std::cout << std::setprecision(std::log10(max_prints)+1) << "\033[2K\rProgress: " << 100*percentage << "%" <<   "    Events: " << event_counter.total() << std::flush;
+                    std::cout << std::setprecision(std::log10(max_progress_reports)+1) << "\033[2K\rProgress: " << 100*percentage << "%" <<   "    Events: " << event_counter.total() << std::flush;
                     prints++;
                 }
 
@@ -210,7 +200,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const
 
         }
         // ============================================================================
-        if constexpr (Observer<Callable, T>){
+        if constexpr (isObserver<Callable, T>){
             return observer(t, q, step_ptr);
         } else {
             return true;
@@ -220,11 +210,11 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const
     bool success;
     BoxedInterp<T, N> interpolator;
     if constexpr (store_explicit_steps){
-        success = solver_->do_observe_until(t_max, main_observer, t_eval);
+        success = solver_->do_advance_until(t_max, main_observer, t_eval);
     } else if (interpolate){
-        success = static_cast<bool>(interpolator = solver_->do_interp_until(t_max, main_observer));
+        success = static_cast<bool>(interpolator = solver_->do_interpolate_until(t_max, main_observer));
     } else {
-        success = solver_->do_observe_until(t_max, main_observer);
+        success = solver_->do_advance_until(t_max, main_observer);
     }
 
     if (success) {

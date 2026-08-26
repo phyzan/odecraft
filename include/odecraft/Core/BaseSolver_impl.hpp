@@ -17,24 +17,24 @@ namespace ode{
 // ODE PROPERTIES
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::Rhs(T* dq_dt, const T& t, const T* q) const{
-    return ode_.Rhs(dq_dt, t, q);
+void BaseSolver<Derived, T, N, SP, OdeType>::Rhs(T* out, const T& t, const T* q) const{
+    return ode_.Rhs(out, t, q);
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::rhs(T* dq_dt, const T& t, const T* q) const{
-    this->Rhs(dq_dt, t, q);
+void BaseSolver<Derived, T, N, SP, OdeType>::rhs(T* out, const T& t, const T* q) const{
+    this->Rhs(out, t, q);
     this->rhs_eval_count_++;
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* jm, const T& t, const T* q) const{
+void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* out, const T& t, const T* q) const{
     
     if constexpr (JP == JacPolicy::Approx){
-        return this->Jac(jm, t, q, nullptr);
+        return this->Jac(out, t, q, nullptr);
     } else if constexpr (JP == JacPolicy::Autodiff){
         decltype(auto) scratch_duals = this->scratch_.duals();
-        MutView<T, Layout::F, N, N> jacmat = this->jac_view(jm);
+        MutView<T, Layout::F, N, N> jacmat = this->jac_view(out);
 
         DualType::with_default_nvars(this->nsys(), [&](){
             const size_t nsys = this->nsys();
@@ -50,14 +50,14 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* jm, const T& t, const T* q) 
             }
         });
     } else {
-        ode_.Jac(jm, t, q);
+        ode_.Jac(out, t, q);
     }
 
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::jac(T* jm, const T& t, const T* q) const{
-    this->Jac(jm, t, q);
+void BaseSolver<Derived, T, N, SP, OdeType>::jac(T* out, const T& t, const T* q) const{
+    this->Jac(out, t, q);
     this->jac_eval_count_++;
 }
 
@@ -258,154 +258,47 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::advance(){
 }
 
 
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<OptionalObserver<T> Callable>
-BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::interpolate_until(const T& time, const Callable& observer){
-    pbox::Box<LinkedInterpolator<T, N>> interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t_old(), this->vector_old().data(), this->nsys());
-    bool current_state_is_new = false;
-    if (!this->is_at_new_state()){
-        interp->expand_by_owning(this->state_interpolator(0, -1));
-    }else{
-        current_state_is_new = true;
-    }
-
-    const T t_start = this->t();
-    if (this->advance_until(time, [&](const T& t, const T* q, const T* t_ptr){
-        bool obs_res;
-        if constexpr (Observer<Callable, T>){
-            obs_res = observer(t, q, t_ptr);
-        } else{
-            obs_res = true;
-        }
-        if (obs_res){
-            if (this->is_at_new_state()){
-                if (current_state_is_new){
-                    interp->expand_by_owning(this->state_interpolator(0, -1));
-                }
-                interp->expand_by_owning(std::make_unique<LocalInterpolator<T, N>>(this->t(), this->vector().data(), this->nsys()));
-                current_state_is_new = true;
-            } else if (current_state_is_new) {
-                interp->expand_by_owning(this->state_interpolator(0, -1));
-                current_state_is_new = false;
-            }
-            return true;
-        } else {
-            return false;
-        }
-
-    })){
-        if (t_start != interp->t_start()){
-            interp->adjust_start(t_start);
-        }
-        if (time != interp->t_end()){
-            interp->adjust_end(time);
-        }
-        interp->close_end();
-        return interp;
-    } else {
-        return BoxedInterp<T, N>();
-    }
-
-}
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::interp_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer){
-    return this->interpolate_until(time, observer);
-}
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool BaseSolver<Derived, T, N, SP, OdeType>::advance_until(const T& time){
-    return this->advance_until(time, nullptr);
+    return this->generic_advance_until(time, nullptr, nullptr);
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<OptionalObserver<T> Callable, typename ArrayType>
-bool BaseSolver<Derived, T, N, SP, OdeType>::advance_until(const T& time, const Callable& observer, const ArrayType& extra_steps){
-
-    if (this->is_dead()){
-        this->warn_dead();
-        return false;
-    }
-
-    int d = this->direction();
-    if (time == this->t()){
-        return false;
-    } else if (time*d < this->t()*d) {
-        throw std::runtime_error(GetStr("Cannot advance until time ", time, " because it is in the opposite direction of integration. Current time is ", this->t(), " and direction is ", d, "."));
-    }
-
-    constexpr bool explicit_steps = !std::is_same_v<std::decay_t<ArrayType>, EmptyArr<T>>;
-    const bool has_extra_steps = explicit_steps && extra_steps.size() > 0;
-    const T& t_dual = has_extra_steps ? extra_steps[extra_steps.size() - 1] : time;
-
-    bool success;
-    auto evolve = [&]() NDSPAN_LAMBDA_INLINE -> bool {
-        bool res;
-        while ((res = (this->is_running() && Accessor::call_Adv_Impl(*THIS, time))) && (time != this->t())){
-            bool obs_res;
-            if constexpr (Observer<Callable, T>){
-                obs_res = observer(this->t(), this->true_state_ptr()+2, nullptr);
-            } else{
-                obs_res = true;
-            }
-            if (!obs_res){
-                // the observer itself might have advanced the solver to the same target time, so its worth making this check.
-                return this->t() * d >= time * d;
-            }
-        }
-
-        if (res){
-            const T* t_ptr = (!explicit_steps || (has_extra_steps && t_dual == time)) ? &t_dual : nullptr;
-            if constexpr (Observer<Callable, T>){
-                observer(this->t(), this->true_state_ptr()+2, t_ptr);
-            }            
-            return true;
-        }else{
-            return this->t() * d >= time * d;
-        }
-    };
-
-    if (!has_extra_steps){
-        return evolve();
-    }else if (extra_steps[extra_steps.size()-1]*d > time*d){
-        throw std::runtime_error(GetStr("Invalid extra steps: last extra step is ", extra_steps[extra_steps.size()-1], " but target time is ", time, ". Extra steps must be in the same direction and between the current time and the target time."));
-    }else{
-        auto validate_idx = [&](size_t idx) NDSPAN_LAMBDA_INLINE -> size_t{
-            if (extra_steps[idx]*d <= this->t()*d){
-                throw std::runtime_error(GetStr("Invalid extra step: ", extra_steps[idx], ". Extra steps must be in the same direction and between the current time (", this->t(), ") and the target time (", time, ")."));
-            }
-            return idx;
-        };
-        size_t idx = 0;
-        while (idx < extra_steps.size() && (success = (this->is_running() && this->advance_until(extra_steps[validate_idx(idx)], observer))) && (time != this->t())){
-            idx++;
-        }
-
-        if (this->t() != time && success){
-            return evolve();
-        } else{
-            return success;
-        }
-    }
+template<isObserver<T> Callable>
+bool BaseSolver<Derived, T, N, SP, OdeType>::advance_until(const T& time, Callable&& observer){
+    return this->generic_advance_until(time, std::forward<Callable>(observer), nullptr);
 }
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+template<isObserver<T> Callable, isArray<T> ArrayType>
+bool BaseSolver<Derived, T, N, SP, OdeType>::advance_until(const T& time, Callable&& observer, ArrayType&& checkpoints){
+    return this->generic_advance_until(
+        time,
+        std::forward<Callable>(observer),
+        std::forward<ArrayType>(checkpoints)
+    );
+}
+
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::interpolate_until(const T& time){
+    return this->generic_interpolate_until(time, nullptr);
+}
+
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+template<isObserver<T> Callable>
+BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::interpolate_until(const T& time, Callable&& observer){
+    return this->generic_interpolate_until(time, std::forward<Callable>(observer));
+}
+
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool BaseSolver<Derived, T, N, SP, OdeType>::advance_by(T interval){
     assert(interval >= 0 && "Interval must be non-negative in advance_by. Its sign is determined by the solver's direction of integration.");
     return this->advance_until(this->t() + interval*this->direction());
 }
-
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-bool BaseSolver<Derived, T, N, SP, OdeType>::observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer, View1D<T> extra_steps){
-    return this->advance_until(time, observer, extra_steps);
-}
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-bool BaseSolver<Derived, T, N, SP, OdeType>::observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer){
-    return this->advance_until(time, observer);
-}
-
 
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -682,7 +575,7 @@ MutView<T, Layout::F, N, N> BaseSolver<Derived, T, N, SP, OdeType>::jac_view(T* 
 // PROTECTED CONSTRUCTOR
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir) :
+BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction) :
     ics_state_(q0.size()+2),
     old_state_(q0.size()+2),
     new_state_(q0.size()+2),
@@ -695,7 +588,7 @@ BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, 
     scratch_(q0.size()),
     ode_(std::move(ode)),
     nsys_(q0.size()),
-    direction_(dir){
+    direction_(direction){
         assert(this->nsys() > 0 && "Ode system size is 0");
         if (stepsize < 0){
             throw std::runtime_error("The stepsize argument cannot be negative");
@@ -727,20 +620,20 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::validate_it(StepResult result, cons
     switch (result){
         case StepResult::Success:
             break;
-        case StepResult::INF_ERROR:
+        case StepResult::NonFiniteError:
             this->kill("ODE solution diverges (inf or nan encountered)");
             this->diverges_ = true;
             success = false;
             break;
-        case StepResult::TINY_STEP_ERROR:
+        case StepResult::TinyStepError:
             this->kill("Required stepsize was smaller than machine precision");
             success = false;
             break;
-        case StepResult::MIN_STEP_ERROR:
+        case StepResult::MinStepError:
             this->kill("The next time step is smaller than the minimum allowed step");
             success = false;
             break;
-        case StepResult::MAX_STEP_ERROR:
+        case StepResult::MaxStepError:
             this->kill("The next time step is larger than the maximum allowed step");
             success = false;
             break;
@@ -782,6 +675,153 @@ void BaseSolver<Derived, T, N, SP, OdeType>::set_state(const T& time, T* state){
     state[0] = time;
     state[1] = this->stepsize();
     interp(state+2, time);
+}
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+template<typename Callable, typename ArrayLike>
+bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
+    const T& time,
+    Callable&& observer,
+    ArrayLike&& checkpoints){
+
+    if (this->is_dead()){
+        this->warn_dead();
+        return false;
+    }
+
+    int d = this->direction();
+    if (time == this->t()){
+        return false;
+    } else if (time*d < this->t()*d) {
+        throw std::runtime_error(GetStr("Cannot advance until time ", time, " because it is in the opposite direction of integration. Current time is ", this->t(), " and direction is ", d, "."));
+    }
+
+    constexpr bool explicit_steps = !std::is_same_v<std::decay_t<ArrayLike>, std::nullptr_t>;
+
+    const bool has_checkpoints = [&](){
+        if constexpr (explicit_steps) {
+            return checkpoints.size() > 0;
+        } else {
+            return false;
+        }
+    }();
+
+    const T& t_dual = [&]() -> const T& {
+        if constexpr (explicit_steps){
+            if (has_checkpoints) {
+                return checkpoints[checkpoints.size()-1];
+            }
+        }
+        return time;
+    }();
+
+
+    bool success;
+    auto evolve = [&]() NDSPAN_LAMBDA_INLINE -> bool {
+        bool res;
+        while ((res = (this->is_running() && Accessor::call_Adv_Impl(*THIS, time))) && (time != this->t())){
+            bool obs_res;
+            if constexpr (isObserver<Callable, T>){
+                obs_res = observer(this->t(), this->true_state_ptr()+2, nullptr);
+            } else{
+                obs_res = true;
+            }
+            if (!obs_res){
+                // the observer itself might have advanced the solver to the same target time, so its worth making this check.
+                return this->t() * d >= time * d;
+            }
+        }
+
+        if (res){
+            const T* t_ptr = (!explicit_steps || (has_checkpoints && t_dual == time)) ? &t_dual : nullptr;
+            if constexpr (isObserver<Callable, T>){
+                observer(this->t(), this->true_state_ptr()+2, t_ptr);
+            }            
+            return true;
+        } else {
+            return this->t() * d >= time * d;
+        }
+    };
+
+    if constexpr (!explicit_steps){
+        return evolve();
+    } else if (!has_checkpoints){
+        return evolve();
+    } else if (t_dual*d > time*d){
+        // a.t.p. t_dual is the last element of `checkpoints`
+        throw std::runtime_error(GetStr("Invalid extra steps: last extra step is ", t_dual, " but target time is ", time, ". Extra steps must be in the same direction and between the current time and the target time."));
+    }else{
+        auto validate_idx = [&](size_t idx) NDSPAN_LAMBDA_INLINE -> size_t {
+            if (checkpoints[idx]*d <= this->t()*d){
+                throw std::runtime_error(GetStr("Invalid extra step: ", checkpoints[idx], ". Extra steps must be in the same direction and between the current time (", this->t(), ") and the target time (", time, ")."));
+            }
+            return idx;
+        };
+        size_t idx = 0;
+        while (idx < checkpoints.size() && (success = (this->is_running() && this->generic_advance_until(checkpoints[validate_idx(idx)], observer, nullptr))) && (time != this->t())){
+            idx++;
+        }
+
+        if (this->t() != time && success){
+            return evolve();
+        } else{
+            return success;
+        }
+    }
+
+}
+
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+template<typename Callable>
+BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_until(const T& time, Callable&& observer){
+
+    pbox::Box<LinkedInterpolator<T, N>> interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t_old(), this->vector_old().data(), this->nsys());
+    bool current_state_is_new = false;
+    if (!this->is_at_new_state()){
+        interp->expand_by_owning(this->state_interpolator(0, -1));
+    }else{
+        current_state_is_new = true;
+    }
+
+    const T t_start = this->t();
+    if (this->advance_until(
+        time,
+        [&](const T& t, const T* q, const T* t_ptr){
+            bool obs_res;
+            if constexpr (isObserver<Callable, T>){
+                obs_res = observer(t, q, t_ptr);
+            } else{
+                obs_res = true;
+            }
+            if (obs_res){
+                if (this->is_at_new_state()){
+                    if (current_state_is_new){
+                        interp->expand_by_owning(this->state_interpolator(0, -1));
+                    }
+                    interp->expand_by_owning(std::make_unique<LocalInterpolator<T, N>>(this->t(), this->vector().data(), this->nsys()));
+                    current_state_is_new = true;
+                } else if (current_state_is_new) {
+                    interp->expand_by_owning(this->state_interpolator(0, -1));
+                    current_state_is_new = false;
+                }
+                return true;
+            } else {
+                return false;
+            }
+        })
+    ){
+        if (t_start != interp->t_start()){
+            interp->adjust_start(t_start);
+        }
+        if (time != interp->t_end()){
+            interp->adjust_end(time);
+        }
+        interp->close_end();
+        return interp;
+    } else {
+        return BoxedInterp<T, N>();
+    }
 }
 
 

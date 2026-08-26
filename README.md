@@ -56,7 +56,7 @@ CMake options that toggle preprocessor macros across the library, its bundled de
 
 | CMake Option | Macro | Effect |
 |--------------|-------|--------|
-| `ODECRAFT_RK4_DENSE` | `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, at the cost of additional memory usage and slightly slower performance. |
+| `ODECRAFT_RK4_DENSE` | `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, but for large ODE systems this can be expensive. |
 | `ODECRAFT_NO_WARN` | `ODECRAFT_NO_WARN` | Disable ODE solver console warnings. |
 | `ODECRAFT_NO_NAN_CHECK` | `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
 | `DEBUG` | — | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
@@ -167,8 +167,8 @@ The `BaseSolver` class provides a common interface for all solvers, with the fol
 
 ```cpp
 // Accessors
-void                Rhs(T* dq_dt, const T& t, const T* q) const; // Compute the right-hand side of the ODE system
-void                Jac(T* J, const T& t, const T* q) const; // Compute the Jacobian of the ODE system (optional)
+void                Rhs(T* out, const T& t, const T* q) const; // Compute the right-hand side of the ODE system
+void                Jac(T* out, const T& t, const T* q) const; // Compute the Jacobian of the ODE system (optional)
 const T&            t() const; // Get the current time
 View1D<T, N>        vector() const; // Get the current state vector
 State<T>            ics() const; // Get the initial conditions
@@ -181,10 +181,10 @@ const std::string&  status() const; // Get the solver's status message
 // Modifiers
 bool                advance(); // Advance the solver by one step (automatic step size control)
 bool                advance_until(const T& time); // Advance the solver until a specified time is reached
-bool                advance_until(const T& time, const Callable& observer); // Advance the solver until a specified time is reached, calling an observer function at each step
+bool                advance_until(const T& time, Callable&& observer); // Advance the solver until a specified time is reached, calling an observer function at each step
 bool                set_ics(T t0, const T* y0, T stepsize, int direction); // Set new initial conditions and reset the solver in-place (no memory reallocation happens)
 void                Reset(); // Reset the solver to its initial state
-BoxedInterp<T, N>   interpolate_until(const T& time, const Callable& observer = nullptr); // Advance the solver until a specified time is reached, returning an interpolator over the integration interval
+BoxedInterp<T, N>   interpolate_until(const T& time, Callable&& observer); // Advance the solver until a specified time is reached, returning an interpolator over the integration interval
 ```
 
 ### Available methods

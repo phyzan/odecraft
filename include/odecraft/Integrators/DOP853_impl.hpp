@@ -363,8 +363,8 @@ T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q
 // ============================================================================
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir) requires (!is_rich<SP>)
-    : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir),
+DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction) requires (!is_rich<SP>)
+    : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, direction),
       K_(N_STAGES_EXT, q0.size()), df_tmp_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
     if (q0.data() != nullptr){
         this->rhs(K_.data() + N_STAGES*q0.size(), t0, q0.data());
@@ -372,8 +372,8 @@ DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events) requires (is_rich<SP>)
-    : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)),
+DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events) requires (is_rich<SP>)
+    : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, direction, std::move(events)),
       K_(N_STAGES_EXT, q0.size()), df_tmp_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
     if (q0.data() != nullptr){
         this->rhs(K_.data() + N_STAGES*q0.size(), t0, q0.data());

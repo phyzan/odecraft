@@ -169,8 +169,8 @@ void VariationalSolver<Solver, T, N, SP, OdeType, Derived>::JacMain(T* out, cons
         this->ode().ode().Jac(out, t, q);
         return;
     } else {
-        jac_approx<T>([this](T* jm, const T& t_dummy, const T* q_dummy){
-            this->RhsMain(jm, t_dummy, q_dummy);
+        jac_approx<T>([this](T* out_, const T& t_, const T* q_){
+            this->RhsMain(out_, t_, q_);
         }, out, worker.data(), t, q, nullptr, this->atol(), this->nsys()/2);
     }
 }
@@ -319,15 +319,15 @@ pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Integrator method, 
 
 template<SolverPolicy SP, Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (!is_rich<SP>)
-auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir){
-    return VariationalSolver<Solver, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, dir);
+auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int direction){
+    return VariationalSolver<Solver, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction);
 }
 
 
 template<SolverPolicy SP, Integrator Solver, typename T, size_t N, hasRhsFunc<T> OdeType>
 requires (is_rich<SP>)
-auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events){
-    return VariationalSolver<Solver, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
+auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events){
+    return VariationalSolver<Solver, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction, std::move(events));
 }
 
 } // namespace ode

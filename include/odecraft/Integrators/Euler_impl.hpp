@@ -7,14 +7,14 @@ namespace ode{
 
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Euler<T, N, SP, OdeType, Derived>::Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int dir) requires (!is_rich<SP>) : Base(ode, t0, q0, 0, 0, 0, 0, stepsize, dir) {}
+Euler<T, N, SP, OdeType, Derived>::Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int direction) requires (!is_rich<SP>) : Base(ode, t0, q0, 0, 0, 0, 0, stepsize, direction) {}
 
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 Euler<T, N, SP, OdeType, Derived>::Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int dir, EventList<T> events) requires (is_rich<SP>) : Base(ode, t0, q0, 0, 0, 0, 0, stepsize, dir, std::move(events)) {}
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Euler<T, N, SP, OdeType, Derived>::Euler(OdeType ode, T t0, View1D<T, N> q0, T /*rtol*/, T /*atol*/, T /*min_step*/, T /*max_step*/, T stepsize, int dir) requires (!is_rich<SP>) : Euler(ode, t0, q0, stepsize, dir) {}
+Euler<T, N, SP, OdeType, Derived>::Euler(OdeType ode, T t0, View1D<T, N> q0, T /*rtol*/, T /*atol*/, T /*min_step*/, T /*max_step*/, T stepsize, int direction) requires (!is_rich<SP>) : Euler(ode, t0, q0, stepsize, direction) {}
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 Euler<T, N, SP, OdeType, Derived>::Euler(OdeType ode, T t0, View1D<T, N> q0, T /*rtol*/, T /*atol*/, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T> events) requires (is_rich<SP>) : Euler(ode, t0, q0, stepsize, dir, std::move(events)) {}
@@ -45,7 +45,7 @@ StepResult Euler<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state)
         vec[i] = state[i+2] + vec[i]*stepsize;
     }
     if (!all_are_finite(vec, this->nsys())){
-        return StepResult::INF_ERROR;
+        return StepResult::NonFiniteError;
     }else{
         return StepResult::Success;
     }

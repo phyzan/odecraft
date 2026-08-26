@@ -18,7 +18,7 @@ class EventCounter{
 
 public:
 
-    EventCounter(const std::vector<EventOptions>& options);
+    EventCounter(std::vector<EventOptions> options);
 
     DEFAULT_RULE_OF_FOUR(EventCounter)
 
@@ -63,20 +63,9 @@ public:
 
     size_t                      nsys() const;
 
-    template<OptionalObserver<T> Callable = std::nullptr_t>
-    bool                        rich_integrate(OdeSolution<T, N>& out, const T& interval, const std::vector<EventOptions>& event_options={}, Callable&& observer = nullptr, int max_prints = 0);
+    bool                        integrate_until(OdeResult<T, N>* out, T time, const std::vector<T>& t_eval={}, const std::vector<EventOptions>& event_options={}, int max_progress_reports = 0, observer_t<T> observer = nullptr);
 
-    template<OptionalObserver<T> Callable = std::nullptr_t>
-    bool                        integrate(OdeResult<T, N>* out, const T& interval, const std::vector<T>& t_array, const std::vector<EventOptions>& event_options={}, Callable&& observer = nullptr, int max_prints = 0);
-
-    template<OptionalObserver<T> Callable = std::nullptr_t>
-    bool                        integrate(OdeResult<T, N>* out, const T& interval, const std::vector<EventOptions>& event_options={}, Callable&& observer = nullptr, int max_prints = 0);
-
-    template<OptionalObserver<T> Callable = std::nullptr_t>
-    bool                        integrate_until(OdeResult<T, N>* out, const T& t, const std::vector<EventOptions>& event_options={}, Callable&& observer = nullptr, int max_prints = 0);
-
-    template<OptionalObserver<T> Callable = std::nullptr_t>
-    bool                        integrate_until(OdeResult<T, N>* out, const T& t, const std::vector<T>& t_eval, const std::vector<EventOptions>& event_options={}, Callable&& observer = nullptr, int max_prints = 0);
+    bool                        rich_integrate_until(OdeSolution<T, N>& out, T time, const std::vector<EventOptions>& event_options={}, int max_progress_reports = 0, observer_t<T> observer = nullptr);
 
     bool                        diverges() const;
 
@@ -121,8 +110,8 @@ protected:
 
 private:
 
-    template<typename ArrayType, OptionalObserver<T> Callable = std::nullptr_t>
-    bool                                        priv_integrate_until(OdeResult<T, N>* out, const T& t_max, const ArrayType& t_store, const std::vector<EventOptions>& event_options={}, Callable&& observer = nullptr, int max_prints = 0, bool interpolate = false);
+    template<typename ArrayType, typename Callable>
+    bool                                        priv_integrate_until(OdeResult<T, N>* out, const T& t_max, ArrayType&& t_store, const std::vector<EventOptions>& event_options, Callable&& observer, int max_progress_reports, bool interpolate);
 
 };
 

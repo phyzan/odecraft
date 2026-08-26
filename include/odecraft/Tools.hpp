@@ -4,6 +4,7 @@
 
 #include <complex>
 #include <chrono>
+#include <functional>
 #include <omp.h>
 #include <cmath>
 #include <sstream>
@@ -42,7 +43,6 @@ template<typename F, typename T>
 concept isRhsFunc = 
 requires(F f, T* out, T t, const T* q){
     { f(out, t, q) } -> std::same_as<void>;
-    { f(out, std::as_const(t), q) } -> std::same_as<void>;
 };
 
 template<typename F, typename T>
@@ -53,7 +53,6 @@ template<typename F, typename T>
 concept hasRhsFunc =
     requires(F f, T* out, T t, const T* q) {
         { f.Rhs(out, t, q) } -> std::same_as<void>;
-        { f.Rhs(out, std::as_const(t), q) } -> std::same_as<void>;
     };
 
 // Check if F has a callable Jac (static or non-static, non-template)
@@ -61,7 +60,6 @@ template<typename F, typename T>
 concept hasJacFunc =
     requires(F f, T* out, T t, const T* q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
-        { f.Jac(out, std::as_const(t), q) } -> std::same_as<void>;
     };
 
 template<typename F, typename T>
@@ -74,19 +72,20 @@ template<typename F, typename T>
 concept isObjFun =
 requires(F f, T t, const T* q){
     { f(t, q) } -> std::convertible_to<T>;
-    { f(std::as_const(t), q) } -> std::convertible_to<T>;
 };
 
-
 template<typename F, typename T>
-concept Observer =
+concept isObserver =
 requires(F f, T t, const T* q, const T* t_ptr){
     { f(t, q, t_ptr) } -> std::convertible_to<bool>;
-    { f(std::as_const(t), q, t_ptr) } -> std::convertible_to<bool>;
 };
 
 template<typename F, typename T>
-concept OptionalObserver = std::is_same_v<F, std::nullptr_t> || Observer<F, T>;
+concept isArray =
+requires(const F& f, size_t i){
+    { f.size() } -> std::same_as<size_t>;
+    { f[i] } -> std::same_as<const T&>;
+};
 
 
 // Check if F has a callable templated Rhs (static or non-static)
@@ -94,7 +93,6 @@ template<typename F, typename T, size_t N>
 concept supportsDualRhs =
     requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
         { f.Rhs(out, t, q) } -> std::same_as<void>;
-        { f.Rhs(out, std::as_const(t), q) } -> std::same_as<void>;
     };
 
 // Check if F has a callable templated Jac (static or non-static)
@@ -102,15 +100,18 @@ template<typename F, typename T, size_t N>
 concept supportsDualJac =
     requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
-        { f.Jac(out, std::as_const(t), q) } -> std::same_as<void>;
     };
 
 
 template<typename F, typename T>
-concept StateInterp = requires(F f, T* out, T t){
+concept isStateInterp = requires(F f, T* out, T t){
     { f(out, t) } -> std::same_as<void>;
-    { f(out, std::as_const(t)) } -> std::same_as<void>;
 };
+
+
+// f(time, state_vector, optional_address)
+template<typename T>
+using observer_t = std::function<bool(const T&, const T*, const T*)>;
 
 enum class RootPolicy : std::uint8_t { Left, Middle, Right};
 
@@ -141,6 +142,11 @@ NDSPAN_INLINE void set_max(T& out, const A& a, const B& b){
     (a > b) ? (out = a) : (out = b);
 }
 
+template<typename T, typename U>
+NDSPAN_INLINE void set_abs(T& out, const U& x){
+    (x > 0) ? (out = x) : (out = -x);
+}
+
 template<typename T>
 NDSPAN_INLINE const T& max_ref(const T& a, const T& b){
     return (a > b) ? a : b;
@@ -162,37 +168,38 @@ bool allEqual(const T* a, const T* b, size_t n){
 }
 
 template<typename T, RootPolicy RP, typename Callable>
-T bisect(Callable&& f, const T& a, const T& b, const T& atol){
-    T err = 2*atol+1;
-    T _a = a;
-    T _b = b;
-    T c = a;
+T bisect(Callable&& f, T a, T b, const T& ftol){
+    T err = 2*ftol+1;
+    T m = a;
+    T fa = f(a);
     T fm;
 
-    assert((f(a) * f(b) <= 0) && "Root not bracketed" );
+    assert((fa * f(b) <= 0) && "Root not bracketed" );
     
-    while (err > atol){
-        c = (_a+_b)/2;
-        if (c == _a || c == _b){
+    while (err > ftol){
+        m = (a + b) / 2;
+        if (m == a || m == b){
             // reached machine precision limit, return the best guess so far
             break;
+        } else {
+            fm = f(m);
         }
-        fm = f(c);
-        if (f(_a) * fm  > 0){
-            _a = c;
+
+        if (fa * fm  > 0){
+            a = m;
+            fa = fm;
+        } else {
+            b = m;
         }
-        else{
-            _b = c;
-        }
-        err = abs<T>(fm);
+        set_abs(err, fm);
     }
 
     if constexpr (RP == RootPolicy::Left) {
-        return _a;
-    }else if constexpr (RP == RootPolicy::Middle) {
-        return c;
-    }else {
-        return _b;
+        return a;
+    } else if constexpr (RP == RootPolicy::Middle) {
+        return m;
+    } else {
+        return b;
     }
 }
 
@@ -454,28 +461,10 @@ constexpr JacPolicy getJacPolicy(){
 
 enum class StepResult : std::uint8_t {
     Success, // Successful step
-    INF_ERROR, // Non-finite value encountered (e.g., NaN or Inf)
-    TINY_STEP_ERROR, // Step size became too small (below machine epsilon)
-    MIN_STEP_ERROR, // Step size reached minimum set by user
-    MAX_STEP_ERROR, // Step size reached maximum set by user
-};
-
-template<typename T>
-struct EmptyArr{
-
-    EmptyArr() = default;
-
-    inline T operator[](size_t) const{
-        return T(0);
-    }
-
-    inline size_t size() const{
-        return 0;
-    }
-
-    inline const T* data() const{
-        return nullptr;
-    }
+    NonFiniteError, // Non-finite value encountered (NaN or Inf)
+    TinyStepError, // Step size became too small (below machine epsilon)
+    MinStepError, // Step size reached minimum set by user
+    MaxStepError, // Step size reached maximum set by user
 };
 
 
