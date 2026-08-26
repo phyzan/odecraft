@@ -32,7 +32,7 @@ void test_variational_solver(){
     std::array<T, 3> y0 = {1.0, 1.0, 1.0};
     std::array<T, 3> y0_var = {1.0, 1.0, 1.0};
 
-    chaos::VariationalSolver<Integrator::RK45, T, NSYS, ode::SolverPolicy::Static, MyODE> solver(
+    chaos::VariationalSolver<Stepper::RK45, T, NSYS, ode::SolverPolicy::Static, MyODE> solver(
         MyODE{},
         0.0,
         View1D<T, NSYS>{y0.data()},

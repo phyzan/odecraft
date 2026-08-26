@@ -21,7 +21,7 @@
 #include <odecraft/Interpolation/Scattered/ScatteredNdInterpolator_impl.hpp>
 #include <odecraft/Interpolation/Univariate/StateInterp_impl.hpp>
 
-#include <odecraft/Integrators/Solvers_impl.hpp>
+#include <odecraft/Steppers/Steppers_impl.hpp>
 
 #include <odecraft/Chaos/VariationalSolvers_impl.hpp>
 

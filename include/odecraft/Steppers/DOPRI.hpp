@@ -112,7 +112,7 @@ public:
 
     DEFAULT_RULE_OF_FOUR(RK23)
 
-    Integrator  method() const;
+    Stepper  method() const;
 
     auto        local_interp() const;
 
@@ -182,7 +182,7 @@ public:
 
     DEFAULT_RULE_OF_FOUR(RK45)
 
-    Integrator method() const;
+    Stepper method() const;
 
     auto local_interp() const;
 
@@ -235,13 +235,13 @@ private:
 namespace detail{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Integrator::RK23, T, N, SP, OdeType, Derived>{
+struct SolverTypeGetter<Stepper::RK23, T, N, SP, OdeType, Derived>{
     using type = RK23<T, N, SP, OdeType, Derived>;
 };
 
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Integrator::RK45, T, N, SP, OdeType, Derived>{
+struct SolverTypeGetter<Stepper::RK45, T, N, SP, OdeType, Derived>{
     using type = RK45<T, N, SP, OdeType, Derived>;
 };
 

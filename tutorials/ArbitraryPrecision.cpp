@@ -13,7 +13,7 @@ void run(const char* label){
     
     // Let's create a solver for the simple harmonic oscillator using the RK45 method
     Box<OdeSolver<T, 2>> solver = make_vsolver(
-        Integrator::RK45,
+        Stepper::RK45,
         OdeData{
             .Rhs=[](auto* dq_dt, const auto& t, const auto* q){
                 dq_dt[0] = q[1];

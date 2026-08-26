@@ -69,7 +69,7 @@ public:
 
     DEFAULT_RULE_OF_FOUR(DOP853)
 
-    Integrator method() const;
+    Stepper method() const;
 
     auto local_interp() const;
 
@@ -127,7 +127,7 @@ private:
 namespace detail{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Integrator::DOP853, T, N, SP, OdeType, Derived>{
+struct SolverTypeGetter<Stepper::DOP853, T, N, SP, OdeType, Derived>{
     using type = DOP853<T, N, SP, OdeType, Derived>;
 };
 

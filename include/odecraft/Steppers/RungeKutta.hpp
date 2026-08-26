@@ -26,7 +26,7 @@ public:
     template<typename... Type>
     RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, Type&&... extras);
 
-    Integrator method() const;
+    Stepper method() const;
 
     auto  local_interp() const;
 
@@ -60,7 +60,7 @@ protected:
 namespace detail{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Integrator::RK4, T, N, SP, OdeType, Derived>{
+struct SolverTypeGetter<Stepper::RK4, T, N, SP, OdeType, Derived>{
     using type = RK4<T, N, SP, OdeType, Derived>;
 };
 

@@ -5,33 +5,33 @@
 
 namespace ode{
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
 template<typename... Args>
-ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::ObjectiveSolver(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args) : Base(std::move(ode), std::forward<Args>(args)...), obj(std::move(funcs)){
+ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::ObjectiveSolver(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args) : Base(std::move(ode), std::forward<Args>(args)...), obj(std::move(funcs)){
     this->cache_current_signs();
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-void ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::Reset(){
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+void ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::Reset(){
     Base::Reset();
     cache_current_signs();
     detected.fill(false);
     current_idx = -1;
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::is_at_objective() const {
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+bool ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::is_at_objective() const {
     return current_idx != -1;
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-int ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::current_objective() const {
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+int ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::current_objective() const {
     return current_idx;
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
 template<typename... Args>
-bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::Adv_Impl(Args&&... args){
+bool ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::Adv_Impl(Args&&... args){
     T nearest_floor;
     size_t idx;
     current_idx = -1;
@@ -63,16 +63,16 @@ bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::Adv_Impl(Args&&... a
     }
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-void ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::ReAdjust(const T* new_vector){
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+void ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::ReAdjust(const T* new_vector){
     Base::ReAdjust(new_vector);
     cache_current_signs();
     detected.fill(false);
     current_idx = -1;
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& out){
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+bool ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& out){
     bool base_floor = Base::RequestTimeFloor(out);
     const int d = this->direction();
     T my_floor = this->t_new();
@@ -109,8 +109,8 @@ bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& 
     return true;
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::get_nearest_floor(T& out, size_t& idx) const{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+bool ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::get_nearest_floor(T& out, size_t& idx) const{
     bool found = false;
     NDSPAN_FOR_LOOP(I, NOBJ,
         if (detected[I]){
@@ -127,25 +127,25 @@ bool ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::get_nearest_floor(T&
     return found;
 }
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-void ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>::cache_current_signs(){
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+void ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>::cache_current_signs(){
     NDSPAN_FOR_LOOP(I, NOBJ,
         cached_sign[I] = sgn(std::get<I>(obj).func(this->t(), this->vector().data()));
     );
 }
 
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
 template<typename... Args>
-SingleObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun>::SingleObjectiveSolver(ObjFunData<T, ObjFun> data, OdeType ode, Args&&... args) : Base(std::tuple{data}, std::move(ode), std::forward<Args>(args)...) {}
+SingleObjectiveSolver<S, T, N, SP, OdeType, ObjFun>::SingleObjectiveSolver(ObjFunData<T, ObjFun> data, OdeType ode, Args&&... args) : Base(std::tuple{data}, std::move(ode), std::forward<Args>(args)...) {}
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
 template<typename... Args>
-SingleObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun>::SingleObjectiveSolver(ObjFun obj_fun, OdeType ode, Args&&... args) : Base(std::tuple{ObjFunData{std::move(obj_fun), T{0.0}, 1}}, std::move(ode), std::forward<Args>(args)...) {}
+SingleObjectiveSolver<S, T, N, SP, OdeType, ObjFun>::SingleObjectiveSolver(ObjFun obj_fun, OdeType ode, Args&&... args) : Base(std::tuple{ObjFunData{std::move(obj_fun), T{0.0}, 1}}, std::move(ode), std::forward<Args>(args)...) {}
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun, typename... Args>
+template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun, typename... Args>
 auto getObjectiveSolver(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args){
-    return ObjectiveSolver<Solver, T, N, SolverPolicy::Static, OdeType, ObjFun...>(std::move(funcs), std::move(ode), std::forward<Args>(args)...);
+    return ObjectiveSolver<S, T, N, SolverPolicy::Static, OdeType, ObjFun...>(std::move(funcs), std::move(ode), std::forward<Args>(args)...);
 }
 
 } // namespace ode

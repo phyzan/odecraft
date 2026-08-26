@@ -22,7 +22,7 @@ void test_single_objective(){
 
     T y0[2] = {1.0, 0.0};
 
-    auto solver = getObjectiveSolver<RK45, T, 2>(
+    auto solver = getObjectiveSolver<Stepper::RK45, T, 2>(
         std::tuple{obj_data},
         OdeData{.Rhs = rhs},
         0.0,              // t0
@@ -83,7 +83,7 @@ void test_two_objectives(){
 
     T y0[2] = {0.0, 1.0};
 
-    auto solver = getObjectiveSolver<RK45, T, 2>(
+    auto solver = getObjectiveSolver<Stepper::RK45, T, 2>(
         std::tuple{data0, data1},
         OdeData{.Rhs = rhs},
         T{0.0},              // t0

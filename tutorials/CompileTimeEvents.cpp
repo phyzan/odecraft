@@ -41,12 +41,12 @@ struct MyOdeRhs{
 
 // Class that hardcodes the ODE system and the **two** objective functions,
 // and uses the ObjectiveSolver to handle events.
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP = SolverPolicy::Static>
-class MySolver : public ObjectiveSolver<Solver, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>{
+template<Stepper S, typename T, size_t N, SolverPolicy SP = SolverPolicy::Static>
+class MySolver : public ObjectiveSolver<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>{
 
 public:
 
-    using Base = ObjectiveSolver<Solver, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>;
+    using Base = ObjectiveSolver<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>;
 
     // Following the convention that the first argument of solvers is the ODE system, we pass MyOdeRhs as the first argument to the base class constructor.
     // The rest of the arguments are forwarded to the base class constructor.
@@ -82,7 +82,7 @@ int main(){
     // Using the `MySolver` class
     {
         std::cout << "---------- Using MySolver class ----------" << std::endl;
-        auto solver = MySolver<RK45, T, 2>{
+        auto solver = MySolver<Stepper::RK45, T, 2>{
             {T{0.0}, 1},
             {T{0.0}, 1},
             T{0.0}, // initial time
@@ -109,7 +109,7 @@ int main(){
     {
         std::cout << "\n---------- Using getObjectiveSolver with lambdas ----------" << std::endl;
 
-        auto solver = getObjectiveSolver<RK45, T, 2>(
+        auto solver = getObjectiveSolver<Stepper::RK45, T, 2>(
             std::tuple{
                 ObjFunData{
                     // passing the lambda and ftol automatically deduces the template
@@ -160,7 +160,7 @@ int main(){
     {
         std::cout << "\n---------- Using SingleObjectiveSolver class ----------" << std::endl;
 
-        SingleObjectiveSolver<RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
+        SingleObjectiveSolver<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
             ObjFunData{
                 .func=Obj1<T>{},
                 .ftol=T{0.0},
@@ -189,7 +189,7 @@ int main(){
     // or if direction does not matter, and maximum accuracy is desired, you can use the following constructor:
     {
         std::cout << "\n---------- Using SingleObjectiveSolver class with simpler constructor ----------" << std::endl;
-        SingleObjectiveSolver<RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
+        SingleObjectiveSolver<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
             Obj1<T>{},
             MyOdeRhs{},
             T{0.0}, // initial time

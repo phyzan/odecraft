@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_RUNGEKUTTA_IMPL_HPP
 #define ODECRAFT_RUNGEKUTTA_IMPL_HPP
 
-#include <odecraft/Integrators/RungeKutta.hpp>
+#include <odecraft/Steppers/RungeKutta.hpp>
 
 namespace ode{
 
@@ -83,8 +83,8 @@ K(5, q0.size())
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Integrator RK4<T, N, SP, OdeType, Derived>::method() const{
-    return Integrator::RK4;
+Stepper RK4<T, N, SP, OdeType, Derived>::method() const{
+    return Stepper::RK4;
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>

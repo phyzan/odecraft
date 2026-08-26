@@ -21,10 +21,10 @@ and as a result it is the most derived class in the CRTP hierarchy.
 That means that any class deriving from ObjectiveSolver that overrides functions like `Adv_Impl` will not have those overrides called by the base solver class,.
 For virtual inheritance this might not be the case, so it is best not to override any of the base solver functions, but only extend the functionality.
 */
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-class ObjectiveSolver : public Solver<T, N, SP, OdeType, ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>>{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+class ObjectiveSolver : public detail::SolverTypeGetter<S, T, N, SP, OdeType, ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>>::type{
 
-    using Base = Solver<T, N, SP, OdeType, ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun...>>;
+    using Base = typename detail::SolverTypeGetter<S, T, N, SP, OdeType, ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>>::type;
 
 public:
 
@@ -63,10 +63,10 @@ private:
 };
 
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
-class SingleObjectiveSolver : public ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun>{
+template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
+class SingleObjectiveSolver : public ObjectiveSolver<S, T, N, SP, OdeType, ObjFun>{
 
-    using Base = ObjectiveSolver<Solver, T, N, SP, OdeType, ObjFun>;
+    using Base = ObjectiveSolver<S, T, N, SP, OdeType, ObjFun>;
 public:
 
     template<typename... Args>
@@ -77,7 +77,7 @@ public:
 
 };
 
-template<ODECRAFT_TEMPLATE typename Solver, typename T, size_t N, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun, typename... Args>
+template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun, typename... Args>
 auto getObjectiveSolver(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args);
 
 

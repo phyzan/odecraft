@@ -58,7 +58,7 @@ pbox::Box<OdeResult<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::strea
     double max_step,
     double stepsize,
     int direction,
-    Integrator method,
+    Stepper method,
     bool normalized,
     const std::vector<double>& t_eval) const{
 
@@ -85,7 +85,7 @@ pbox::Box<OdeResult<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::strea
     double max_step,
     double stepsize,
     int direction,
-    Integrator method,
+    Stepper method,
     bool normalized) const{
 
     pbox::Box<ODE<double, NDIM>> ode = this->get_streamline_ode(x0, rtol, atol, min_step, max_step, stepsize, direction, method, normalized);
@@ -110,7 +110,7 @@ pbox::Box<ODE<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::get_streaml
     double max_step,
     double stepsize,
     int direction,
-    Integrator method,
+    Stepper method,
     bool normalized) const{
 
     if (normalized){

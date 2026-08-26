@@ -25,7 +25,7 @@ struct VirtualVectorField {
         double max_step,
         double stepsize,
         int direction,
-        Integrator method,
+        Stepper method,
         bool normalized,
         const std::vector<double>& t_eval
     ) const = 0;
@@ -39,7 +39,7 @@ struct VirtualVectorField {
         double max_step,
         double stepsize,
         int direction,
-        Integrator method,
+        Stepper method,
         bool normalized
     ) const = 0;
 
@@ -51,7 +51,7 @@ struct VirtualVectorField {
         double max_step,
         double stepsize,
         int direction,
-        Integrator method,
+        Stepper method,
         bool normalized
     ) const = 0;
 
@@ -84,7 +84,7 @@ public:
         double max_step,
         double stepsize,
         int direction,
-        Integrator method,
+        Stepper method,
         bool normalized,
         const std::vector<double>& t_eval
     ) const;
@@ -98,7 +98,7 @@ public:
         double max_step,
         double stepsize,
         int direction,
-        Integrator method,
+        Stepper method,
         bool normalized
     ) const;
 
@@ -110,7 +110,7 @@ public:
         double max_step,
         double stepsize,
         int direction,
-        Integrator method,
+        Stepper method,
         bool normalized
     ) const;
 

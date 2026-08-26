@@ -72,7 +72,7 @@ public:
     static constexpr int ERR_EST_ORDER = 1;
     static constexpr bool IS_IMPLICIT = true;
 
-    Integrator method() const;
+    Stepper method() const;
 
 protected:
 
@@ -123,7 +123,7 @@ private:
 namespace detail{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Integrator::BDF, T, N, SP, OdeType, Derived>{
+struct SolverTypeGetter<Stepper::BDF, T, N, SP, OdeType, Derived>{
     using type = BDF<T, N, SP, OdeType, Derived>;
 };
 

@@ -12,7 +12,7 @@ T crossing(const T& /*t*/, const T* y) {
 
 
 template<typename Scalar>
-void crossing_test(Integrator method) {
+void crossing_test(Stepper method) {
     // Initial conditions
     std::array<Scalar, 2> y0 = {3, 0};
 
@@ -71,12 +71,12 @@ void test_oscillator_solver() {
 
     // Test with double precision
     std::cout << "Testing with double precision:\n";
-    crossing_test<double>(Integrator::RK45);
+    crossing_test<double>(Stepper::RK45);
 
     // Test with arbitrary precision
     std::cout << "\nTesting with arbitrary precision (mpreal):\n";
     mpfr::mpreal::set_default_prec(256); // Set precision to 256 bits
 
-    crossing_test<mpfr::mpreal>(Integrator::RK45);
+    crossing_test<mpfr::mpreal>(Stepper::RK45);
     std::cout << "Expected event at t = 3.48143\n";
 }
