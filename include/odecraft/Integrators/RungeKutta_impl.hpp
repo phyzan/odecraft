@@ -5,6 +5,26 @@
 
 namespace ode{
 
+#ifdef ODECRAFT_RK4_DENSE
+namespace detail{
+
+template<typename T, size_t N>
+class MutArray{
+public:
+    MutArray(size_t n) : vec{n} {}
+
+    T* data() const{
+        return vec.data();
+    }
+
+private:
+    mutable Vector<T, N> vec;
+};
+
+} // namespace ode::detail
+#endif
+
+
 template<typename T, typename RhsType>
 void rk4_step(RhsType&& rhs, T* y_new, const T& t, const T& h, const T* y, T* k, size_t n, T* worker){
     // rhs(out, t, y);
@@ -69,19 +89,33 @@ Integrator RK4<T, N, SP, OdeType, Derived>::method() const{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto RK4<T, N, SP, OdeType, Derived>::local_interp() const{
-    size_t nsys = this->nsys();
 #ifdef ODECRAFT_RK4_DENSE
-    return [solver=*this, nsys](T* out, const T& t){
-            rk4_step([&solver](T* out_, const T& t_, const T* y_){
-                solver.rhs(out_, t_, y_);
-            },
-            out, solver.t_old(), t - solver.t_old(), solver.old_state_ptr()+2, solver.K.data()+5*nsys, nsys, solver.K.data() + 4*nsys);
-    };
+    /*
+    TODO : This is expensive. If we could guarantee that the RK4 object does not go out of scope,
+    we can just reference the solver without copying this->K and this->ode()
+    in the lambda below
+    */
+    return
+        [K = detail::MutArray<T, 5*N>{
+            5*this->nsys()},
+        nsys = this->nsys(),
+        t_old = this->t_old(),
+        old = Array1D<T, N>(this->old_state_ptr()+2, this->nsys()),
+        ode=this->ode()]
+        (T* out, const T& t) {
+            rk4_step(
+                [&ode](T* out_, const T& t_, const T* y_){
+                    ode.Rhs(out_, t_, y_);
+                },
+                out, t_old, t - t_old, old.data(), K.data(), nsys, K.data()+4*nsys
+            );
+        };
 #else
     set_interp_data();
     const T* d = this->interp_new_state_ptr();
-    return [n=nsys, t1=this->t_old(), t2 = d[0], y1=Array1D<T, N>(this->old_state_ptr()+2, nsys), y2=Array1D<T, N>(d+2, nsys), y1dot=Array1D<T, N>(K.data(), nsys), y2dot=Array1D<T, N>(K.data()+nsys, nsys)](T* out, const T& t){
-        rk4_interp(out, t, t1, t2, y1.data(), y2.data(), y1dot.data(), y2dot.data(), n);
+    size_t nsys = this->nsys();
+    return [nsys, t1=this->t_old(), t2 = d[0], y1=Array1D<T, N>(this->old_state_ptr()+2, nsys), y2=Array1D<T, N>(d+2, nsys), y1dot=Array1D<T, N>(K.data(), nsys), y2dot=Array1D<T, N>(K.data()+nsys, nsys)](T* out, const T& t){
+        rk4_interp(out, t, t1, t2, y1.data(), y2.data(), y1dot.data(), y2dot.data(), nsys);
     };
 #endif
 }
@@ -107,7 +141,7 @@ StepResult RK4<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 
     rk4_step(rhs_caller, y_new, t, h, y, K.data(), n, K.data() + 4*n);
     if (!all_are_finite(y_new, n)){
-        return StepResult::INF_ERROR;
+        return StepResult::NonFiniteError;
     }else{
         return StepResult::Success;
     }
@@ -115,16 +149,16 @@ StepResult RK4<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK4<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
+void RK4<T, N, SP, OdeType, Derived>::interp_impl(T* out, const T& t) const{
     size_t nsys = this->nsys();
 #ifdef ODECRAFT_RK4_DENSE    
-    rk4_step([this](T* out, const T& tt, const T* y) NDSPAN_LAMBDA_INLINE{
-        this->rhs(out, tt, y);
-    }, result, this->t_old(), t - this->t_old(), this->old_state_ptr()+2, K.data()+5*nsys, nsys, K.data() + 4*nsys);
+    rk4_step([this](T* out_, const T& t_, const T* y_) NDSPAN_LAMBDA_INLINE{
+        this->rhs(out_, t_, y_);
+    }, out, this->t_old(), t - this->t_old(), this->old_state_ptr()+2, K.data()+5*nsys, nsys, K.data() + 4*nsys);
 #else
     set_interp_data();
     const T* d = this->interp_new_state_ptr();
-    rk4_interp(result, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, K.data(), K.data()+nsys, nsys);
+    rk4_interp(out, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, K.data(), K.data()+nsys, nsys);
 #endif
 }
 

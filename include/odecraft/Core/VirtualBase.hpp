@@ -64,10 +64,14 @@ public:
     // MODIFIERS
     virtual bool                do_advance() = 0;
     virtual bool                do_advance_by(T interval) = 0;
-    virtual bool                do_advance_until(const T& time) = 0;
-    virtual bool                do_observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer) = 0;
-    virtual bool                do_observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer, View1D<T> extra_steps) = 0;
-    virtual BoxedInterp<T, N>   do_interp_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer = [](const auto&, const auto*, const auto*){return true;}) = 0;
+
+    virtual bool                do_advance_until(T time) = 0;
+    virtual bool                do_advance_until(T time, observer_t<T> observer) = 0;
+    virtual bool                do_advance_until(T time, observer_t<T> observer, View1D<T> checkpoints) = 0;
+
+    virtual BoxedInterp<T, N>   do_interpolate_until(T time) = 0;
+    virtual BoxedInterp<T, N>   do_interpolate_until(T time, observer_t<T> observer) = 0;
+
     virtual void                do_reset() = 0;
     virtual void                do_kill(std::string message = "") = 0;
     virtual bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) = 0;

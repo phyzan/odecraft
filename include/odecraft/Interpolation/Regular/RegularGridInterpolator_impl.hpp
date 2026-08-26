@@ -11,37 +11,37 @@ namespace ode::interp::rgi{
 //                              RegularGridInterpolator
 // ============================================================================================
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
+template<int NDIM, bool AS_VIRTUAL>
 template<typename ValuesContainer, typename AxisViewContainer>
-RegularGridInterpolator<T, NDIM, AS_VIRTUAL>::RegularGridInterpolator(const ValuesContainer& values, const AxisViewContainer& grid, bool coord_axis_first) : Base(values, coord_axis_first), grid_(grid) {
+RegularGridInterpolator<NDIM, AS_VIRTUAL>::RegularGridInterpolator(const ValuesContainer& values, const AxisViewContainer& grid, bool coord_axis_first) : Base(values, coord_axis_first), grid_(grid) {
     assert([&](){
         int tot_size = coord_axis_first ? values.shape(0) : values.shape(values.ndim()-1);
         return static_cast<bool>(tot_size == detail::get_point_count(grid));
     }() && "Mismatch between values and grid points");
 }
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-bool RegularGridInterpolator<T, NDIM, AS_VIRTUAL>::contains(const T* coords) const{
+template<int NDIM, bool AS_VIRTUAL>
+bool RegularGridInterpolator<NDIM, AS_VIRTUAL>::contains(const double* coords) const{
     return grid_.contains(coords);
 }
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-int RegularGridInterpolator<T, NDIM, AS_VIRTUAL>::ndim() const{
+template<int NDIM, bool AS_VIRTUAL>
+int RegularGridInterpolator<NDIM, AS_VIRTUAL>::ndim() const{
     return grid_.ndim();
 }
 
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-bool RegularGridInterpolator<T, NDIM, AS_VIRTUAL>::interp(T* out, const T* coords) const{
+template<int NDIM, bool AS_VIRTUAL>
+bool RegularGridInterpolator<NDIM, AS_VIRTUAL>::interp(double* out, const double* coords) const{
     int nd = this->ndim();
-    Array2D<T, NDIM, 2, Base::ALLOC> cube(nd, 2); // cube(axis, neighbor)
+    Array2D<double, NDIM, 2, Base::ALLOC> cube(nd, 2); // cube(axis, neighbor)
 
-    Array1D<T, NDIM, Base::ALLOC> coefs(nd); // interpolation coefficients for each axis
+    Array1D<double, NDIM, Base::ALLOC> coefs(nd); // interpolation coefficients for each axis
     Array1D<int, NDIM, Base::ALLOC> left_nbrs(nd); // left neighbors for each axis
     int nfields = this->nvals_per_point();
-    const T* values = this->values().data();
+    const double* values = this->values().data();
 
-    const RegularGrid<T, NDIM>& grid = this->grid();
+    const RegularGrid<double, NDIM>& grid = this->grid();
 
     for (int axis=0; axis<nd; axis++){
         int left_nbr = grid.find_left_idx(coords[axis], axis);
@@ -63,7 +63,7 @@ bool RegularGridInterpolator<T, NDIM, AS_VIRTUAL>::interp(T* out, const T* coord
 
     // perform multilinear interpolation
     for (int corner = 0; corner < n_corners; corner++){
-        T weight = 1;
+        double weight = 1;
         int offset = 0;
         for (int axis=0; axis<nd; axis++){
             int bit = (corner >> axis) & 1;
@@ -81,9 +81,9 @@ bool RegularGridInterpolator<T, NDIM, AS_VIRTUAL>::interp(T* out, const T* coord
 //                              RegularVectorField
 // ============================================================================================
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
+template<int NDIM, bool AS_VIRTUAL>
 template<typename ValuesContainer, typename AxisViewContainer>
-RegularVectorField<T, NDIM, AS_VIRTUAL>::RegularVectorField(const ValuesContainer& values, const AxisViewContainer& grid, CoordType coord_type, bool coord_axis_first) : InterpBase(values, grid, coord_axis_first), VFBase(), coord_type_(coord_type) {
+RegularVectorField<NDIM, AS_VIRTUAL>::RegularVectorField(const ValuesContainer& values, const AxisViewContainer& grid, CoordType coord_type, bool coord_axis_first) : InterpBase(values, grid, coord_axis_first), VFBase(), coord_type_(coord_type) {
     if (this->ndim() < 2){
         throw std::invalid_argument("Vectorfields require ndim >= 2");
     } else if (this->ndim() > 3 && coord_type != CoordType::Cartesian){
@@ -93,23 +93,23 @@ RegularVectorField<T, NDIM, AS_VIRTUAL>::RegularVectorField(const ValuesContaine
     }
 }
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-bool RegularVectorField<T, NDIM, AS_VIRTUAL>::interp(T* out, const T* coords) const{
+template<int NDIM, bool AS_VIRTUAL>
+bool RegularVectorField<NDIM, AS_VIRTUAL>::interp(double* out, const double* coords) const{
     return InterpBase::interp(out, coords);
 }
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-int RegularVectorField<T, NDIM, AS_VIRTUAL>::ndim() const{
+template<int NDIM, bool AS_VIRTUAL>
+int RegularVectorField<NDIM, AS_VIRTUAL>::ndim() const{
     return InterpBase::ndim();
 }
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-bool RegularVectorField<T, NDIM, AS_VIRTUAL>::contains(const T* coords) const{
+template<int NDIM, bool AS_VIRTUAL>
+bool RegularVectorField<NDIM, AS_VIRTUAL>::contains(const double* coords) const{
     return InterpBase::contains(coords);
 }
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-void RegularVectorField<T, NDIM, AS_VIRTUAL>::OdeFuncNorm(T* out, const T& t, const T* q) const{
+template<int NDIM, bool AS_VIRTUAL>
+void RegularVectorField<NDIM, AS_VIRTUAL>::OdeFuncNorm(double* out, double t, const double* q) const{
     
     if (coord_type_ == CoordType::Cartesian){
         VFBase::OdeFuncNorm(out, t, q);
@@ -123,7 +123,7 @@ void RegularVectorField<T, NDIM, AS_VIRTUAL>::OdeFuncNorm(T* out, const T& t, co
     }
 
     // Normalize by physical norm first (physical components form a Euclidean vector)
-    T norm = 0;
+    double norm = 0;
     for (size_t i = 0; i < nd; i++) {
         norm += out[i] * out[i];
     }
@@ -143,32 +143,32 @@ void RegularVectorField<T, NDIM, AS_VIRTUAL>::OdeFuncNorm(T* out, const T& t, co
 }
 
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
-std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::streamplot_data(T max_length, T ds, size_t density, T rtol, T atol, T min_step, T max_step, T stepsize, Integrator method) const{
+template<int NDIM, bool AS_VIRTUAL>
+std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Integrator method) const{
     return streamplot_data_core(max_length, ds, density, rtol, atol, min_step, max_step, stepsize, method, std::make_index_sequence<NDIM>{});
 }
 
 
 
-template<typename T, int NDIM, bool AS_VIRTUAL>
+template<int NDIM, bool AS_VIRTUAL>
 template<size_t... I>
-std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::streamplot_data_core(T max_length, T ds, size_t density, T rtol, T atol, T min_step, T max_step, T stepsize, Integrator method, std::index_sequence<I...>) const{
+std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Integrator method, std::index_sequence<I...>) const{
     
     assert(max_length > ds && max_length > 0 && ds > 0 && "max_length and ds must be positive, and max_length must be greater than ds");
     assert(density > 1 && "Density must be greater than 1");
-    EventList<T> events{};
-    pbox::Box<OdeRichSolver<T, NDIM>> solver = make_solver<UtilPolicy::RichVirtual>(method,
+    EventList<double> events{};
+    pbox::Box<OdeRichSolver<double, NDIM>> solver = make_solver<UtilPolicy::RichVirtual>(method,
         OdeData{
-            .Rhs=[this](T* out, const T& t, const T* q){
+            .Rhs=[this](double* out, double t, const double* q){
                 this->OdeFuncNorm(out, t, q);
             }
         },
-        T{0}, View1D<T, NDIM>{nullptr, this->ndim()}, rtol, atol, min_step, max_step, stepsize, +1, std::move(events));
+        0.0, View1D<double, NDIM>{nullptr, this->ndim()}, rtol, atol, min_step, max_step, stepsize, +1, std::move(events));
 
     const auto& X = this->grid().data();
     Array1D<int, NDIM, InterpBase::ALLOC> N(this->ndim());
-    Array1D<T, NDIM, InterpBase::ALLOC> L(this->ndim());
-    Array1D<T, NDIM, InterpBase::ALLOC> Dx(this->ndim());
+    Array1D<double, NDIM, InterpBase::ALLOC> L(this->ndim());
+    Array1D<double, NDIM, InterpBase::ALLOC> Dx(this->ndim());
     for (int axis=0; axis<this->ndim(); axis++){
         N[axis] = density;
         L[axis] = this->grid().length(axis);
@@ -183,25 +183,25 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
     is_full.fill(false);
 
     // Compute physical extents for each axis (angular extents scaled by representative radii)
-    Array1D<T, NDIM, InterpBase::ALLOC> L_phys(this->ndim());
+    Array1D<double, NDIM, InterpBase::ALLOC> L_phys(this->ndim());
     for (int axis=0; axis<this->ndim(); axis++){
         L_phys[axis] = L[axis];
     }
     if (coord_type_ == CoordType::Polar){
-        T r_mid = X[0][0] + L[0] / 2;
+        double r_mid = X[0][0] + L[0] / 2;
         L_phys[1] = r_mid * L[1];
     } else if (coord_type_ == CoordType::Spherical){
-        T r_mid = X[0][0] + L[0] / 2;
-        T theta_mid = X[1][0] + L[1] / 2;
+        double r_mid = X[0][0] + L[0] / 2;
+        double theta_mid = X[1][0] + L[1] / 2;
         L_phys[1] = r_mid * L[1];
         L_phys[2] = r_mid * sin(theta_mid) * L[2];
     }
-    T min_length = 0.2 * (*std::min_element(L_phys.begin(), L_phys.end())); // minimum physical length of streamline to be kept
+    double min_length = 0.2 * (*std::min_element(L_phys.begin(), L_phys.end())); // minimum physical length of streamline to be kept
 
     Array1D<int, NDIM, InterpBase::ALLOC> i_start(this->ndim());
     Array1D<int, NDIM, InterpBase::ALLOC> i_curr(this->ndim());
 
-    auto GetIdx = [&](Array1D<int, NDIM, InterpBase::ALLOC>& i, const T* x) NDSPAN_LAMBDA_INLINE{
+    auto GetIdx = [&](Array1D<int, NDIM, InterpBase::ALLOC>& i, const double* x) NDSPAN_LAMBDA_INLINE{
         if constexpr (NDIM > 0){
             ((i[I] = int(std::round((x[I] - X[I][0]) / Dx[I]))), ...);
         }else{
@@ -226,11 +226,11 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
         }
     };
 
-    auto IntegrateDirection = [&](pbox::Box<OdeRichSolver<T, NDIM>>& rich_solver, T& s_total, T* const * x, int& n_steps_tot, const int dir) -> int {
+    auto IntegrateDirection = [&](pbox::Box<OdeRichSolver<double, NDIM>>& rich_solver, double& s_total, double* const * x, int& n_steps_tot, const int direction) -> int {
         // x[I] are preallocated arrays of size max_pts + 1. x[I][0] = x0[I], so at each step, we write to x[I][step], starting from x[I][1]
-        Array1D<T, NDIM, InterpBase::ALLOC> ics(this->ndim());
+        Array1D<double, NDIM, InterpBase::ALLOC> ics(this->ndim());
         if constexpr (NDIM > 0){
-            ics = Array1D<T, NDIM, InterpBase::ALLOC>{x[I][0]...};
+            ics = Array1D<double, NDIM, InterpBase::ALLOC>{x[I][0]...};
         }else{
             for (int axis=0; axis<this->ndim(); axis++){
                 ics[axis] = x[axis][0];
@@ -238,12 +238,12 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
         }
         
         assert(this->contains(ics.data()) && "Initial point out of bounds");
-        assert((dir == 1 || dir == -1) && "Direction must be either +1 or -1");
-        if (!rich_solver->do_set_ics(0, ics.data(), stepsize, dir)) {
+        assert((direction == 1 || direction == -1) && "Direction must be either +1 or -1");
+        if (!rich_solver->do_set_ics(0, ics.data(), stepsize, direction)) {
             return 0;
         }
         int n_steps = 0;
-        const T* q_new;
+        const double* q_new;
 
 
         GetIdx(i_start, ics.data());
@@ -253,7 +253,7 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
             n_steps++;
             n_steps_tot++;
             if constexpr (NDIM > 0){
-                ((x[I][n_steps*dir] = q_new[I]), ...);
+                ((x[I][n_steps*direction] = q_new[I]), ...);
                 if (((i_curr[I] != i_start[I]) || ...) && InBounds(i_curr)){
                     if(is_full(i_curr[I]...)){
                         break;  // Stop if cell already occupied
@@ -265,7 +265,7 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
                 }
             }else{
                 for (int axis=0; axis<this->ndim(); axis++){
-                    x[axis][n_steps*dir] = q_new[axis];
+                    x[axis][n_steps*direction] = q_new[axis];
                 }
                 if ((!allEqual(i_start.data(), i_curr.data(), this->ndim())) && InBounds(i_curr)){
                     if(is_full.getElem(i_curr.data())){
@@ -285,8 +285,8 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
         return n_steps;
     };
 
-    auto GetStreamline = [&](bool& success, Array2D<T, NDIM, 0>& worker_line, const T* x0) {
-        assert(worker_line.shape(1) == size_t(2*max_pts + 1)&& "Line array must have shape (2, 2*max_pts + 1)");
+    auto GetStreamline = [&](bool& success, Array2D<double, NDIM, 0>& worker_line, const double* x0) {
+        assert( (worker_line.shape(1) == size_t(2*max_pts + 1)) && "Line array must have shape (2, 2*max_pts + 1)");
         if constexpr (NDIM > 0) {
             ((worker_line(I, max_pts) = x0[I]), ...);
         }else{
@@ -298,8 +298,8 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
 
         int n_steps_tot = 0;
 
-        T s_total = 0;
-        Array1D<T*, NDIM, InterpBase::ALLOC> x(this->ndim());
+        double s_total = 0;
+        Array1D<double*, NDIM, InterpBase::ALLOC> x(this->ndim());
         if constexpr (NDIM > 0){
             x = {worker_line.ptr(I, max_pts)...};
             ((reached[I].clear()), ...);
@@ -314,7 +314,7 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
         int n_steps_bwd = IntegrateDirection(solver, s_total, x.data(), n_steps_tot, -1);
 
         // if the streamline is long enough and n_steps_tot  > 1, we keep it:
-        Array1D<const T*, NDIM, InterpBase::ALLOC> x_line(this->ndim());
+        Array1D<const double*, NDIM, InterpBase::ALLOC> x_line(this->ndim());
         if constexpr (NDIM > 0){
             x_line = {worker_line.ptr(I, max_pts - n_steps_bwd)...};
         }else{
@@ -322,7 +322,7 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
                 x_line[axis] = worker_line.ptr(axis, max_pts - n_steps_bwd);
             }
         }
-        Array2D<T, NDIM, 0> true_line(this->ndim(), n_steps_tot);
+        Array2D<double, NDIM, 0> true_line(this->ndim(), n_steps_tot);
         if (s_total > min_length && n_steps_tot > 1){
             if constexpr (NDIM > 0){
                 ((ndspan::copy_array(true_line.ptr(I, 0), x_line[I], n_steps_tot)), ...);
@@ -360,8 +360,8 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
         return true_line;
     };
 
-    std::vector<Array2D<T, NDIM, 0>> streamlines;
-    auto TryTrajectory = [&](Array2D<T, NDIM, 0>& worker_line, const Array1D<int, NDIM, InterpBase::ALLOC>& idx) NDSPAN_LAMBDA_INLINE{
+    std::vector<Array2D<double, NDIM, 0>> streamlines;
+    auto TryTrajectory = [&](Array2D<double, NDIM, 0>& worker_line, const Array1D<int, NDIM, InterpBase::ALLOC>& idx) NDSPAN_LAMBDA_INLINE{
 
         if constexpr (NDIM > 0) {
             if (((idx[I] < 0 || idx[I] >= int(N[I])) || ...)) {
@@ -374,9 +374,9 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
                 }
             }
         }
-        Array1D<T, NDIM, InterpBase::ALLOC> x0(this->ndim());
+        Array1D<double, NDIM, InterpBase::ALLOC> x0(this->ndim());
         if constexpr (NDIM > 0){
-            x0 = Array1D<T, NDIM, InterpBase::ALLOC>{(X[I][0] + idx[I] * Dx[I])...};
+            x0 = Array1D<double, NDIM, InterpBase::ALLOC>{(X[I][0] + idx[I] * Dx[I])...};
         }else{
             for (int axis=0; axis<this->ndim(); axis++){
                 x0[axis] = X[axis][0] + idx[axis] * Dx[axis];
@@ -394,7 +394,7 @@ std::vector<Array2D<T, NDIM, 0>> RegularVectorField<T, NDIM, AS_VIRTUAL>::stream
     };
 
     // Seeding streamlines from edges working inwards (shell by shell):
-    Array2D<T, NDIM, 0> line(this->ndim(), 2*max_pts + 1);
+    Array2D<double, NDIM, 0> line(this->ndim(), 2*max_pts + 1);
 
     int min_N = *std::min_element(N.begin(), N.end());
     int max_shells = (min_N + 1) / 2;

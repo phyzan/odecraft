@@ -40,7 +40,7 @@ protected:
 
     StepResult  adapt_impl(T* res, const T* state);
 
-    void        interp_impl(T* result, const T& t) const;
+    void        interp_impl(T* out, const T& t) const;
 
     void        ReAdjust(const T* new_vector);
 

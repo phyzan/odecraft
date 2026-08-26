@@ -276,14 +276,14 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 
         // Checks go at the top so that continue statements inside the loop will still trigger them.
         if (habs < h_min){
-            return StepResult::MIN_STEP_ERROR; // TODO: The algorithm does not work properly when we go below min_step.
+            return StepResult::MinStepError; // TODO: The algorithm does not work properly when we go below min_step.
         }else if (habs > max_step){
             _change_D(max_step/habs);
             habs = max_step;
             interp_idx = int(_idx_D);
             return StepResult::Success; // The step is acceptet, but the stepsize is limited by max_step.
         }else if (habs < this->MIN_STEP){
-            return StepResult::TINY_STEP_ERROR;
+            return StepResult::TinyStepError;
         }
         
         t_new = t + habs * this->direction();
@@ -465,7 +465,7 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::_solve_bdf_system(T* y, const T* y_pre
         }
 
         if (!all_are_finite(y, n)){
-            flag = StepResult::INF_ERROR;
+            flag = StepResult::NonFiniteError;
             break;
         }else if (dy_norm == 0 || ((rate != 0) && (rate * dy_norm < _newton_tol * (1-rate)))){
             converged = true;

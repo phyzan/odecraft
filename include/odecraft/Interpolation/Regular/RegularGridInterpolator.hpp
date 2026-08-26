@@ -15,8 +15,8 @@ enum class CoordType : uint8_t {
 };
 
 
-template<typename T, int NDIM, bool AS_VIRTUAL = false>
-class RegularGridInterpolator : public NdInterpolator<RegularGridInterpolator<T, NDIM, AS_VIRTUAL>, T, NDIM, AS_VIRTUAL>{
+template<int NDIM, bool AS_VIRTUAL = false>
+class RegularGridInterpolator : public NdInterpolator<RegularGridInterpolator<NDIM, AS_VIRTUAL>, double, NDIM, AS_VIRTUAL>{
 
     /**
     Represents an N-dimensional regular grid interpolator using multilinear interpolation.
@@ -26,7 +26,7 @@ class RegularGridInterpolator : public NdInterpolator<RegularGridInterpolator<T,
     Only multilinear interpolation is supported at the moment.
     */
 
-    using Base = NdInterpolator<RegularGridInterpolator<T, NDIM, AS_VIRTUAL>, T, NDIM, AS_VIRTUAL>;
+    using Base = NdInterpolator<RegularGridInterpolator<NDIM, AS_VIRTUAL>, double, NDIM, AS_VIRTUAL>;
 
 public:
 
@@ -35,50 +35,50 @@ public:
     template<typename ValuesContainer, typename AxisViewContainer>
     RegularGridInterpolator(const ValuesContainer& values, const AxisViewContainer& grid, bool coord_axis_first);
 
-    inline const RegularGrid<T, NDIM>&  grid() const { return grid_; }
+    inline const RegularGrid<double, NDIM>&  grid() const { return grid_; }
 
     // ============== Static Override ==================
     int             ndim() const;
-    bool            interp(T* out, const T* coords) const;
-    bool            contains(const T* coords) const;
+    bool            interp(double* out, const double* coords) const;
+    bool            contains(const double* coords) const;
     // =================================================
 
 private:
 
-    RegularGrid<T, NDIM> grid_;
+    RegularGrid<double, NDIM> grid_;
 
 }; // RegularGridInterpolator
 
 
-template<typename T, int NDIM, bool AS_VIRTUAL = false>
-class RegularVectorField : public RegularGridInterpolator<T, NDIM, AS_VIRTUAL>, public VectorField<RegularVectorField<T, NDIM, AS_VIRTUAL>, T, NDIM, AS_VIRTUAL>{
+template<int NDIM, bool AS_VIRTUAL = false>
+class RegularVectorField : public RegularGridInterpolator<NDIM, AS_VIRTUAL>, public VectorField<RegularVectorField<NDIM, AS_VIRTUAL>, NDIM, AS_VIRTUAL>{
 
-    using InterpBase = RegularGridInterpolator<T, NDIM, AS_VIRTUAL>;
-    using VFBase = VectorField<RegularVectorField<T, NDIM, AS_VIRTUAL>, T, NDIM, AS_VIRTUAL>;
+    using InterpBase = RegularGridInterpolator<NDIM, AS_VIRTUAL>;
+    using VFBase = VectorField<RegularVectorField<NDIM, AS_VIRTUAL>, NDIM, AS_VIRTUAL>;
 
 public:
 
     // overriden to support different coordinate systems (Cartesian, Polar, Spherical)
-    void OdeFuncNorm(T* out, const T& t, const T* q) const;
+    void OdeFuncNorm(double* out, double t, const double* q) const;
 
     // grid[i].data(), grid[i].size() : grid points along axis i
     template<typename ValuesContainer, typename AxisViewContainer>
     RegularVectorField(const ValuesContainer& values, const AxisViewContainer& grid, CoordType coord_type, bool coord_axis_first);
 
-    std::vector<Array2D<T, NDIM, 0>>    streamplot_data(T max_length, T ds, size_t density, T rtol, T atol, T min_step, T max_step, T stepsize, Integrator method) const;
+    std::vector<Array2D<double, NDIM, 0>>    streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Integrator method) const;
 
 
     // ============ Explicit overrides for VectorField ==============
-    bool    interp(T* out, const T* coords) const;
+    bool    interp(double* out, const double* coords) const;
     int     ndim() const;
-    bool    contains(const T* coords) const;
+    bool    contains(const double* coords) const;
     // ==============================================================
 
 
 private:
 
     template<size_t... I>
-    std::vector<Array2D<T, NDIM, 0>>    streamplot_data_core(T max_length, T ds, size_t density, T rtol, T atol, T min_step, T max_step, T stepsize, Integrator method, std::index_sequence<I...>) const;
+    std::vector<Array2D<double, NDIM, 0>>    streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Integrator method, std::index_sequence<I...>) const;
 
     CoordType coord_type_;
 

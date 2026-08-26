@@ -164,11 +164,11 @@ public:
 
     /**
      * @brief Evaluate the right-hand side of the ODE system.
-     * @param[out] dq_dt Output array for the derivative dq/dt (size Nsys).
+     * @param[out] out Output array for the derivative dq/dt (size Nsys).
      * @param[in]  t     Current time.
      * @param[in]  q     Current state vector (size Nsys).
     */
-    void                 Rhs(T* dq_dt, const T& t, const T* q) const;
+    void                 Rhs(T* out, const T& t, const T* q) const;
 
     /**
      * @brief Compute the Jacobian matrix of the ODE system.
@@ -176,11 +176,11 @@ public:
      * Uses the exact Jacobian if provided, otherwise falls back to
      * finite difference approximation
      *
-     * @param[out] jm Output array for Jacobian in column-major order (size Nsys x Nsys).
+     * @param[out] out Output array for Jacobian in column-major order (size Nsys x Nsys).
      * @param[in]  t  Current time.
      * @param[in]  q  Current state vector (size Nsys).
     */
-    void                 Jac(T* jm, const T& t, const T* q) const;
+    void                 Jac(T* out, const T& t, const T* q) const;
 
     /**
      * @brief Approximate the Jacobian using central finite differences.
@@ -326,41 +326,56 @@ public:
      */
     bool                advance();
 
-    bool                advance_until(const T& time);
+    
+    /**
+     * @param time Target time to integrate to.
+     * @returns `true` if the solver reached `time`, `false` if stopped early
+    */
+    bool    advance_until(const T& time);
 
     /**
      * @brief Integrate until the specified time is reached.
      * @param time Target time to integrate to.
-     * @param observer Callable function(t, q_ptr, t_ptr) ->bool that is called at each successfull step until "time" is reached.
-     *     observer arguments:
-     *          t: solver's current integration time.
-     *          q_ptr: solver's current state vector
-     *          t_ptr: if positioned at an extra_step, pointer to the t-value in the array. Otherwise nullptr. If no extra_steps passed,
-     *              then t_ptr is always nullptr except for the last call (if successfull), in which case t_ptr = &time.
-     * the observer should return true to continue integration, or false to stop advancing anymore.
-     * @param extra_steps Optional array of additional time points to observe (must be in the same direction and within the integration range). Observer will be called at these points as well.
-     * @return True if integration succeeded reaching the target time, false if solver stopped early.
+     * @param observer Callable `bool(t, q_ptr, t_ptr)`, invoked after every successful step.
+     *     `t`     : Current integration time.
+     *     `q_ptr` : Current state vector.
+     *     `t_ptr` : const T*, this `advance_until` overload always passes null
+     *     Return `false` to stop advancing immediately.
+     * @returns `true` if the solver reached `time`, `false` if stopped early.
      */
-    template<OptionalObserver<T> Callable, typename ArrayType = EmptyArr<T>>
-    bool                advance_until(const T& time, const Callable& observer, const ArrayType& extra_steps = EmptyArr<T>());
-
-    bool                observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer, View1D<T> extra_steps);
-
-    bool                observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer);
-
-    /// @brief observer(t, q_ptr, t_ptr) -> bool
-    template<OptionalObserver<T> Callable = std::nullptr_t>
-    BoxedInterp<T, N>   interpolate_until(const T& time, const Callable& observer = nullptr);
-
-    BoxedInterp<T, N>   interp_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer = [](const auto&, const auto*, const auto*){return true;});
+    template<isObserver<T> Callable>
+    bool    advance_until(
+        const T& time,
+        Callable&& observer
+    );
 
     /**
-     * @brief Advance the solver by a specified time interval (along the integration direction).
-     * @param interval Time interval to advance by (must be positive).
-     * @return True if the interval was successfully integrated, false otherwise
-     * @note This is a convenience method equivalent to advance_until(t() + interval*direction()).
-     *      The is not a single step advance; the solver will take as many steps as needed to reach the target time,
-     *      and use interpolation to end exactly at the target time.
+     * @brief Integrate until the specified time is reached.
+     * @param time Target time to integrate to.
+     * @param observer Callable `bool(t, q_ptr, t_ptr)`, invoked after every successful step.
+     *     `t`     : Current integration time.
+     *     `q_ptr` : Current state vector.
+     *     `t_ptr` : Address of the checkpoint the solver lands on, else null.
+     *               If checkpoints.size() == 0, it is null on every call but the last,
+     *               where it is `&time`.
+     *     Return `false` to stop advancing immediately.
+     * @return `true` if the solver reached `time`, `false` if stopped early
+     */
+    template<isObserver<T> Callable, isArray<T> ArrayType>
+    bool    advance_until(
+        const T& time,
+        Callable&& observer,
+        ArrayType&& checkpoints
+    );
+
+    BoxedInterp<T, N>   interpolate_until(const T& time);
+
+    template<isObserver<T> Callable>
+    BoxedInterp<T, N>   interpolate_until(const T& time, Callable&& observer);
+
+    /**
+     * @brief Advance until (this->t() + interval*direction) is reached
+     * @param interval Unsigned interval to integrate
     */
     bool                advance_by(T interval);
 
@@ -424,17 +439,20 @@ public:
     void                get_interp(T* result, const T& t) const { interp(result, t); }
     size_t              get_rhs_eval_count() const { return rhs_eval_count_; }
     size_t              get_jac_eval_count() const { return jac_eval_count_; }
-    BoxedInterp<T, N> get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
+    BoxedInterp<T, N>   get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
     T                   get_auto_step(T t, const T* q) const { return auto_step(t, q); }
     T                   get_auto_step() const { return auto_step(); }
     
     // Modifiers
     bool                do_advance() { return advance(); }
     bool                do_advance_by(T interval) { return advance_by(interval); }
-    bool                do_advance_until(const T& time) { return advance_until(time); }
-    bool                do_observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer) { return observe_until(time, observer); }
-    bool                do_observe_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer, View1D<T> extra_steps) { return observe_until(time, observer, extra_steps); }
-    BoxedInterp<T, N>   do_interp_until(const T& time, std::function<bool(const T&, const T*, const T*)> observer = [](const auto&, const auto*, const auto*){return true;}) { return interp_until(time, observer); }
+
+    bool                do_advance_until(T time) { return advance_until(time); }
+    bool                do_advance_until(T time, observer_t<T> observer) { return advance_until(time, observer); }
+    bool                do_advance_until(T time, observer_t<T> observer, View1D<T> checkpoints) { return advance_until(time, observer, checkpoints); }
+
+    BoxedInterp<T, N>   do_interpolate_until(T time) { return interpolate_until(time); }
+    BoxedInterp<T, N>   do_interpolate_until(T time, observer_t<T> observer) { return interpolate_until(time, observer); }
     void                do_reset() { THIS->Reset(); }
     void                do_kill(std::string message = "") { kill(std::move(message)); }
     bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) { return set_ics(t0, y0, stepsize, direction); }
@@ -524,10 +542,10 @@ protected:
     inline const OdeType& ode() const {return ode_;}
 
     /// @brief Same as this->Rhs, but increments the RHS evaluation counter.
-    void        rhs(T* dq_dt, const T& t, const T* q) const;
+    void        rhs(T* out, const T& t, const T* q) const;
 
     /// @brief Same as this->Jac, but increments the Jacobian evaluation counter.
-    void        jac(T* jm, const T& t, const T* q) const;
+    void        jac(T* out, const T& t, const T* q) const;
 
     /// @brief Get pointer to the initial conditions state data.
     const T*    ics_ptr() const;
@@ -587,7 +605,7 @@ protected:
         T min_step,
         T max_step,
         T stepsize,
-        int dir);
+        int direction);
 
     // ==================================================
 
@@ -605,9 +623,21 @@ protected:
 
 private:
 
-    bool                    validate_it(StepResult result, const T* state);
-    void                    set_state(const T& time, T* state);
+    bool    validate_it(StepResult result, const T* state);
+    void    set_state(const T& time, T* state);
 
+    template<typename Callable, typename ArrayType>
+    bool    generic_advance_until(
+        const T& time,
+        Callable&& observer,
+        ArrayType&& checkpoints
+    );
+
+    template<typename Callable>
+    BoxedInterp<T, N>   generic_interpolate_until(
+        const T& time,
+        Callable&& observer
+    );
 
     template<typename A, typename... Rest>
     const T&    nearest_time_priv(const A& t_a, const Rest&... t_rest) const{

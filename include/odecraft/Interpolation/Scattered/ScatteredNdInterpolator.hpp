@@ -43,10 +43,10 @@ private:
 
 
 template<int NDIM, bool AS_VIRTUAL>
-class ScatteredVectorField : public ScatteredNdInterpolator<NDIM, AS_VIRTUAL>, public VectorField<ScatteredVectorField<NDIM, AS_VIRTUAL>, double, NDIM, AS_VIRTUAL>{
+class ScatteredVectorField : public ScatteredNdInterpolator<NDIM, AS_VIRTUAL>, public VectorField<ScatteredVectorField<NDIM, AS_VIRTUAL>, NDIM, AS_VIRTUAL>{
 
     using InterpBase = ScatteredNdInterpolator<NDIM, AS_VIRTUAL>;
-    using VFBase = VectorField<ScatteredVectorField<NDIM, AS_VIRTUAL>, double, NDIM, AS_VIRTUAL>;
+    using VFBase = VectorField<ScatteredVectorField<NDIM, AS_VIRTUAL>, NDIM, AS_VIRTUAL>;
 public:
 
     // points: (n_points, ndim)

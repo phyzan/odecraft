@@ -93,7 +93,7 @@ void EventBase<Derived, T, MaskFunc>::setup(T t_start, size_t n_sys, int directi
 
 
 template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
-template<StateInterp<T> Callable>
+template<isStateInterp<T> Callable>
 bool EventBase<Derived, T, MaskFunc>::locate_state(T& out, State<T> before, State<T> after, Callable&& obj_fun){
     assert(this->is_setup_ && "Call setup() method before trying to locate an event");
     assert((sgn(before.t(), after.t()) == this->direction_) && "Invalid direction");
@@ -127,7 +127,7 @@ void EventBase<Derived, T, MaskFunc>::reset(int direction){
 }
 
 template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc>
-template<StateInterp<T> Callable>
+template<isStateInterp<T> Callable>
 bool EventBase<Derived, T, MaskFunc>::locate_impl(T& /*t*/, State<T> /*before*/, State<T> /*after*/, Callable&& /*obj_fun*/) const{
     static_assert(false, "static override");
     return false;
@@ -161,7 +161,7 @@ int PreciseEvent<T, Target, MaskFunc, Derived>::sign_change_dir() const{
 }
 
 template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc, typename Derived>
-template<StateInterp<T> Callable>
+template<isStateInterp<T> Callable>
 bool PreciseEvent<T, Target, MaskFunc, Derived>::locate_impl(T& t, State<T> before, State<T> after, Callable&& obj_fun) const{
     T val1 = this->obj_fun(before.t(), before.vector());
     T val2 = this->obj_fun(after.t(), after.vector());
@@ -198,7 +198,7 @@ T PeriodicEvent<T, MaskFunc, Derived>::get_t(size_t n) const{
 }
 
 template<typename T, OptionalRhsFunc<T> MaskFunc, typename Derived>
-template<StateInterp<T> Callable>
+template<isStateInterp<T> Callable>
 bool PeriodicEvent<T, MaskFunc, Derived>::locate_impl(T& t, State<T> before, State<T> after, Callable&& /*obj_fun*/) const{
     n_aux_ = n_;
     int d = this->direction();
@@ -246,6 +246,26 @@ const Event<T>& EventCollection<T>::event(size_t event_idx) const{
     return *events[event_idx].get_raw_pointer();
 }
 
+template<typename T>
+T EventCollection<T>::get_time(size_t detection_idx) const{
+    assert(detection_idx < detections && "Out of bounds detection_idx requested in get_time");
+    return event_times[detection_order[detection_idx]];
+}
+
+template<typename T>
+const Event<T>* EventCollection<T>::get_event(size_t detection_idx) const{
+    if (detection_idx >= detections){
+        return nullptr;
+    }else{
+        return events[detection_order[detection_idx]].get_raw_pointer();
+    }
+}
+
+template<typename T>
+bool EventCollection<T>::is_located(size_t event_idx) const{
+    return located[event_idx];
+}
+
 
 template<typename T>
 int EventCollection<T>::event_idx(const std::string& name) const{
@@ -254,6 +274,12 @@ int EventCollection<T>::event_idx(const std::string& name) const{
         return int(it->second);
     }
     return -1;
+}
+
+template<typename T>
+size_t EventCollection<T>::get_event_idx(size_t detection_idx) const{
+    assert(detection_idx < detections && "Detection index out of bounds in get_event_idx");
+    return detection_order[detection_idx];
 }
 
 template<typename T>
@@ -276,7 +302,7 @@ void EventCollection<T>::setup(T t_start, size_t n_sys, int direction){
 }
 
 template<typename T>
-template<StateInterp<T> Callable>
+template<isStateInterp<T> Callable>
 bool EventCollection<T>::detect_all_between(State<T> before, State<T> after, Callable&& obj_fun) {
     if (this->size() == 0){
         return false;
@@ -357,6 +383,11 @@ bool EventCollection<T>::detect_all_between(State<T> before, State<T> after, Cal
 }
 
 template<typename T>
+const MaskedState<T>* EventCollection<T>::masked_state() const{
+    return has_masked_state ? &masked_data : nullptr;
+}
+
+template<typename T>
 void EventCollection<T>::reset(int direction){
 
     for (size_t i=0; i<this->size(); i++){
@@ -375,16 +406,16 @@ std::vector<EventOptions> EventCollection<T>::validate_events(const std::vector<
     size_t Nevs = this->size();
     std::vector<EventOptions> res(Nevs);
     bool found;
-    for (size_t i=0; i<options.size(); i++) {
+    for (const auto & option : options) {
         found = false;
         for (size_t j=0; j<Nevs; j++){
-            if (this->event(j).name() == options[i].name){
+            if (this->event(j).name() == option.name){
                 found = true;
                 break;
             }
         }
         if (!found){
-            throw std::logic_error("Event name \""+options[i].name+"\" is invalid");
+            throw std::logic_error("Event name \""+option.name+"\" is invalid");
         }
     }
 

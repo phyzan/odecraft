@@ -37,7 +37,6 @@ DelaunayTri<NDIM>::DelaunayTri(const double* points, size_t n_points, size_t ndi
             }
         }
 
-        // invert A ONCE (reuse your existing solver here)
         inv_mat_row_major(invT_.ptr(s, 0, 0), A.data(), nd, work.data(), pivot.data());
 
     }

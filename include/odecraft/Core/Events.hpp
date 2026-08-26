@@ -207,7 +207,7 @@ public:
     void                    setup(T t_start, size_t n_sys, int direction);
 
     /// @brief Attempt to locate event in an interval. obj_fun(T* out, T t) -> void fills the state vector at time t.
-    template<StateInterp<T> Callable>
+    template<isStateInterp<T> Callable>
     bool                    locate_state(T& out, State<T> before, State<T> after, Callable&& obj_fun);
 
     /// @brief Attempt to locate event in an interval.
@@ -244,7 +244,7 @@ protected:
      * @param[in]  obj_fun Interpolation function (T* out, const T& t) -> void to compute state at intermediate times (for masked events).
      * @return True if event was found in interval.
      */
-    template<StateInterp<T> Callable>
+    template<isStateInterp<T> Callable>
     bool locate_impl(T& t, State<T> before, State<T> after, Callable&& obj_fun) const;
 
     // ============= STATIC OVERRIDE (OPTIONAL) ================
@@ -315,7 +315,7 @@ public:
 protected:
 
     /// @brief Locate zero crossing using bisection.
-    template<StateInterp<T> Callable>
+    template<isStateInterp<T> Callable>
     bool locate_impl(T& t, State<T> before, State<T> after, Callable&& obj_fun) const;
 
     Target  target = nullptr;      ///< Objective function to monitor.
@@ -363,7 +363,7 @@ protected:
     T           get_t(size_t n) const;
 
     /// @brief Locate next periodic trigger in interval.
-    template<StateInterp<T> Callable>
+    template<isStateInterp<T> Callable>
     bool        locate_impl(T& t, State<T> before, State<T> after, Callable&& obj_fun) const;
 
     /// @brief Update period counter on registration.
@@ -396,8 +396,13 @@ public:
 
     /// @brief Construct from vector of event pointers.
     EventCollection(EventList<T> evs);
+
+    // Default constructors
     EventCollection() = default;
-    DEFAULT_RULE_OF_FOUR(EventCollection)
+    EventCollection(const EventCollection<T>& other) = default;
+    EventCollection(EventCollection<T>&& other) noexcept = default;
+    EventCollection<T>& operator=(const EventCollection<T>& other) = default;
+    EventCollection<T>& operator=(EventCollection<T>&& other) noexcept = default;
     ~EventCollection() = default;
 
     // ------------------------ ACCESSORS ----------------------------
@@ -405,30 +410,16 @@ public:
     /// @brief Get event by index.
     const Event<T>&         event(size_t event_idx) const;
 
-    T                       get_time(size_t detection_idx) const{
-        assert(detection_idx < detections && "Out of bounds detection_idx requested in get_time");
-        return event_times[detection_order[detection_idx]];
-    }
+    T                       get_time(size_t detection_idx) const;
 
-    const Event<T>*         get_event(size_t detection_idx) const{
-        if (detection_idx >= detections){
-            return nullptr;
-        }else{
-            return events[detection_order[detection_idx]].get_raw_pointer();
-        }
-    }
+    const Event<T>*         get_event(size_t detection_idx) const;
 
-    bool                    is_located(size_t event_idx) const{
-        return located[event_idx];
-    }
+    bool                    is_located(size_t event_idx) const;
 
     /// @brief Get the index of the event with the given name, or -1 if not found.
     int                     event_idx(const std::string& name) const;
 
-    size_t                  get_event_idx(size_t detection_idx) const{
-        assert(detection_idx < detections && "Detection index out of bounds in get_event_idx");
-        return detection_order[detection_idx];
-    }
+    size_t                  get_event_idx(size_t detection_idx) const;
 
     /// @brief Get total number of events.
     size_t                  size() const;
@@ -448,12 +439,10 @@ public:
         * @param after  State at interval end.
         * @param obj_fun Interpolation function (T* out, const T& t) -> void to compute state at intermediate times (for masked events).
      */
-    template<StateInterp<T> Callable>
+    template<isStateInterp<T> Callable>
     bool                    detect_all_between(State<T> before, State<T> after, Callable&& obj_fun);
 
-    const MaskedState<T>*   masked_state() const{
-        return has_masked_state ? &masked_data : nullptr;
-    }
+    const MaskedState<T>*   masked_state() const;
 
     /// @brief Reset all events to initial state.
     void                    reset(int direction = 0);
@@ -482,9 +471,7 @@ struct EventState{
     bool is_masked = false;
     bool active = false; //true if the solver is currently at this event
 
-    operator bool() const{
-        return active;
-    }
+    inline operator bool() const{ return active; }
 };
 
 
