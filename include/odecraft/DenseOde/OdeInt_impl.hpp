@@ -14,8 +14,8 @@ namespace ode{
 
 // EventCounter implementations
 template<typename T, size_t N>
-EventCounter<T, N>::EventCounter(std::vector<EventOptions> options) : _options(std::move(options)), _counter(options.size(), 0), _period_counter(options.size(), 0) {
-    for (const auto & option : options){
+EventCounter<T, N>::EventCounter(std::vector<EventOptions> options) : _options(std::move(options)), _counter(_options.size(), 0), _period_counter(_options.size(), 0) {
+    for (const auto & option : _options){
         if (option.period < 1){
             throw std::runtime_error("The period argument in event options must be at least 1.");
         }
@@ -97,20 +97,92 @@ size_t ODE<T, N>::nsys() const{
 }
 
 template<typename T, size_t N>
-bool ODE<T, N>::integrate_until(OdeResult<T, N>* out, T time, const std::vector<T>& t_eval, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
-    return this->priv_integrate_until(out, time, t_eval, event_options, std::move(observer), max_progress_reports, false);
+bool ODE<T, N>::integrate_until(
+    OdeResult<T, N>* out,
+    T t_max,
+    const std::vector<EventOptions>& event_options,
+    int max_progress_reports,
+    observer_t<T> observer){
+
+    if (observer == nullptr){
+        return this->priv_integrate_until(out, t_max, nullptr, event_options, nullptr, max_progress_reports, false);
+    } else {
+        return this->priv_integrate_until(out, t_max, nullptr, event_options, std::move(observer), max_progress_reports, false);
+    }
 }
 
 template<typename T, size_t N>
-bool ODE<T, N>::integrate(OdeResult<T, N>* out, T interval, const std::vector<T>& t_eval, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
+bool ODE<T, N>::integrate_until(
+    OdeResult<T, N>* out,
+    T t_max,
+    const std::vector<EventOptions>& event_options,
+    int max_progress_reports,
+    observer_t<T> observer,
+    const std::vector<T>& t_eval){
+
+    if (observer == nullptr){
+        return this->priv_integrate_until(out, t_max, t_eval, event_options, nullptr, max_progress_reports, false);
+    } else {
+        return this->priv_integrate_until(out, t_max, t_eval, event_options, std::move(observer), max_progress_reports, false);
+    }
+}
+
+template<typename T, size_t N>
+bool ODE<T, N>::integrate(
+    OdeResult<T, N>* out,
+    T interval,
+    const std::vector<EventOptions>& event_options,
+    int max_progress_reports,
+    observer_t<T> observer){
+
     if (interval < 0){
         throw std::runtime_error("Integration interval must be non-negative");
     }
-    return this->integrate_until(out, interval + solver_->get_time()*solver_->get_direction(), t_eval, event_options, max_progress_reports, std::move(observer));
+
+    T t_max = interval + solver_->get_time()*solver_->get_direction();
+
+    return this->integrate_until(
+        out,
+        t_max,
+        event_options,
+        max_progress_reports,
+        std::move(observer)
+    );
 }
 
 template<typename T, size_t N>
-bool ODE<T, N>::rich_integrate_until(OdeSolution<T, N>& out, T time, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
+bool ODE<T, N>::integrate(
+    OdeResult<T, N>* out,
+    T interval,
+    const std::vector<EventOptions>& event_options,
+    int max_progress_reports,
+    observer_t<T> observer,
+    const std::vector<T>& t_eval){
+
+    if (interval < 0){
+        throw std::runtime_error("Integration interval must be non-negative");
+    }
+
+    T t_max = interval + solver_->get_time()*solver_->get_direction();
+
+    return this->integrate_until(
+        out,
+        t_max,
+        event_options,
+        max_progress_reports,
+        std::move(observer),
+        t_eval
+    );
+}
+
+template<typename T, size_t N>
+bool ODE<T, N>::rich_integrate_until(
+    OdeSolution<T, N>& out,
+    T time,
+    const std::vector<EventOptions>& event_options,
+    int max_progress_reports,
+    observer_t<T> observer){
+
     if (observer == nullptr){
         return this->priv_integrate_until(&out, time, nullptr, event_options, nullptr, max_progress_reports, true);
     } else {
@@ -119,16 +191,44 @@ bool ODE<T, N>::rich_integrate_until(OdeSolution<T, N>& out, T time, const std::
 }
 
 template<typename T, size_t N>
-bool ODE<T, N>::rich_integrate(OdeSolution<T, N>& out, T interval, const std::vector<EventOptions>& event_options, int max_progress_reports, observer_t<T> observer){
+bool ODE<T, N>::rich_integrate(
+    OdeSolution<T, N>& out,
+    T interval,
+    const std::vector<EventOptions>& event_options,
+    int max_progress_reports,
+    observer_t<T> observer){
+
     if (interval < 0){
         throw std::runtime_error("Integration interval must be non-negative");
     }
-    return this->rich_integrate_until(out, interval + solver_->get_time()*solver_->get_direction(), event_options, max_progress_reports, std::move(observer));
+    T t_max = interval + solver_->get_time()*solver_->get_direction();
+    return this->rich_integrate_until(
+        out,
+        t_max,
+        event_options,
+        max_progress_reports,
+        std::move(observer)
+    );
 }
 
 template<typename T, size_t N>
 template<typename ArrayType, typename Callable>
 bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, ArrayType&& t_store, const std::vector<EventOptions>& event_options, Callable&& observer, int max_progress_reports, bool interpolate){
+
+    static_assert(isObserver<Callable, T> || std::is_same_v<std::decay_t<Callable>, std::nullptr_t>, "Callable must be an observer or nullptr");
+    static_assert(isArray<ArrayType, T> || std::is_same_v<std::decay_t<ArrayType>, std::nullptr_t>, "ArrayLike must be an array or nullptr");
+
+    /*
+    
+    **For private use** because its interface might be confusing
+    So simple overloaded versions are provided
+
+    ArrayType being an empty array and being nullptr are *completely* different.
+    If t_store is an array, only its elements are stored
+    So if it is empty, no steps are stored
+    However if nullptr, **ALL** steps are stored
+    */
+
     if (solver_->get_is_dead()){
         if (out){
             *out = OdeResult<T, N>({}, {this->nsys()}, solver_->get_diverges(), 0, false, 0, solver_->get_status());
