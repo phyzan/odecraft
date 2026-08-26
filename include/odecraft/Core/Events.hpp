@@ -164,7 +164,7 @@ public:
  * @tparam Derived The derived event class (CRTP pattern).
  * @tparam T       Scalar type for computations.
  */
-template<typename Derived, typename T, OptionalRhsFunc<T> MaskFunc = std::nullptr_t>
+template<typename Derived, typename T, typename MaskFunc>
 class EventBase : public Event<T>{
 
 public:
@@ -287,7 +287,7 @@ private:
  * @tparam T       Scalar type for computations.
  * @tparam Derived Optional derived class for further CRTP extension.
  */
-template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc = std::nullptr_t, typename Derived = void>
+template<typename T, isObjFun<T> Target, typename MaskFunc = std::nullptr_t, typename Derived = void>
 class PreciseEvent : public EventBase<GetDerived<PreciseEvent<T, Target, MaskFunc, Derived>, Derived>, T, MaskFunc>{
 
     using Base = EventBase<GetDerived<PreciseEvent<T, Target, MaskFunc, Derived>, Derived>, T, MaskFunc>;
@@ -301,10 +301,19 @@ public:
      * @param objfun    Objective function: triggers when this crosses zero.
      * @param event_tol Tolerance for bisection root finding.
      * @param dir       Crossing direction: +1 (increasing), -1 (decreasing), 0 (any).
-     * @param mask      Optional mask function to transform state at trigger.
+     */
+    PreciseEvent(std::string name, Target objfun, T event_tol=1e-20, int dir=0);
+
+    /**
+     * @brief Construct a zero-crossing event.
+     * @param name      Unique event name.
+     * @param objfun    Objective function: triggers when this crosses zero.
+     * @param event_tol Tolerance for bisection root finding.
+     * @param dir       Crossing direction: +1 (increasing), -1 (decreasing), 0 (any).
+     * @param mask      Mask function to transform state at trigger.
      * @param delay_mask If true, delay the application of the mask, showing the unfiltered state until the event has been processed.
      */
-    PreciseEvent(std::string name, Target objfun, T event_tol=1e-20, int dir=0, MaskFunc mask=nullptr, bool delay_mask=false);
+    PreciseEvent(std::string name, Target objfun, T event_tol, int dir, MaskFunc mask, bool delay_mask=false);
 
     /// @brief Evaluate the objective function at given time and state.
     T    obj_fun(const T& t, const T* q) const;
@@ -334,7 +343,7 @@ protected:
  * @tparam T       Scalar type for computations.
  * @tparam Derived Optional derived class for further CRTP extension.
  */
-template<typename T, OptionalRhsFunc<T> MaskFunc = std::nullptr_t, typename Derived = void>
+template<typename T, typename MaskFunc = std::nullptr_t, typename Derived = void>
 class PeriodicEvent : public EventBase<GetDerived<PeriodicEvent<T, MaskFunc, Derived>, Derived>, T, MaskFunc>{
 
     using Base = EventBase<GetDerived<PeriodicEvent<T, MaskFunc, Derived>, Derived>, T, MaskFunc>;
@@ -346,10 +355,18 @@ public:
      * @brief Construct a periodic event.
      * @param name      Unique event name.
      * @param period    Time interval between triggers.
-     * @param mask      Optional mask function to transform state at trigger.
+     */ 
+    PeriodicEvent(std::string name, T period);
+
+
+    /**
+     * @brief Construct a periodic event.
+     * @param name      Unique event name.
+     * @param period    Time interval between triggers.
+     * @param mask      Mask function to transform state at trigger.
      * @param delay_mask If true, delay the application of the mask, showing the unfiltered state until the event has been processed.
      */ 
-    PeriodicEvent(std::string name, T period, MaskFunc mask=nullptr, bool delay_mask=false);
+    PeriodicEvent(std::string name, T period, MaskFunc mask, bool delay_mask=false);
 
     /// @brief Get the period (time between triggers).
     const T&    period() const;

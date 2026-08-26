@@ -65,7 +65,11 @@ public:
 
     bool                        integrate_until(OdeResult<T, N>* out, T time, const std::vector<T>& t_eval={}, const std::vector<EventOptions>& event_options={}, int max_progress_reports = 0, observer_t<T> observer = nullptr);
 
+    bool                        integrate(OdeResult<T, N>* out, T interval, const std::vector<T>& t_eval={}, const std::vector<EventOptions>& event_options={}, int max_progress_reports = 0, observer_t<T> observer = nullptr);
+
     bool                        rich_integrate_until(OdeSolution<T, N>& out, T time, const std::vector<EventOptions>& event_options={}, int max_progress_reports = 0, observer_t<T> observer = nullptr);
+
+    bool                        rich_integrate(OdeSolution<T, N>& out, T interval, const std::vector<EventOptions>& event_options={}, int max_progress_reports = 0, observer_t<T> observer = nullptr);
 
     bool                        diverges() const;
 

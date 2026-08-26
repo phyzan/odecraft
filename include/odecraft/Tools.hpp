@@ -45,9 +45,6 @@ requires(F f, T* out, T t, const T* q){
     { f(out, t, q) } -> std::same_as<void>;
 };
 
-template<typename F, typename T>
-concept OptionalRhsFunc = std::same_as<F, std::nullptr_t> || isRhsFunc<F, T>;
-
 // Check if F has a callable Rhs (static or non-static, non-template)
 template<typename F, typename T>
 concept hasRhsFunc =
