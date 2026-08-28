@@ -122,14 +122,14 @@ public:
     DynamicSolverScratch(size_t nsys) : state_(nsys+2), four_state_cache_(4*nsys), ics_cache_(nsys), duals_(2*nsys) {}
 
     ScratchState<T, N>& state() const {return state_;}
-    Array1D<T>& four_state_cache() const {return four_state_cache_;}
-    Array1D<T>& ics_cache() const {return ics_cache_;}
-    Array1D<DualType>& duals() const {return duals_;}
+    Array1D<T, 4*N>& four_state_cache() const {return four_state_cache_;}
+    Array1D<T, N>& ics_cache() const {return ics_cache_;}
+    Array1D<DualType, 2*N>& duals() const {return duals_;}
 private:
     mutable ScratchState<T, N> state_; // for trying the next step
-    mutable Array1D<T> four_state_cache_; // for approx jac and auto step
-    mutable Array1D<T> ics_cache_; // for trying the next step with modified ICs
-    mutable Array1D<DualType> duals_; // for autodiff when JP==JacPolicy::Autodiff
+    mutable Array1D<T, 4*N> four_state_cache_; // for approx jac and auto step
+    mutable Array1D<T, N> ics_cache_; // for trying the next step with modified ICs
+    mutable Array1D<DualType, 2*N> duals_; // for autodiff when JP==JacPolicy::Autodiff
 };
 
 template<typename T, size_t N>

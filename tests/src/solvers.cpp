@@ -35,7 +35,7 @@ void run(const char* label){
 
     // Heap allocated solver (nsys is passed as a runtime parameter)
     auto solver_2 = getSolver<S, SolverPolicy::Static>(
-        OdeData{.Rhs=rhs}, t0, View1D{q0.data(), nsys}, rtol, atol, min_step, max_step, stepsize, 1);
+        OdeData{.Rhs=rhs}, t0, View1D<double>{q0.data(), nsys}, rtol, atol, min_step, max_step, stepsize, 1);
 
     
     

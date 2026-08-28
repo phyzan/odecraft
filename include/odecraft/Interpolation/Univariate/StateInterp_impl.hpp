@@ -633,11 +633,11 @@ void LinkedInterpolator<T, N, INTERPOLATOR>::_throw_invalid_interpolant(const In
 template<typename T>
 void lin_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, size_t size){
     if (t == t1){
-        ndspan::copy_array(result, y1, size);
+        std::copy(y1, y1 + size, result);
         return;
     }
     else if (t == t2){
-        ndspan::copy_array(result, y2, size);
+        std::copy(y2, y2 + size, result);
         return;
     }
     #pragma omp simd
@@ -650,11 +650,11 @@ template<typename T>
 void coef_mat_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* coef_mat, size_t order, size_t size){
     //coef_mat dimensions: size x order
     if (t == t1){
-        ndspan::copy_array(result, y1, size);
+        std::copy(y1, y1 + size, result);
         return;
     }
     else if (t == t2){
-        ndspan::copy_array(result, y2, size);
+        std::copy(y2, y2 + size, result);
         return;
     }
 

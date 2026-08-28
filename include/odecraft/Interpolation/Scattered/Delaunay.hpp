@@ -2,7 +2,7 @@
 #define ODECRAFT_DELAUNAY_HPP
 
 #include <memory>
-#include <ndspan/arrays.hpp>
+#include <ndspan/ndspan.hpp>
 
 namespace ode::interp::sci {
 

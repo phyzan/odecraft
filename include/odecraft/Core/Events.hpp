@@ -26,8 +26,6 @@ namespace ode {
 
 using pbox::owner;
 
-using ndspan::copy_array;
-
 template<typename T>
 class Event;
 
@@ -226,9 +224,14 @@ protected:
     /**
      * @brief Construct an event with optional mask.
      * @param name      Unique event name.
+     */
+    EventBase(std::string name);
+
+    /**
+     * @brief Construct an event with optional mask.
+     * @param name      Unique event name.
      * @param mask      Optional mask function to transform state at trigger.
      * @param delay_mask If true, delay the application of the mask, showing the unfiltered state until the event has been processed.
-     * @param obj       Optional user object pointer for callbacks.
      */
     EventBase(std::string name, MaskFunc mask, bool delay_mask);
 
@@ -302,7 +305,12 @@ public:
      * @param event_tol Tolerance for bisection root finding.
      * @param dir       Crossing direction: +1 (increasing), -1 (decreasing), 0 (any).
      */
-    PreciseEvent(std::string name, Target objfun, T event_tol=1e-20, int dir=0);
+    PreciseEvent(
+        std::string name,
+        Target objfun,
+        T event_tol=1e-20,
+        int dir=0
+    );
 
     /**
      * @brief Construct a zero-crossing event.
@@ -313,7 +321,14 @@ public:
      * @param mask      Mask function to transform state at trigger.
      * @param delay_mask If true, delay the application of the mask, showing the unfiltered state until the event has been processed.
      */
-    PreciseEvent(std::string name, Target objfun, T event_tol, int dir, MaskFunc mask, bool delay_mask=false);
+    PreciseEvent(
+        std::string name,
+        Target objfun,
+        T event_tol,
+        int dir,
+        MaskFunc mask,
+        bool delay_mask=false
+    );
 
     /// @brief Evaluate the objective function at given time and state.
     T    obj_fun(const T& t, const T* q) const;
@@ -366,7 +381,12 @@ public:
      * @param mask      Mask function to transform state at trigger.
      * @param delay_mask If true, delay the application of the mask, showing the unfiltered state until the event has been processed.
      */ 
-    PeriodicEvent(std::string name, T period, MaskFunc mask, bool delay_mask=false);
+    PeriodicEvent(
+        std::string name,
+        T period,
+        MaskFunc mask,
+        bool delay_mask=false
+    );
 
     /// @brief Get the period (time between triggers).
     const T&    period() const;

@@ -272,11 +272,11 @@ void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, con
     // Implements the Horner-like scheme from scipy with alternating θ and (1-θ)
     // y(θ) = y_old + sum of terms with alternating θ and (1-θ) multiplications
     if (t == t1){
-        ndspan::copy_array(result, y1, size);
+        std::copy(y1, y1 + size, result);
         return;
     }
     else if (t == t2){
-        ndspan::copy_array(result, y2, size);
+        std::copy(y2, y2 + size, result);
         return;
     }
 
@@ -533,7 +533,9 @@ T DOP853<T, N, SP, OdeType, Derived>::step_impl(T* result, const T* state, const
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     mat_is_set_ = false;
-    copy_array(K_.data(), K_.data() + N_STAGES*this->nsys(), this->nsys());
+    T* dest = K_.data();
+    const T* src = K_.data() + N_STAGES*this->nsys();
+    std::copy(src, src + this->nsys(), dest);
     return detail::rk_adapt_step(res, state, this->nsys(),
                           this->min_step(), this->max_step(), this->MIN_STEP,
                           this->SAFETY, this->MAX_FACTOR, this->MIN_FACTOR,
@@ -581,7 +583,7 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 constexpr typename DOP853<T, N, SP, OdeType, Derived>::Ctype DOP853<T, N, SP, OdeType, Derived>::Cmatrix(){
     Ctype result(N_STAGES);
     auto C = DOP_COEFS<T>::make_C();
-    ndspan::copy_array(result.data(), C.data(), N_STAGES);
+    std::copy(C.data(), C.data() + N_STAGES, result.data());
     return result;
 }
 
@@ -589,7 +591,9 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 constexpr typename DOP853<T, N, SP, OdeType, Derived>::AExtraType DOP853<T, N, SP, OdeType, Derived>::Amatrix_extra(){
     AExtraType result(N_STAGES_EXTRA, N_STAGES_EXT);
     auto A = DOP_COEFS<T>::make_A();
-    ndspan::copy_array(result.data(), A.data() + (N_STAGES+1)*N_STAGES_EXT, N_STAGES_EXTRA*N_STAGES_EXT);
+    T* dest = result.data();
+    const T* src = A.data() + (N_STAGES+1)*N_STAGES_EXT;
+    std::copy(src, src + N_STAGES_EXTRA*N_STAGES_EXT, dest);
     return result;
 }
 
@@ -597,7 +601,7 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 constexpr typename DOP853<T, N, SP, OdeType, Derived>::CExtraType DOP853<T, N, SP, OdeType, Derived>::Cmatrix_extra(){
     CExtraType result(N_STAGES_EXTRA);
     auto C = DOP_COEFS<T>::make_C();
-    ndspan::copy_array(result.data(), C.data() + N_STAGES+1, N_STAGES_EXTRA);
+    std::copy(C.data() + N_STAGES+1, C.data() + N_STAGES+1 + N_STAGES_EXTRA, result.data());
     return result;
 }
 

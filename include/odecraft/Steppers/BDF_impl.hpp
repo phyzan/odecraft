@@ -17,7 +17,7 @@ void LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
     JacMat<T, N>& A = LU;
 
     // Copy input to output
-    ndspan::copy_array(A.data(), A_input.data(), A_input.size());
+    std::copy(A_input.data(), A_input.data() + A_input.size(), A.data());
 
     // Initialize pivot array as identity
     for (size_t i = 0; i < n; ++i) {
@@ -172,10 +172,10 @@ BDF<T, N, SP, OdeType, Derived>::BDF(private_tag, OdeType ode, T t0, View1D<T, N
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void BDF<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector) {
     Base::ReAdjust(new_vector);
-    ndspan::copy_array(_D[2].data(), _D[_idx_D].data(), this->nsys());
+    std::copy(_D[_idx_D].data(), _D[_idx_D].data() + this->nsys(), _D[2].data());
     _D[0].fill(0);
     _D[1].fill(0);
-    ndspan::copy_array(_D[0].data(), new_vector, this->nsys());
+    std::copy(new_vector, new_vector + this->nsys(), _D[0].data());
     this->rhs(_D[0].data()+this->nsys(), this->t(), new_vector);
     for (size_t i=0; i<this->nsys(); i++){
         _D[0][i+this->nsys()] *= this->stepsize() * this->direction();
@@ -251,7 +251,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     T& habs = res[1];
     T* y_new = res+2;
 
-    ndspan::copy_array(y_new, state+2, nsys);
+    std::copy(state+2, state+2 + nsys, y_new);
 
     T safety, max_factor, factor, c;
     int delta_order;
@@ -430,7 +430,7 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 NewtConv BDF<T, N, SP, OdeType, Derived>::_solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale){
     d.fill(0);
     size_t n = this->nsys();
-    ndspan::copy_array(y, y_pred, n);
+    std::copy(y_pred, y_pred + n, y);
     T dy_norm = 0;
     T dy_norm_old = 0;
     T rate = 0;

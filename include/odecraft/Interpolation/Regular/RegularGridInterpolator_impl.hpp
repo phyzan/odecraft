@@ -325,10 +325,11 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
         Array2D<double, NDIM, 0> true_line(this->ndim(), n_steps_tot);
         if (s_total > min_length && n_steps_tot > 1){
             if constexpr (NDIM > 0){
-                ((ndspan::copy_array(true_line.ptr(I, 0), x_line[I], n_steps_tot)), ...);
+                ((std::copy(x_line[I], x_line[I] + n_steps_tot, true_line.ptr(I, 0))), ...);
+                
             }else{
                 for (int axis=0; axis<this->ndim(); axis++){
-                    ndspan::copy_array(true_line.ptr(axis, 0), x_line[axis], n_steps_tot);
+                    std::copy(x_line[axis], x_line[axis] + n_steps_tot, true_line.ptr(axis, 0));
                 }
             }
 

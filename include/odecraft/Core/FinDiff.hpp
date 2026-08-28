@@ -7,13 +7,14 @@
 namespace ode{
 
 /**
- * @brief Approximates the Jacobian matrix using finite differences.
+ * @brief Approximates the Jacobian matrix using central finite differences.
+ *  Performs (2 x n) function evaluations in the process, where n is the size of the state vector.
  * 
  * @tparam T The type of the elements.
  * @tparam Callable The type of the callable object representing the function.
  * @param f The callable object representing the function.
- * @param out The output (F-storage) array for the Jacobian matrix, of size n x n
- * @param worker A temporary array for intermediate computations, of size 4xn
+ * @param out The output (F-storage) array for the Jacobian matrix, of size (n x n)
+ * @param worker A temporary array for intermediate computations, of size (3 x n)
  * @param t The current time.
  * @param q The current state vector (size n).
  * @param dt The time step or perturbation vector (size n) or nullptr.
@@ -23,16 +24,15 @@ namespace ode{
  * component of the scale vector. A component-wise tolerance has not been implemented yet in this library for simplicity.
  */
 template<typename T, typename Callable>
-constexpr void jac_approx(Callable&& f, T* out, T* worker, const T& t, const T* q, const T* dt, const T& threshold, size_t n){
+constexpr void jac_approx(Callable&& func, T* out, T* worker, const T& t, const T* q, const T* dt, const T& threshold, size_t n){
+
     const T EPS_SQRT = sqrt(std::numeric_limits<T>::epsilon());
 
-    T* x1 = worker;
-    T* x2 = worker + n;
-    T* y1 = worker + 2*n;
-    T* y2 = worker + 3*n;
+    T* x = worker;
+    T* y1 = worker + n;
+    T* y2 = worker + 2*n;
 
-    ndspan::copy_array(x1, q, n);
-    ndspan::copy_array(x2, q, n);
+    std::copy(q, q + n, x);
 
     for (size_t i = 0; i < n; i++) {
         // Compute step size: use provided dt or compute
@@ -44,12 +44,13 @@ constexpr void jac_approx(Callable&& f, T* out, T* worker, const T& t, const T* 
             h_i = EPS_SQRT * max_ref(threshold, abs_qi);
         }
 
-        x1[i] = q[i] - h_i;
-        x2[i] = q[i] + h_i;
-        f(y1, t, x1);
-        f(y2, t, x2);
-        x1[i] = q[i];
-        x2[i] = q[i];
+        x[i] = q[i] - h_i;
+        func(y1, t, x);
+
+        x[i] = q[i] + h_i;
+        func(y2, t, x);
+
+        x[i] = q[i]; // restore it for the next iteration
 
         // Compute Jacobian column using central differences
         T* col = out + i * n;

@@ -49,6 +49,14 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* out, const T& t, const T* q)
                 }
             }
         });
+    } else if constexpr (JP == JacPolicy::Nullable){
+        // The Jacobian was declared but may be null at runtime, in which case we fall
+        // back to a numerical approximation (see the note in getJacPolicy).
+        if (ode_.Jac != nullptr){
+            ode_.Jac(out, t, q);
+        } else {
+            return this->Jac(out, t, q, nullptr);
+        }
     } else {
         ode_.Jac(out, t, q);
     }
@@ -65,10 +73,11 @@ template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> 
 void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* out, const T& t, const T* q, const T* dt) const{
     const size_t n = this->nsys();
 
+    // Only 3 of the 4*n scratch states are needed for jac_approx
     decltype(auto) scratch = this->scratch_.four_state_cache();
 
-    ode::jac_approx<T>([this](T* dummy_out, const T& dummy_t, const T* dummy_q){
-        this->Rhs(dummy_out, dummy_t, dummy_q);
+    ode::jac_approx<T>([this](T* out_, const T& t_, const T* q_){
+        this->Rhs(out_, t_, q_);
     }, out, scratch.data(), t, q, dt, this->atol(), n);
 }
 
@@ -173,9 +182,15 @@ template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> 
 void BaseSolver<Derived, T, N, SP, OdeType>::interp(T* out, const T& t) const{
     assert((t*this->direction() >= this->t_old()*this->direction() && t*this->direction() <= this->interp_new_state_ptr()[0]*this->direction()) && "Out of bounds interpolation requested");
     if (this->t_old() == this->t_new()){
-        ndspan::copy_array(out, this->new_state_ptr(), this->nsys());
+        const T* vector_new = this->new_state_ptr() + 2;
+        std::copy(
+            vector_new,
+            vector_new + this->nsys(),
+            out
+        );
+    } else {
+        return interp_impl(out, t);
     }
-    return interp_impl(out, t);
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -320,7 +335,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::set_ics(T t0, const T* y0, T stepsi
         T* ics = this->ics_state_.data();
         ics[0] = t0;
         ics[1] = stepsize;
-        ndspan::copy_array(ics+2, y0, this->nsys());
+        std::copy(y0, y0 + this->nsys(), ics+2);
         this->ics_is_valid_ = true;
         THIS->Reset();
         return true;
@@ -513,11 +528,12 @@ void BaseSolver<Derived, T, N, SP, OdeType>::warn_dead() const{
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::ReAdjust(const T* new_vector){
-    ndspan::copy_array(this->interp_state_.data(), this->new_state_ptr(), this->nsys()+2); //store the re-adjusted new state for interpolation
+    std::copy(this->new_state_ptr(), this->new_state_ptr() + this->nsys()+2, this->interp_state_.data()); //store the re-adjusted new state for interpolation
+    
     T* state = true_state_.data();
     state[0] = this->t();
     state[1] = this->stepsize();
-    ndspan::copy_array(state+2, new_vector, this->nsys());
+    std::copy(new_vector, new_vector + this->nsys(), state+2);
     if (! is_at_new_state_){
         new_state_ = true_state_;
     }
@@ -602,7 +618,7 @@ BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, 
             T habs = (stepsize == 0 ? this->auto_step(t0, q0.data()) : abs<T>(stepsize));
             ics_state_[0] = t0;
             ics_state_[1] = habs;
-            ndspan::copy_array(ics_state_.data()+2, q0.data(), this->nsys());
+            std::copy(q0.data(), q0.data() + this->nsys(), ics_state_.data()+2);
             old_state_ = ics_state_;
             new_state_ = ics_state_;
             true_state_ = ics_state_;
@@ -649,7 +665,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::validate_it(StepResult result, cons
         //alter their interpolation polynomials when calling adapt_impl,
         //but since the step failed, the current interpolation interval is no longer valid.
         use_new_state_ = false;;
-        ndspan::copy_array(interp_state_.data(), this->old_state_ptr(), this->nsys()+2);
+        std::copy(this->old_state_ptr(), this->old_state_ptr() + this->nsys()+2, interp_state_.data());
     }
 
     return success;
