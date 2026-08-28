@@ -9,7 +9,21 @@ namespace ode{
 // EventBase implementations
 
 template<typename Derived, typename T, typename MaskFunc>
-EventBase<Derived, T, MaskFunc>::EventBase(std::string name, MaskFunc mask, bool delay_mask) : name_(std::move(name)), mask_(std::move(mask)), delay_mask_(delay_mask) {
+EventBase<Derived, T, MaskFunc>::EventBase(std::string name) : name_(std::move(name)) {
+    static_assert(std::is_same_v<MaskFunc, std::nullptr_t>, "MaskFunc must be std::nullptr_t for this constructor");
+    if (name_.empty()){
+        throw std::runtime_error("Please provide a non-empty name when instanciating an Event class");
+    }
+}
+
+template<typename Derived, typename T, typename MaskFunc>
+EventBase<Derived, T, MaskFunc>::EventBase(std::string name, MaskFunc mask, bool delay_mask)
+    : name_(std::move(name)),
+    mask_(std::move(mask)),
+    delay_mask_(delay_mask) {
+
+    static_assert(isRhsFunc<MaskFunc, T>, "MaskFunc must be a valid right-hand side function for this constructor");
+
     if (name_.empty()){
         throw std::runtime_error("Please provide a non-empty name when instanciating an Event class");
     }
@@ -148,12 +162,10 @@ void EventBase<Derived, T, MaskFunc>::reset_impl(int direction){
 // PreciseEvent implementations
 
 template<typename T, isObjFun<T> Target, typename MaskFunc, typename Derived>
-PreciseEvent<T, Target, MaskFunc, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir) : Base(std::move(name), nullptr, false), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {}
+PreciseEvent<T, Target, MaskFunc, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir) : Base(std::move(name)), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {}
 
 template<typename T, isObjFun<T> Target, typename MaskFunc, typename Derived>
-PreciseEvent<T, Target, MaskFunc, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir, MaskFunc mask, bool delay_mask) : Base(std::move(name), std::move(mask), delay_mask), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {
-    static_assert(isRhsFunc<MaskFunc, T> && "MaskFunc must be a callable of type void(T* out, const T& t, const T* q)");
-}
+PreciseEvent<T, Target, MaskFunc, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir, MaskFunc mask, bool delay_mask) : Base(std::move(name), std::move(mask), delay_mask), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {}
 
 template<typename T, isObjFun<T> Target, typename MaskFunc, typename Derived>
 T PreciseEvent<T, Target, MaskFunc, Derived>::obj_fun(const T& t, const T* q) const{
@@ -190,7 +202,7 @@ bool PreciseEvent<T, Target, MaskFunc, Derived>::locate_impl(T& t, State<T> befo
 // PeriodicEvent implementations
 
 template<typename T, typename MaskFunc, typename Derived>
-PeriodicEvent<T, MaskFunc, Derived>::PeriodicEvent(std::string name, T period) : Base(name, nullptr, false), period_(period) {}
+PeriodicEvent<T, MaskFunc, Derived>::PeriodicEvent(std::string name, T period) : Base(name), period_(period) {}
 
 template<typename T, typename MaskFunc, typename Derived>
 PeriodicEvent<T, MaskFunc, Derived>::PeriodicEvent(std::string name, T period, MaskFunc mask, bool delay_mask) : Base(name, std::move(mask), delay_mask), period_(period) {}

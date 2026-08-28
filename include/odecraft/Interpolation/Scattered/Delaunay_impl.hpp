@@ -280,7 +280,7 @@ double DelaunayTri<NDIM>::volume(int simplex_idx) const {
                 + d[2]*(d[3]*d[7] - d[4]*d[6]);
         } else {
             double* worker = mat_cache().data();
-            ndspan::copy_array(worker, d, nd*nd);
+            std::copy(d, d + nd*nd, worker);
             det = detLU_row_major(worker, nd);
         }
     }
@@ -465,19 +465,19 @@ Array2D<double, NDIM, NDIM>& DelaunayTri<NDIM>::mat_cache() const {
 template<size_t NDIM>
 void DelaunayTri<NDIM>::set_state(const View2D<double, 0, NDIM>& points, const View2D<int, 0, DIM_SPX>& simplices, const View2D<int, 0, DIM_SPX>& neighbors, const View2D<double, 0, NDIM>& v0, const View3D<double, 0, NDIM, NDIM>& invT){
     points_.resize(points.shape(), points.ndim());
-    ndspan::copy_array(points_.data(), points.data(), points.size());
+    std::copy(points.data(), points.data() + points.size(), points_.data());
 
     simplices_.resize(simplices.shape(), simplices.ndim());
-    ndspan::copy_array(simplices_.data(), simplices.data(), simplices.size());
+    std::copy(simplices.data(), simplices.data() + simplices.size(), simplices_.data());
 
     neighbors_.resize(neighbors.shape(), neighbors.ndim());
-    ndspan::copy_array(neighbors_.data(), neighbors.data(), neighbors.size());
+    std::copy(neighbors.data(), neighbors.data() + neighbors.size(), neighbors_.data());
 
     v0_.resize(v0.shape(), v0.ndim());
-    ndspan::copy_array(v0_.data(), v0.data(), v0.size());
+    std::copy(v0.data(), v0.data() + v0.size(), v0_.data());
     
     invT_.resize(invT.shape(), invT.ndim());
-    ndspan::copy_array(invT_.data(), invT.data(), invT.size());
+    std::copy(invT.data(), invT.data() + invT.size(), invT_.data());
 }
 
 

@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_GRIDS_HPP
 #define ODECRAFT_GRIDS_HPP
 
-#include <ndspan/arrays.hpp>
+#include <ndspan/ndspan.hpp>
 
 namespace ode::interp::rgi{
 

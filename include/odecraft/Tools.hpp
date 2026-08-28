@@ -11,7 +11,7 @@
 #include <xdiff/xdiff.hpp>
 #include <polybox/polybox.hpp>
 #include <xdiff/tools.hpp>
-#include <ndspan/arrays.hpp>
+#include <ndspan/ndspan.hpp>
 
 
 #define ODE_LAMBDA(out, t, q) [=](auto* out, const auto& t, const auto* q) -> void 
@@ -20,7 +20,7 @@ namespace ode {
 
 using std::pow, std::sin, std::cos, std::exp, std::real, std::imag, ndspan::min, ndspan::max, std::complex;
 
-using ndspan::Array, ndspan::Array1D, ndspan::Array2D, ndspan::View, ndspan::MutView, ndspan::View1D, ndspan::View2D, ndspan::View3D, ndspan::Allocation, ndspan::Layout, ndspan::prod, ndspan::copy_array, ndspan::copy_array;
+using ndspan::Array, ndspan::Array1D, ndspan::Array2D, ndspan::View, ndspan::MutView, ndspan::View1D, ndspan::View2D, ndspan::View3D, ndspan::Allocation, ndspan::Layout, ndspan::prod;
 
 using xdiff::Vector, xdiff::make_vector;
 
@@ -29,8 +29,20 @@ using GetDerived = std::conditional_t<(std::is_same_v<derived, void>), cls, deri
 
 // USEFUL ALIASES
 
+// The layout is the only part of DualType that varies with N, and it does not depend
+// on Order. Keeping it in its own constant lets DualType stay a direct alias to a class
+// template specialisation, which leaves `Order` in a *deducible* position.
+//
+// Spelling DualType as std::conditional_t<...> instead would expand it to
+// `typename std::conditional<...>::type`, a dependent qualified name and therefore a
+// non-deduced context: no function template taking a DualType<T, N, Order>* parameter
+// could then deduce Order from its argument, and every such overload would silently
+// drop out of overload resolution (and out of the supportsDualRhs/Jac concepts).
+template<size_t N>
+inline constexpr xdiff::Layout dual_layout = (N > 0) ? xdiff::Layout::Flat : xdiff::Layout::Nested;
+
 template<typename T, size_t N, size_t Order>
-using DualType = std::conditional_t<(N > 0), xdiff::Dual<T, N, Order, xdiff::Layout::Flat>, xdiff::Dual<T, 0, Order, xdiff::Layout::Nested>>;
+using DualType = xdiff::Dual<T, N, Order, dual_layout<N>>;
 
 
 template<typename T, size_t N>
@@ -38,6 +50,36 @@ using JacMat = Array2D<T, N, N, Allocation::Auto, Layout::F>;
 
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+
+namespace detail {
+
+template<typename F, typename T, size_t N, size_t Order>
+concept supportsDualRhsAt =
+    requires(F f, DualType<T, N, Order>* out, T t, const DualType<T, N, Order>* q) {
+        { f.Rhs(out, t, q) } -> std::same_as<void>;
+    };
+
+template<typename F, typename T, size_t N, size_t Order>
+concept supportsDualJacAt =
+    requires(F f, DualType<T, N, Order>* out, T t, const DualType<T, N, Order>* q) {
+        { f.Jac(out, t, q) } -> std::same_as<void>;
+    };
+
+template<typename F, typename T, size_t N, typename Seq>
+inline constexpr bool supportsDualRhsAll = false;
+
+template<typename F, typename T, size_t N, typename Seq>
+inline constexpr bool supportsDualJacAll = false;
+
+template<typename F, typename T, size_t N, size_t... Is>
+inline constexpr bool supportsDualRhsAll<F, T, N, std::index_sequence<Is...>> =
+    (supportsDualRhsAt<F, T, N, Is + 1> && ...);
+
+template<typename F, typename T, size_t N, size_t... Is>
+inline constexpr bool supportsDualJacAll<F, T, N, std::index_sequence<Is...>> =
+    (supportsDualJacAt<F, T, N, Is + 1> && ...);
+
+} // namespace detail
 
 template<typename F, typename T>
 concept isRhsFunc = 
@@ -57,6 +99,13 @@ template<typename F, typename T>
 concept hasJacFunc =
     requires(F f, T* out, T t, const T* q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
+    };
+
+template<typename F>
+concept hasNullableJac =
+    requires(F f) {
+        f.Jac = nullptr;
+        { f.Jac == nullptr } -> std::convertible_to<bool>;
     };
 
 template<typename F, typename T>
@@ -85,19 +134,19 @@ requires(const F& f, size_t i){
 };
 
 
-// Check if F has a callable templated Rhs (static or non-static)
-template<typename F, typename T, size_t N>
+// Satisfied when f.Rhs(out, t, q) allows for `out` and `q`
+// to be Duals of order 1 <= order <= MaxOrder
+template<typename F, typename T, size_t N, size_t MaxOrder>
 concept supportsDualRhs =
-    requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
-        { f.Rhs(out, t, q) } -> std::same_as<void>;
-    };
+    MaxOrder > 0 &&
+    detail::supportsDualRhsAll<F, T, N, std::make_index_sequence<MaxOrder>>;
 
-// Check if F has a callable templated Jac (static or non-static)
-template<typename F, typename T, size_t N>
+// Satisfied when f.Jac(out, t, q) allows for `out` and `q`
+// to be Duals of order 1 <= order <= MaxOrder
+template<typename F, typename T, size_t N, size_t MaxOrder>
 concept supportsDualJac =
-    requires(F f, DualType<T, N, 1>* out, T t, const DualType<T, N, 1>* q) {
-        { f.Jac(out, t, q) } -> std::same_as<void>;
-    };
+    MaxOrder > 0 &&
+    detail::supportsDualJacAll<F, T, N, std::make_index_sequence<MaxOrder>>;
 
 
 template<typename F, typename T>
@@ -105,6 +154,13 @@ concept isStateInterp = requires(F f, T* out, T t){
     { f(out, t) } -> std::same_as<void>;
 };
 
+// f(T t, const T* q) -> T
+template<typename T>
+using objfun_t = std::function<T(const T&, const T*)>;
+
+// f(T* out, const T& t, const T* q) -> void
+template<typename T>
+using rhs_t = std::function<void(T*, const T&, const T*)>;
 
 // f(time, state_vector, optional_address)
 template<typename T>
@@ -438,18 +494,34 @@ OdeData(RHS, JAC) -> OdeData<RHS, JAC>;
 
 
 enum class JacPolicy : std::uint8_t{
-    Approx,
-    Exact,
     Autodiff,
+    Exact,
+    Nullable,
+    Approx
 };
 
 
 template<typename T, size_t N, hasRhsFunc<T> F>
 constexpr JacPolicy getJacPolicy(){
-    if constexpr (supportsDualRhs<F, T, N> && !hasJacFunc<F, T>){
+    if constexpr (hasJacFunc<F, T>){
+        // An explicitly provided Jacobian should
+        // always be utilized, even when the Rhs supports Duals
+        // If the explicitly provided Jacobian is nullable,
+        // and at runtime it is indeed null, then Jac computation
+        // falls backs to numerical approximation for now.
+        // So, either provide a non-Nullable Jac, otherwise
+        // an Rhs that supports Duals (or both)
+        // But it's better *NOT* to provide a nullable Jac
+        // that is indeed null alongside an Rhs that supports Duals,
+        // because the autodiff capability will not be utilized
+        // and that might raise confusion as to the loss of accuracy
+        if constexpr (hasNullableJac<F>){
+            return JacPolicy::Nullable;
+        } else {
+            return JacPolicy::Exact;
+        }
+    } else if (supportsDualRhs<F, T, N, 1>) {
         return JacPolicy::Autodiff;
-    } else if (hasJacFunc<F, T>){
-        return JacPolicy::Exact;
     } else {
         return JacPolicy::Approx;
     }
@@ -535,12 +607,10 @@ bool resize_step(T& factor, T& habs, const T& min_step, const T& max_step){
     if (habs*factor < min_step){
         factor = min_step/habs;
         habs = min_step;
-    }
-    else if (habs*factor > max_step){
+    } else if (habs*factor > max_step){
         factor = max_step/habs;
         habs = max_step;
-    }
-    else{
+    } else{
         habs *= factor;
         res = true;
     }

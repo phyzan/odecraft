@@ -1,7 +1,6 @@
 #ifndef ODECRAFT_VIRTUAL_BASE_HPP
 #define ODECRAFT_VIRTUAL_BASE_HPP
 
-#include <functional>
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
 #include <odecraft/Core/Events.hpp>
 #include <polybox/polybox.hpp>
