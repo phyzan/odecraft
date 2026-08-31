@@ -5,7 +5,7 @@ using namespace ode;
 
 // Harmonic oscillator: q0' = q1, q1' = -q0
 // Solution from (1, 0): q0 = cos(t), q1 = -sin(t)
-static void rhs(T* out, const T& /*t*/, const T* q){
+static void rhs(T* out, T /*t*/, const T* q){
     out[0] = q[1];
     out[1] = -q[0];
 }

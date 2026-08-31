@@ -6,7 +6,7 @@ using namespace ode;
 Testing a simple non-virtual solver, using all available methods
 */
 
-static void rhs(double* out, const double& /*t*/, const double* q){
+static void rhs(double* out, double /*t*/, const double* q){
     const double mu = 300.;
     const double& x = q[0];
     const double& xdot = q[1];
