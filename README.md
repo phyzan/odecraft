@@ -59,6 +59,7 @@ CMake options that toggle preprocessor macros across the library, its bundled de
 | `ODECRAFT_RK4_DENSE` | `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, but for large ODE systems this can be expensive. |
 | `ODECRAFT_NO_WARN` | `ODECRAFT_NO_WARN` | Disable ODE solver console warnings. |
 | `ODECRAFT_NO_NAN_CHECK` | `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
+| `ODECRAFT_USE_FLAT_AUTODIFF` | `ODECRAFT_USE_FLAT_AUTODIFF` | Store automatic-differentiation duals in `xdiff`'s flat layout (a single contiguous array) for systems whose size `N` is known at compile time. Dynamically sized systems (`N == 0`) stay on the nested layout either way, since the flat one needs its variable count at compile time. Off by default, so every system uses the nested layout. |
 | `DEBUG` | — | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
 | `ODECRAFT_BUILD_TESTS` | — | Build the `odecraft_tests` executable from `tests/src/*.cpp`. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
 
@@ -155,11 +156,33 @@ which satisfies the `hasJacFunc<T>` concept, and is filled in column-major order
 jac_mat[i + j*system_size] = df_i/dx_j
 ```
 
-**Automatic differentiation**: if no analytic `Jac` is given but `Rhs` is written generically enough (templated), ideally as
+## Automatic differentiation
+
+If no analytic `Jac` is given but `Rhs` is written generically enough (templated), ideally as
 ```cpp
-void Rhs(auto* out, const auto& t, const auto* q);
+void Rhs(auto* out, const auto& t, auto q);
 ```
-to also run over `xdiff::Dual` numbers (checked via `supportsDualRhs`), the library seeds the state with dual numbers and differentiates `Rhs` itself to obtain an exact Jacobian at no extra coding cost — no finite-difference approximation needed. Jacobian source is chosen automatically: exact analytic `Jac` > autodiff via `xdiff` > finite-difference approximation.
+to also run over `xdiff::Dual` numbers (checked via `supportsDualRhs`), the library seeds the state with dual numbers and differentiates `Rhs` itself to obtain an exact Jacobian at no extra coding cost — no finite-difference approximation needed.
+
+Jacobian source is chosen automatically in the following order of preference: exact analytic `Jac` > autodiff via `xdiff` > finite-difference approximation.
+
+This means that if both an `Rhs` that supports `Dual`s and an analytic `Jac` are provided, the solver will prefer the analytic `Jac` over automatic differentiation. However it is important to ensure that the analytic `Jac` is correctly implemented and in column-major order, as an incorrect Jacobian can lead to inaccurate results or solver instability. Define the Rhs generically with `auto` parameters as shown earlier before providing an analytic `Jac`, and if the latter is correctly implemented and faster, provide it to the solver.
+
+For clarity, the appropriate generic overload for `Rhs` that supports automatic differentiation is:
+```cpp
+template<typename T, size_t N, size_t Order>
+void Rhs(DualType<T, N, Order>* out, const T& t, SeedVec<T, N, Order> q);
+```
+where
+- `out` — output array of dual numbers, receives dq/dt
+- `t` — independent variable (time)
+- `q` — a seed vector of dual numbers representing the current state.
+  This is a special class that wraps over a `const T* rhs`, and `q[i]` returns an
+  `xdiff::Seed<T, N, Order>` object, that contains the value and its derivative is `1` for the `i`-th variable and `0` for all other components.
+
+However this signature does not need to be used, the generic `Rhs` with `auto` parameters as shown earlier is sufficient for automatic differentiation, and also works as the standard right-hand side function for the solvers.
+
+See the `Autodiff` [example](tutorials/Autodiff.cpp) for a practical demonstration of automatic differentiation in action, and how well it compares with using an exact Jacobian or finite-difference approximation, performance-wise.
 
 ---
 

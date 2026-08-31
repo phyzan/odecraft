@@ -1,23 +1,28 @@
+#include "lazy/src/core.hpp"
 #include <odecraft/odecraft.hpp>
 #include <lazy/apps/mpfrLazy.hpp>
 
 using namespace ode;
-template<typename T>
-void f(T* out, const T& /*t*/, const T* y){
-    out[0] = y[1];
-    out[1] = -y[0];
-}
 
 void test_lazy_scalar(){
     using A = mpfr::mpreal;
-    using T = A; //set T = A for performance comparison.
+    using T = lazy::LazyType<A>; //set T = A for performance comparison.
 
     // mpfr::mpreal::set_default_prec(256);
     lazy::set_default_mpreal_prec(256);
     auto y0 = std::vector<T>{1, -3};
 
     auto solver = getSolver<Stepper::BDF, SolverPolicy::Static>(
-        OdeData{.Rhs=f<T>}, T{0.}, View1D<T, 2>{y0.data()}, T{1e-40}, T{1e-40}
+        OdeData{
+            .Rhs=ODE_LAMBDA(out, t, y){ 
+                out[0] = y[1];
+                out[1] = -y[0];
+            }
+        },
+        T{0.},
+        View1D<T, 2>{y0.data()},
+        T{1e-40},
+        T{1e-40}
     );
 
     auto t_start = std::chrono::high_resolution_clock::now();

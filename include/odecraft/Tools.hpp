@@ -14,7 +14,7 @@
 #include <ndspan/ndspan.hpp>
 
 
-#define ODE_LAMBDA(out, t, q) [=](auto* out, const auto& t, const auto* q) -> void 
+#define ODE_LAMBDA(out, t, q) [=](auto* out, const auto& t, auto q) -> void 
 
 namespace ode {
 
@@ -38,8 +38,13 @@ using GetDerived = std::conditional_t<(std::is_same_v<derived, void>), cls, deri
 // non-deduced context: no function template taking a DualType<T, N, Order>* parameter
 // could then deduce Order from its argument, and every such overload would silently
 // drop out of overload resolution (and out of the supportsDualRhs/Jac concepts).
+#ifdef ODECRAFT_USE_FLAT_AUTODIFF
 template<size_t N>
 inline constexpr xdiff::Layout dual_layout = (N > 0) ? xdiff::Layout::Flat : xdiff::Layout::Nested;
+#else
+template<size_t N>
+inline constexpr xdiff::Layout dual_layout = xdiff::Layout::Nested;
+#endif
 
 template<typename T, size_t N, size_t Order>
 using DualType = xdiff::Dual<T, N, Order, dual_layout<N>>;
