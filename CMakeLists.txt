@@ -117,6 +117,11 @@ if(ODECRAFT_BUILD_TESTS)
     )
     set(ODECRAFT_TEST_LINK_OPTIONS -fopenmp)
 
+    # -finline-limit is a GCC-only spelling; clang and MSVC reject/ignore it.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        list(APPEND ODECRAFT_TEST_COMPILE_OPTIONS -finline-limit=10000)
+    endif()
+
     set(ODECRAFT_DEBUG_BUILD OFF)
     if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(ODECRAFT_DEBUG_BUILD ON)

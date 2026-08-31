@@ -50,7 +50,7 @@ public:
     virtual const std::string&  get_status() const = 0;
     virtual bool                get_validate_ics(T t0, const T* q0) const = 0;
     virtual bool                get_has_valid_ics() const = 0;
-    virtual Stepper          get_method() const = 0;
+    virtual Stepper             get_method() const = 0;
     virtual void                get_interp(T* result, const T& t) const = 0;
     virtual size_t              get_rhs_eval_count() const = 0;
     virtual size_t              get_jac_eval_count() const = 0;
