@@ -6,10 +6,6 @@
 #include <odecraft/Tools.hpp>
 #include <stdexcept>
 
-#define NOW \
-std::chrono::high_resolution_clock::now()
-
-#define DURATION(T1, T2) std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(T2 - T1).count()
 
 namespace ode{
 
