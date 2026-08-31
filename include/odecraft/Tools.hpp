@@ -44,6 +44,9 @@ inline constexpr xdiff::Layout dual_layout = (N > 0) ? xdiff::Layout::Flat : xdi
 template<typename T, size_t N, size_t Order>
 using DualType = xdiff::Dual<T, N, Order, dual_layout<N>>;
 
+template<typename T, size_t N, size_t Order>
+using SeedVec = xdiff::SeedVector<T, N, Order, dual_layout<N>>;
+
 
 template<typename T, size_t N>
 using JacMat = Array2D<T, N, N, Allocation::Auto, Layout::F>;
@@ -55,13 +58,13 @@ namespace detail {
 
 template<typename F, typename T, size_t N, size_t Order>
 concept supportsDualRhsAt =
-    requires(F f, DualType<T, N, Order>* out, T t, const DualType<T, N, Order>* q) {
+    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, Order> q) {
         { f.Rhs(out, t, q) } -> std::same_as<void>;
     };
 
 template<typename F, typename T, size_t N, size_t Order>
 concept supportsDualJacAt =
-    requires(F f, DualType<T, N, Order>* out, T t, const DualType<T, N, Order>* q) {
+    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, Order> q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
     };
 

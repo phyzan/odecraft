@@ -29,8 +29,8 @@ VariationalOdeSys<T, N, OdeType>::ScratchDynamic::ScratchDynamic(size_t nsys_mai
     nsys(nsys_main),
     findiffs_(3*nsys),
     jacmat_(nsys*nsys),
-    duals_(2*nsys),
-    dduals_(2*nsys){
+    duals_(nsys),
+    dduals_(nsys){
     assert((N == 0 || N == nsys) && "Invalid nsys argument in VariationalOdeSys::ScratchDynamic");
 }
 
@@ -41,10 +41,10 @@ template<typename T, size_t N, hasRhsFunc<T> OdeType>
 Array1D<T, N*N>& VariationalOdeSys<T, N, OdeType>::ScratchDynamic::jacmat() const {return jacmat_;}
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
-Array1D<::ode::DualType<T, N, 1>, 2*N>& VariationalOdeSys<T, N, OdeType>::ScratchDynamic::duals() const {return duals_;}
+Array1D<DualType<T, N, 1>, N>& VariationalOdeSys<T, N, OdeType>::ScratchDynamic::duals() const {return duals_;}
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
-Array1D<::ode::DualType<T, N, 2>, 2*N>& VariationalOdeSys<T, N, OdeType>::ScratchDynamic::dduals() const {return dduals_;}
+Array1D<DualType<T, N, 2>, N>& VariationalOdeSys<T, N, OdeType>::ScratchDynamic::dduals() const {return dduals_;}
 
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
@@ -59,10 +59,10 @@ template<typename T, size_t N, hasRhsFunc<T> OdeType>
 Array1D<T, N*N> VariationalOdeSys<T, N, OdeType>::ScratchStatic::jacmat() const {return Array1D<T, N*N>();}
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
-Array1D<::ode::DualType<T, N, 1>, 2*N> VariationalOdeSys<T, N, OdeType>::ScratchStatic::duals() const {return Array1D<::ode::DualType<T, N, 1>, 2*N>();}
+Array1D<DualType<T, N, 1>, N> VariationalOdeSys<T, N, OdeType>::ScratchStatic::duals() const {return Array1D<DualType<T, N, 1>, N>();}
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
-Array1D<::ode::DualType<T, N, 2>, 2*N> VariationalOdeSys<T, N, OdeType>::ScratchStatic::dduals() const {return Array1D<::ode::DualType<T, N, 2>, 2*N>();}
+Array1D<DualType<T, N, 2>, N> VariationalOdeSys<T, N, OdeType>::ScratchStatic::dduals() const {return Array1D<DualType<T, N, 2>, N>();}
 
 
 // ----------------------------------------------------------------------------
@@ -91,7 +91,7 @@ constexpr size_t VariationalOdeSys<T, N, OdeType>::nsys_main() const{
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
 template<size_t Order>
 requires (detail::FullRhsSupportsDuals<T, N, OdeType, Order> && N > 0)
-void VariationalOdeSys<T, N, OdeType>::Rhs(::ode::DualType<T, 2*N, Order>* out, const T& t, const ::ode::DualType<T, 2*N, Order>* q) const{
+void VariationalOdeSys<T, N, OdeType>::Rhs(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const{
     /*
     TODO
     Is the first branch indeed preferable to the second one?
@@ -115,7 +115,7 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(::ode::DualType<T, 2*N, Order>* out, 
     offsets stay at N: `out` and `q` hold 2*N entries in total, the original state in
     [0, N) and the deviation vector in [N, 2*N).
     */
-    using AugDual = ::ode::DualType<T, 2*N, Order>;
+    using AugDual = DualType<T, 2*N, Order>;
     if constexpr (MainRhsSupportsAugDuals<Order> && MainJacSupportsAugDuals<Order>){
         std::array<AugDual, N*N> scratch_jacmat; // size n*n, what ode_.Jac fills
         ode_.Rhs(out, t, q); // Fills the first half
@@ -128,19 +128,12 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(::ode::DualType<T, 2*N, Order>* out, 
             }
         }
     } else {
-        using AugDualHi = ::ode::DualType<T, 2*N, Order+1>;
-        std::array<AugDualHi, 2*N> scratch_duals; // n for the rhs, n for the seeded state
+        using AugDualHi = DualType<T, 2*N, Order+1>;
+        std::array<AugDualHi, N> scratch_duals; // n for the rhs
         auto* rhs = scratch_duals.data();
-        auto* y = rhs + N;
-        for (size_t i=0; i<N; i++){
-            // Assumes q does not contain non trivial diffs
-            y[i] = AugDualHi{q[i].value(), {.axis=int(i)}};
-        }
-        ode_.Rhs(rhs, t, y);
+        ode_.Rhs(rhs, t, q.template with_order<Order+1>());
         std::fill(out+N, out+2*N, T{0});
         for (size_t j=0; j<N; j++){
-            // TODO If xdiff implemented a StateVector, this all becomes more robust. Will have to redefine the supportsDual concepts
-            // However will get rid of loops such us for (...) : y[i] = DualType(q[i], axis = i)
             out[j] = rhs[j].trimmed(); // Must truncate diff information. Besides it was always used for below.
             for (size_t i=0; i<N; i++){
                 // Using q (and not trimming y)
@@ -157,20 +150,15 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
     const size_t n = this->nsys_main();
     const T* delta_q = q + n;
     if constexpr (MainRhsSupportsDuals<1>){
-        DualType::with_default_nvars(n,
+        DualType<T, N, 1>::with_default_nvars(n,
             [&](){
-                decltype(auto) duals = scratch.duals(); // 2*n size
-                DualType* rhs = duals.data();
-                DualType* y = rhs + n;
-                for (size_t i=0; i<n; i++){
-                    y[i] = DualType(q[i], {.axis=int(i)});
-                }
-                ode_.Rhs(rhs, t, y);
+                decltype(auto) out_duals = scratch.duals(); // n size
+                ode_.Rhs(out_duals.data(), t, SeedVec<T, N, 1>{q, n, 1});
                 std::fill(out+n, out+2*n, 0);
                 for (size_t j=0; j<n; j++){
-                    out[j] = rhs[j].value();
+                    out[j] = out_duals[j].value();
                     for (size_t i=0; i<n; i++){
-                        out[i+n] += rhs[i].get_diff_wrt(j) * delta_q[j];
+                        out[i+n] += out_duals[i].get_diff_wrt(j) * delta_q[j];
                     }
                 }
             }
@@ -215,7 +203,7 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
 template<size_t Order>
 requires (detail::FullJacSupportsDuals<T, N, OdeType, Order> && N > 0)
-void VariationalOdeSys<T, N, OdeType>::Jac(::ode::DualType<T, 2*N, Order>* out, const T& t, const ::ode::DualType<T, 2*N, Order>* q) const{
+void VariationalOdeSys<T, N, OdeType>::Jac(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const{
     /*
     As in the templated Rhs above, only the dual width is 2*N. The output is the
     (2*N x 2*N) Jacobian of the augmented system in F-storage, built from the
@@ -224,15 +212,11 @@ void VariationalOdeSys<T, N, OdeType>::Jac(::ode::DualType<T, 2*N, Order>* out, 
         [        J                0 ]
         [ d(J)/dq * delta_q       J ]
     */
-    using AugDual = ::ode::DualType<T, 2*N, Order>;
+    using AugDual = DualType<T, 2*N, Order>;
     if constexpr (MainJacSupportsAugDuals<Order+1>){
-        using AugDualHi = ::ode::DualType<T, 2*N, Order+1>;
+        using AugDualHi = DualType<T, 2*N, Order+1>;
         std::array<AugDualHi, N*N> scratch_jacmat; // size n*n
-        std::array<AugDualHi, N> scratch_duals; // the seeded state, size n
-        for (size_t i=0; i<N; i++){
-            scratch_duals[i] = AugDualHi{q[i].value(), {.axis=int(i)}};
-        }
-        ode_.Jac(scratch_jacmat.data(), t, scratch_duals.data());
+        ode_.Jac(scratch_jacmat.data(), t, q.template with_order<Order+1>());
         MutView<AugDualHi, ndspan::Layout::F, N, N> m_in{scratch_jacmat.data()};
         MutView<AugDual, ndspan::Layout::F, 2*N, 2*N> m_out{out};
         for (size_t i=0; i<N; i++){
@@ -250,15 +234,11 @@ void VariationalOdeSys<T, N, OdeType>::Jac(::ode::DualType<T, 2*N, Order>* out, 
             }
         }
     } else {
-        using DDual = ::ode::DualType<T, 2*N, Order+2>;
-        std::array<DDual, 2*N> scratch_duals; // n for the rhs, n for the seeded state
+        using DDual = DualType<T, 2*N, Order+2>;
+        std::array<DDual, N> scratch_duals; // n for the rhs
 
         DDual* rhs = scratch_duals.data();
-        DDual* y = rhs + N;
-        for (size_t i=0; i<N; i++){
-            y[i] = DDual{q[i].value(), {.axis=int(i)}};
-        }
-        ode_.Rhs(rhs, t, y);
+        ode_.Rhs(rhs, t, q.template with_order<Order+2>());
 
         MutView<AugDual, ndspan::Layout::F, 2*N, 2*N> m{out};
         for (size_t i=0; i<N; i++){
@@ -279,27 +259,21 @@ template<typename T, size_t N, hasRhsFunc<T> OdeType>
 void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const{
     const size_t n = this->nsys_main();
     if constexpr (MainRhsSupportsDuals<2>){
-        using DDual = ::ode::DualType<T, N, 2>;
+        using DDual = DualType<T, N, 2>;
         DDual::with_default_nvars(n,
             [&](){
-                decltype(auto) dduals = scratch.dduals(); // 2*n size
-                DDual* rhs = dduals.data();
-                DDual* y = dduals.data() + n;
+                decltype(auto) out_dduals = scratch.dduals(); // n size
 
-                for (size_t i=0; i<n; i++){
-                    y[i] = DDual(q[i], {.axis=int(i)});
-                }
-
-                ode_.Rhs(rhs, t, y);
+                ode_.Rhs(out_dduals.data(), t, SeedVec<T, N, 2>{q, n, 2});
 
                 MutView<T, ndspan::Layout::F, 2*N, 2*N> m(out, 2*n, 2*n);
                 for (size_t i=0; i<n; i++){
                     for (size_t j=0; j<n; j++){
-                        m(i, j) = m(i+n, j+n) = rhs[i].get_diff_wrt(j);
+                        m(i, j) = m(i+n, j+n) = out_dduals[i].get_diff_wrt(j);
                         m(i, j+n) = 0;
                         T sum = 0;
                         for (size_t k=0; k<n; k++){
-                            sum += rhs[i].get_diff_wrt(k, j) * q[n+k];
+                            sum += out_dduals[i].get_diff_wrt(k, j) * q[n+k];
                         }
                         m(i+n, j) = sum;
                     }

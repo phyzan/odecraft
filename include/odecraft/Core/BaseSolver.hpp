@@ -97,8 +97,6 @@ class StaticSolverScratch{
 
 public:
 
-    using DualType = ::ode::DualType<T, N, 1>;
-
     StaticSolverScratch(size_t nsys) {
         assert(nsys == N && "SolverScratchSpace: nsys must match template parameter N for fixed-size systems.");
     }
@@ -106,7 +104,7 @@ public:
     ScratchState<T, N> state() const {return ScratchState<T, N>{};}
     Array1D<T, 4*N> four_state_cache() const {return Array1D<T, 4*N>{};}
     Array1D<T, N> ics_cache() const {return Array1D<T, N>{};}
-    Array1D<DualType, 2*N> duals() const {return Array1D<DualType, 2*N>{};}
+    Array1D<DualType<T, N, 1>, N> duals() const {return Array1D<DualType<T, N, 1>, N>{};}
 };
 
 
@@ -117,19 +115,17 @@ class DynamicSolverScratch{
 
 public:
 
-    using DualType = ::ode::DualType<T, N, 1>;
-
-    DynamicSolverScratch(size_t nsys) : state_(nsys+2), four_state_cache_(4*nsys), ics_cache_(nsys), duals_(2*nsys) {}
+    DynamicSolverScratch(size_t nsys) : state_(nsys+2), four_state_cache_(4*nsys), ics_cache_(nsys), duals_(nsys) {}
 
     ScratchState<T, N>& state() const {return state_;}
     Array1D<T, 4*N>& four_state_cache() const {return four_state_cache_;}
     Array1D<T, N>& ics_cache() const {return ics_cache_;}
-    Array1D<DualType, 2*N>& duals() const {return duals_;}
+    Array1D<DualType<T, N, 1>, N>& duals() const {return duals_;}
 private:
     mutable ScratchState<T, N> state_; // for trying the next step
     mutable Array1D<T, 4*N> four_state_cache_; // for approx jac and auto step
     mutable Array1D<T, N> ics_cache_; // for trying the next step with modified ICs
-    mutable Array1D<DualType, 2*N> duals_; // for autodiff when JP==JacPolicy::Autodiff
+    mutable Array1D<DualType<T, N, 1>, N> duals_; // for autodiff when JP==JacPolicy::Autodiff
 };
 
 template<typename T, size_t N>
@@ -148,7 +144,6 @@ class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, N, SP>::ty
 public:
 
     using Base = typename traits::SolverVirtualTypeTraits<Derived, T, N, SP>::type;
-    using DualType = ::ode::DualType<T, N, 1>;
     static constexpr JacPolicy JP = getJacPolicy<T, N, OdeType>();
     
 

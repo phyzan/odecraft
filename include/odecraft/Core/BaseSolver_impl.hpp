@@ -33,19 +33,15 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* out, const T& t, const T* q)
     if constexpr (JP == JacPolicy::Approx){
         return this->Jac(out, t, q, nullptr);
     } else if constexpr (JP == JacPolicy::Autodiff){
-        decltype(auto) scratch_duals = this->scratch_.duals();
+        decltype(auto) out_duals = this->scratch_.duals();
         MutView<T, Layout::F, N, N> jacmat = this->jac_view(out);
 
-        DualType::with_default_nvars(this->nsys(), [&](){
-            const size_t nsys = this->nsys();
-            for (size_t i=0; i<nsys; i++){
-                scratch_duals[i + nsys] = DualType(q[i], {.axis=int(i)});
-            }
-            ode_.Rhs(scratch_duals.data(), t, scratch_duals.data() + nsys);
-            const DualType* rhs = scratch_duals.data();
+        const size_t nsys = this->nsys();
+        DualType<T, N, 1>::with_default_nvars(nsys, [&](){
+            ode_.Rhs(out_duals.data(), t, SeedVec<T, N, 1>{q, nsys, 1});
             for (size_t i=0; i<nsys; i++){
                 for (size_t j=0; j<nsys; j++){
-                    jacmat(i, j) = rhs[i].get_diff_wrt(j);
+                    jacmat(i, j) = out_duals[i].get_diff_wrt(j);
                 }
             }
         });
