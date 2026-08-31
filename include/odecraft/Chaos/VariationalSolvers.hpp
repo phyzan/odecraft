@@ -112,8 +112,6 @@ struct VariationalOdeSys{
 
 public:
 
-    using DualType      = ::ode::DualType<T, N, 1>;
-
     // same as in BaseSolver, but we need to redefine it here for the variational system
     static constexpr JacPolicy JP_MAIN = getJacPolicy<T, N, OdeType>();
 
@@ -150,7 +148,7 @@ public:
     // since we cannot preallocate for every possible `Order`
     template<size_t Order> // Not important feature, the Stepper will choose the Jac function anyway, not autodiff
     requires (detail::FullRhsSupportsDuals<T, N, OdeType, Order> && N > 0)
-    void    Rhs(::ode::DualType<T, 2*N, Order>* out, const T& t, const ::ode::DualType<T, 2*N, Order>* q) const;
+    void    Rhs(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const;
 
     /*
     For the variational part:
@@ -165,7 +163,7 @@ public:
     // Not ever required by the solver, the untemplated Jac is only (for some steppers) used
     template<size_t Order>
     requires (detail::FullJacSupportsDuals<T, N, OdeType, Order> && N > 0)
-    void    Jac(::ode::DualType<T, 2*N, Order>* out, const T& t, const ::ode::DualType<T, 2*N, Order>* q) const;
+    void    Jac(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const;
 
     // Providing a Jacobian and not letting the solver use finite differences,
     // only using them here as a final fallback.
@@ -183,15 +181,15 @@ private:
 
         Array1D<T, 3*N>& findiffs() const;
         Array1D<T, N*N>& jacmat() const;
-        Array1D<::ode::DualType<T, N, 1>, 2*N>& duals() const;
-        Array1D<::ode::DualType<T, N, 2>, 2*N>& dduals() const;
+        Array1D<DualType<T, N, 1>, N>& duals() const;
+        Array1D<DualType<T, N, 2>, N>& dduals() const;
 
     private:
         size_t nsys = N;
         mutable Array1D<T, 3*N> findiffs_;
         mutable Array1D<T, N*N> jacmat_;
-        mutable Array1D<::ode::DualType<T, N, 1>, 2*N> duals_;
-        mutable Array1D<::ode::DualType<T, N, 2>, 2*N> dduals_;
+        mutable Array1D<DualType<T, N, 1>, N> duals_;
+        mutable Array1D<DualType<T, N, 2>, N> dduals_;
     };
 
     struct ScratchStatic{
@@ -201,8 +199,8 @@ private:
         // Returned by value: a fresh automatic buffer per call. See scratch_is_static.
         Array1D<T, 3*N> findiffs() const;
         Array1D<T, N*N> jacmat() const;
-        Array1D<::ode::DualType<T, N, 1>, 2*N> duals() const;
-        Array1D<::ode::DualType<T, N, 2>, 2*N> dduals() const;
+        Array1D<DualType<T, N, 1>, N> duals() const;
+        Array1D<DualType<T, N, 2>, N> dduals() const;
 
     };
 
