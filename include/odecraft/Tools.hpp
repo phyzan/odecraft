@@ -47,10 +47,10 @@ inline constexpr xdiff::Layout dual_layout = xdiff::Layout::Nested;
 #endif
 
 template<typename T, size_t N, size_t Order>
-using DualType = xdiff::Dual<T, N, Order, dual_layout<N>>;
+using DualType = xdiff::Dual<T, (N == 0 ? -1 : int(N)), Order, dual_layout<N>>;
 
 template<typename T, size_t N, size_t Order>
-using SeedVec = xdiff::SeedVector<T, N, Order, dual_layout<N>>;
+using SeedVec = xdiff::SeedVector<T, (N == 0 ? -1 : int(N)), Order, dual_layout<N>>;
 
 
 template<typename T, size_t N>
