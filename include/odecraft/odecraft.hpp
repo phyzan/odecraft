@@ -2,14 +2,14 @@
 #define ODECRAFT_HPP
 
 #include <polybox/polybox.hpp>
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 #include <odecraft/Core/SolverFactory.hpp>
 #include <odecraft/DenseOde/OdeInt_impl.hpp>
 
-#include <odecraft/Core/BaseSolver_impl.hpp>
-#include <odecraft/Core/RichBase_impl.hpp>
-#include <odecraft/Core/Events_impl.hpp>
-#include <odecraft/Core/ObjectiveSolver_impl.hpp>
+#include <odecraft/Core/BaseSolver/BaseSolver_impl.hpp>
+#include <odecraft/Core/RichSolver/RichBase_impl.hpp>
+#include <odecraft/Events/Events_impl.hpp>
+#include <odecraft/Objectives/StaticEventStepper_impl.hpp>
 
 #include <odecraft/OdeResult/OdeResult_impl.hpp>
 

@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_BDF_HPP
 #define ODECRAFT_BDF_HPP
 
-#include <odecraft/Core/RichBase.hpp>
+#include <odecraft/Core/RichSolver/RichBase.hpp>
 
 namespace ode{
 
@@ -59,9 +59,7 @@ class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, N, SP, OdeType>, Der
 
 public:
 
-    BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) requires (!is_rich<SP>) : BDF(private_tag{}, ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir) {}
-
-    BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) requires (is_rich<SP>) : BDF(private_tag{}, ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)) {}
+    BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) : BDF(private_tag{}, ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)) {}
 
     auto  local_interp() const;
 
@@ -128,7 +126,6 @@ struct SolverTypeGetter<Stepper::BDF, T, N, SP, OdeType, Derived>{
 };
 
 } // namespace ode::detail
-
 
 
 } // namespace ode

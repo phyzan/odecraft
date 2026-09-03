@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_RICH_BASE_IMPL_HPP
 #define ODECRAFT_RICH_BASE_IMPL_HPP
 
-#include <odecraft/Core/RichBase.hpp>
+#include "RichBase.hpp"
 
 namespace ode{
 

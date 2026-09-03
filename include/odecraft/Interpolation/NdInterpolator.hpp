@@ -2,7 +2,7 @@
 #define ODECRAFT_ND_INTERPOLATOR_HPP
 
 
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 
 namespace ode::interp {
 

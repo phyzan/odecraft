@@ -17,7 +17,7 @@
  * - Automatic handling of state discontinuities at events
  */
 
-#include <odecraft/Core/BaseSolver.hpp>
+#include <odecraft/Core/BaseSolver/BaseSolver.hpp>
 
 
 namespace ode{

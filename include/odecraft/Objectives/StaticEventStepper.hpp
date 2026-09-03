@@ -1,8 +1,8 @@
 #ifndef ODECRAFT_OBJECTIVE_SOLVER_HPP
 #define ODECRAFT_OBJECTIVE_SOLVER_HPP
 
-#include <odecraft/Core/BaseSolver.hpp>
-#include <odecraft/Tools.hpp>
+#include <odecraft/Core/BaseSolver/BaseSolver.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 
 namespace ode{
 
@@ -16,22 +16,22 @@ struct ObjFunData{
 };
 
 /*
-ObjectiveSolver passes itself as the Derived type to the base solver class,
+StaticEventStepper passes itself as the Derived type to the base solver class,
 and as a result it is the most derived class in the CRTP hierarchy.
-That means that any class deriving from ObjectiveSolver that overrides functions like `Adv_Impl` will not have those overrides called by the base solver class,.
+That means that any class deriving from StaticEventStepper that overrides functions like `Adv_Impl` will not have those overrides called by the base solver class,.
 For virtual inheritance this might not be the case, so it is best not to override any of the base solver functions, but only extend the functionality.
 */
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-class ObjectiveSolver : public detail::SolverTypeGetter<S, T, N, SP, OdeType, ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>>::type{
+class StaticEventStepper : public detail::SolverTypeGetter<S, T, N, SP, OdeType, StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>>::type{
 
-    using Base = typename detail::SolverTypeGetter<S, T, N, SP, OdeType, ObjectiveSolver<S, T, N, SP, OdeType, ObjFun...>>::type;
+    using Base = typename detail::SolverTypeGetter<S, T, N, SP, OdeType, StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>>::type;
 
 public:
 
     static constexpr size_t NOBJ = sizeof...(ObjFun);
 
     template<typename... Args>
-    ObjectiveSolver(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args);
+    StaticEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args);
 
     void Reset();
 
@@ -64,21 +64,21 @@ private:
 
 
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
-class SingleObjectiveSolver : public ObjectiveSolver<S, T, N, SP, OdeType, ObjFun>{
+class SingleStaticEventStepper : public StaticEventStepper<S, T, N, SP, OdeType, ObjFun>{
 
-    using Base = ObjectiveSolver<S, T, N, SP, OdeType, ObjFun>;
+    using Base = StaticEventStepper<S, T, N, SP, OdeType, ObjFun>;
 public:
 
     template<typename... Args>
-    SingleObjectiveSolver(ObjFunData<T, ObjFun> data, OdeType ode, Args&&... args);
+    SingleStaticEventStepper(ObjFunData<T, ObjFun> data, OdeType ode, Args&&... args);
 
     template<typename... Args>
-    SingleObjectiveSolver(ObjFun obj_fun, OdeType ode, Args&&... args);
+    SingleStaticEventStepper(ObjFun obj_fun, OdeType ode, Args&&... args);
 
 };
 
 template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun, typename... Args>
-auto getObjectiveSolver(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args);
+auto getEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args);
 
 
 

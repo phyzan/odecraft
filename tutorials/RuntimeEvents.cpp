@@ -67,7 +67,7 @@ int main(){
     // and works similarly to std::unique_ptr (cannot be copied, only moved)
     // See external/polybox/README.md for more details
 
-    pbox::Box<Event<T>> event_1 = make_event<T, PreciseEvent>(
+    pbox::Box<Event<T>> event_1 = make_precise_event(
         "boxed_event_1",
         [](const T& t, const T* q){
             return q[1] - 1; // Event triggered when q[1] = 1
@@ -76,7 +76,7 @@ int main(){
         -1 // only trigger when the `Target` crosses from positive to negative
     );
 
-    pbox::Box<Event<T>> event_2 = make_event<T, PreciseEvent>(
+    pbox::Box<Event<T>> event_2 = make_precise_event(
         "boxed_event_2",
         [](const T& t, const T* q){
             return q[0] - 1.25; // Event triggered when q[0] = 1.25

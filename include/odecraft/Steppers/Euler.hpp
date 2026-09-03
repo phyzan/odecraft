@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_EULER_HPP
 #define ODECRAFT_EULER_HPP
 
-#include <odecraft/Core/RichBase.hpp>
+#include <odecraft/Core/RichSolver/RichBase.hpp>
 
 namespace ode{
 
@@ -16,15 +16,10 @@ public:
     static constexpr bool IS_IMPLICIT = false;
 
     DEFAULT_RULE_OF_FOUR(Euler)
+    Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int dir=1, EventList<T> events = {});
 
-    Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int dir=1) requires (!is_rich<SP>);
-
-    Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int dir=1, EventList<T> events = {}) requires (is_rich<SP>);
-
-    // Constructor signature that follows the main constructor pattern.
-    Euler(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) requires (!is_rich<SP>);
-
-    Euler(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) requires (is_rich<SP>);
+    // Constructor signature that follows the main constructor pattern
+    Euler(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
 
     Stepper method() const;
 
@@ -47,6 +42,7 @@ struct SolverTypeGetter<Stepper::Euler, T, N, SP, OdeType, Derived>{
 };
 
 } // namespace ode::detail
+
 
 } // namespace ode
 

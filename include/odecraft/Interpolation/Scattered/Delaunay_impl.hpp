@@ -3,7 +3,7 @@
 
 
 #include <odecraft/Interpolation/Scattered/Delaunay.hpp>
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 #include <libqhull_r/qhull_ra.h>
 
 namespace ode::interp::sci{

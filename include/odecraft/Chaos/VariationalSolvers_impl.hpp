@@ -2,7 +2,7 @@
 #define ODECRAFT_VARIATIONAL_SOLVERS_IMPL_HPP
 
 #include <odecraft/Chaos/VariationalSolvers.hpp>
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 
 namespace ode::chaos{
 
@@ -454,14 +454,13 @@ void VariationalOdeSys<T, N, OdeType>::delta_J(T* mat, const T& t, const T* q, c
 
 
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-template<typename... Args>
-VariationalSolver<S, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, Args&&... extra) : Base(VariationalOdeSys<T, N, OdeType>(ode, q0.size(),atol), t0,
+VariationalSolver<S, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events) : Base(VariationalOdeSys<T, N, OdeType>(ode, q0.size(),atol), t0,
     !q0.data() || !delta_q0.data() ?
     View1D<T, 2*N>{nullptr, 2*q0.size()} :
     View1D<T, 2*N>{
         join_arrays(q0, delta_q0).data(),
         2*q0.size()
-    }, rtol, atol, min_step, max_step, stepsize, dir, std::forward<Args>(extra)...), worker(4*q0.size()), tmp_state_(2*q0.size()), period_(period), t_next_(t0+period*dir), t_last_(t0) {
+    }, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)), worker(4*q0.size()), tmp_state_(2*q0.size()), period_(period), t_next_(t0+period*dir), t_last_(t0) {
 
     if (period <= 0){
         throw std::runtime_error("The renormalization period must be positive");
@@ -746,17 +745,10 @@ pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, Ode
 
 
 template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
-requires (!is_rich<SP>)
-auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int direction){
-    return VariationalSolver<S, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction);
-}
-
-
-template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
-requires (is_rich<SP>)
 auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events){
     return VariationalSolver<S, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction, std::move(events));
 }
+
 
 } // namespace ode
 

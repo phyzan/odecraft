@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <stdexcept>
-#include <odecraft/Core/Events.hpp>
+#include <odecraft/Events/Events.hpp>
 
 
 namespace ode {
@@ -83,15 +83,8 @@ inline ReturnType choose_integrator_case(Stepper method, Callable&& callable, Ar
 }
 
 template<Stepper S, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
-requires (is_rich<SP>)
 inline auto getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) {
     return typename detail::SolverTypeGetter<S, T, N, SP, OdeType, void>::type(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events));
-}
-
-template<Stepper S, SolverPolicy SP, typename T, size_t N, hasRhsFunc<T> OdeType>
-requires (!is_rich<SP>)
-inline auto getSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1) {
-    return typename detail::SolverTypeGetter<S, T, N, SP, OdeType, void>::type(std::move(ode), t0, q0, rtol, atol, min_step, max_step, stepsize, dir);
 }
 
 

@@ -1,7 +1,8 @@
 #ifndef ODECRAFT_VARIATIONAL_SOLVERS_HPP
 #define ODECRAFT_VARIATIONAL_SOLVERS_HPP
 
-#include <odecraft/Core/Events.hpp>
+#include "odecraft/Core/SolverFactory.hpp"
+#include <odecraft/Events/Events.hpp>
 #include <odecraft/DenseOde/OdeInt.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/Core/VirtualTraits.hpp>
@@ -27,11 +28,11 @@ void normalized(T* out, const T* src, size_t nsys);
 template<typename T, size_t N, UtilPolicy UP>
 class ChaoticSolver;
 
-template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
-
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
 class VariationalSolver;
+
+template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
+pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
 
 
 template<typename T, size_t N, UtilPolicy UP>
@@ -244,8 +245,7 @@ class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, T, 2*N, SP, 
 
 public:
 
-    template<typename... Args>
-    VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, Args&&... extra);
+    VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T> events={});
 
     T       elapsed_time() const;
 
@@ -299,9 +299,6 @@ private:
 };
 
 
-
-
-
 template<typename T, size_t N>
 class VariationalODE : public ODE<T, N>{
 
@@ -347,12 +344,6 @@ pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, Ode
 
 
 template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
-requires (!is_rich<SP>)
-auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1);
-
-
-template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
-requires (is_rich<SP>)
 auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
 
 } // namespace ode::chaos
@@ -371,6 +362,7 @@ struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, N, SolverPo
     using type = chaos::ChaoticSolver<T, N, UtilPolicy::RichVirtual>;
 };
 
-} // namespace ode
+} // namespace ode::traits
+
 
 #endif // ODECRAFT_VARIATIONAL_SOLVERS_HPP
