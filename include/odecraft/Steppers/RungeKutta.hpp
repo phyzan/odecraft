@@ -2,7 +2,7 @@
 #define ODECRAFT_RUNGEKUTTA_HPP
 
 
-#include <odecraft/Core/RichBase.hpp>
+#include <odecraft/Core/RichSolver/RichBase.hpp>
 
 namespace ode{
 

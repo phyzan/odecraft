@@ -3,7 +3,7 @@
 
 #include <algorithm>
 
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
 
 namespace ode{

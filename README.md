@@ -227,7 +227,7 @@ Currently, the following solver classes are provided, overriding the proper `Bas
 
 One main component of the library is the event detection system, which allows users to define conditions that trigger during integration. This feature was mainly developed for accurately detecting crossings in a *Poincaré surface of section* in dynamical systems, but it can be used for any situation where you need to detect when a certain condition is met during the integration of a system of ODE's.
 
-- **Compile-time events**: For events that can be hardcoded in a project, it is preferred to use the compile-time event system, which avoids the overhead of virtual function calls, and allows for inlining and more compiler optimizations. This is achieved via the `ObjectiveSolver` class. See the relevant [example](tutorials/CompileTimeEvents.cpp) for different ways to declare relevant solvers.
+- **Compile-time events**: For events that can be hardcoded in a project, it is preferred to use the compile-time event system, which avoids the overhead of virtual function calls, and allows for inlining and more compiler optimizations. This is achieved via the `StaticEventStepper` class. See the relevant [example](tutorials/CompileTimeEvents.cpp) for different ways to declare relevant solvers.
 
 - **Runtime events**: For events whose number or type is not known at compile-time, the polymorphic `Event<T>` class
 is provided, which requires that the solver is declared with `ode::SolverPolicy::RichVirtual` or `RichStatic`.
@@ -382,7 +382,7 @@ odecraft/
 │       │   ├── RichBase.hpp         # Event-aware solver extension
 │       │   ├── Events.hpp           # Event detection system
 │       │   ├── FinDiff.hpp          # Finite difference utilities
-│       │   ├── ObjectiveSolver.hpp  # Objective-based solver interface
+│       │   ├── StaticEventStepper.hpp  # Objective-based solver interface
 │       │   ├── SolverFactory.hpp    # Factory for solver instantiation
 │       │   └── *_impl.hpp           # Implementation files
 │       │

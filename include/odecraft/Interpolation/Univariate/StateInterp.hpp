@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_STATE_INTERP_HPP
 #define ODECRAFT_STATE_INTERP_HPP
 
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 
 namespace ode::interp::uni {
 

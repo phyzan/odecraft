@@ -4,7 +4,7 @@
 #include <algorithm>
 
 #include <odecraft/Core/VirtualBase.hpp>
-#include <odecraft/Core/Events.hpp>
+#include <odecraft/Events/Events.hpp>
 #include <odecraft/DenseOde/OdeInt.hpp>
 
 

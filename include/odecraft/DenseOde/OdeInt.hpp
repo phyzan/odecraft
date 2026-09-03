@@ -2,7 +2,7 @@
 #define ODECRAFT_ODE_INT_HPP
 
 #include <odecraft/OdeResult/OdeResult.hpp>
-#include <odecraft/Core/BaseSolver.hpp>
+#include <odecraft/Core/BaseSolver/BaseSolver.hpp>
 #include <odecraft/Core/SolverFactory.hpp> // IWYU pragma: keep
 
 

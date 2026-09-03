@@ -1,4 +1,4 @@
-#include <odecraft/Core/Events.hpp>
+#include <odecraft/Events/Events.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/odecraft.hpp>
 #include <mpreal.h>
@@ -18,7 +18,7 @@ void crossing_test(Stepper method) {
 
 
     // Define the y' = 1 crossing
-    pbox::Box<Event<Scalar>> event = make_event<Scalar, PreciseEvent>("event", crossing<Scalar>, Scalar(0));
+    pbox::Box<Event<Scalar>> event = make_precise_event("event", crossing<Scalar>, Scalar(0));
 
     // Create solver
     Scalar t = 0;

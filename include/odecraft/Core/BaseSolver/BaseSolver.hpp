@@ -589,19 +589,10 @@ protected:
     /// @brief Check if the current true state matches the new state.
     bool        is_at_new_state() const;
 
-
-    void cerr(const std::string& message) const {
-        #pragma omp critical
-        {
-            std::cerr << message << std::endl;
-        }
-    }
+    void cerr(const std::string& message) const;
 
     template<typename... U>
-    T   nearest_time(const U&... t) const{
-        static_assert(sizeof...(U) > 0, "BaseSolver::nearest_time requires at least one argument");
-        return nearest_time_priv(t...);
-    }
+    T   nearest_time(const U&... t) const;
 
     // ================== Constructors ==================
 
@@ -620,7 +611,8 @@ protected:
         T min_step,
         T max_step,
         T stepsize,
-        int direction);
+        int direction,
+        EventList<T> events={});
 
     // ==================================================
 
@@ -655,31 +647,13 @@ private:
     );
 
     template<typename A, typename... Rest>
-    const T&    nearest_time_priv(const A& t_a, const Rest&... t_rest) const{
-        if constexpr (sizeof...(Rest) > 0){
-            return nearest_time_helper(t_a, t_rest...);
-        } else {
-            return t_a;
-        }
-    }
+    const T&    nearest_time_priv(const A& t_a, const Rest&... t_rest) const;
 
     template<typename A, typename B, typename... Rest>
-    const T&    nearest_time_helper(const A& t_a, const B& t_b, const Rest&... t_rest) const{
-        if constexpr (sizeof...(Rest) > 0){
-            return nearest_time_helper(nearest_of(t_a, t_b), t_rest...);
-        }else{
-            return nearest_of(t_a, t_b);
-        }
-    }
+    const T&    nearest_time_helper(const A& t_a, const B& t_b, const Rest&... t_rest) const;
 
     template<typename A, typename B>
-    const T& nearest_of(const A& t_a, const B& t_b) const{
-        if (this->direction() == 1){
-            return (t_a < t_b ? t_a : t_b);
-        }else{
-            return (t_a > t_b ? t_a : t_b);
-        }
-    }
+    const T& nearest_of(const A& t_a, const B& t_b) const;
 
     /// @brief Only use inside Adv_Impl (so that if the state here is updated, all derived classes are aware). Move the current state to a new time between the current time and the most recently adapted state. This is a lowlevel operation, so use carefully or the intended bahavior might break.
     void                    move_state(const T& time);

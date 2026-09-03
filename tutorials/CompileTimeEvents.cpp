@@ -40,13 +40,13 @@ struct MyOdeRhs{
 // ===================== Class declaration =========================
 
 // Class that hardcodes the ODE system and the **two** objective functions,
-// and uses the ObjectiveSolver to handle events.
+// and uses the StaticEventStepper to handle events.
 template<Stepper S, typename T, size_t N, SolverPolicy SP = SolverPolicy::Static>
-class MySolver : public ObjectiveSolver<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>{
+class MySolver : public StaticEventStepper<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>{
 
 public:
 
-    using Base = ObjectiveSolver<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>;
+    using Base = StaticEventStepper<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>;
 
     // Following the convention that the first argument of solvers is the ODE system, we pass MyOdeRhs as the first argument to the base class constructor.
     // The rest of the arguments are forwarded to the base class constructor.
@@ -105,11 +105,11 @@ int main(){
     }
     
 
-    // Using ode::getObjectiveSolver by passing the same function as lambdas
+    // Using ode::getEventStepper by passing the same function as lambdas
     {
-        std::cout << "\n---------- Using getObjectiveSolver with lambdas ----------" << std::endl;
+        std::cout << "\n---------- Using getEventStepper with lambdas ----------" << std::endl;
 
-        auto solver = getObjectiveSolver<Stepper::RK45, T, 2>(
+        auto solver = getEventStepper<Stepper::RK45, T, 2>(
             std::tuple{
                 ObjFunData{
                     // passing the lambda and ftol automatically deduces the template
@@ -155,12 +155,12 @@ int main(){
         }
     }
 
-    // For single events, use the `SingleObjectiveSolver` class:
+    // For single events, use the `SingleStaticEventStepper` class:
 
     {
-        std::cout << "\n---------- Using SingleObjectiveSolver class ----------" << std::endl;
+        std::cout << "\n---------- Using SingleStaticEventStepper class ----------" << std::endl;
 
-        SingleObjectiveSolver<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
+        SingleStaticEventStepper<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
             ObjFunData{
                 .func=Obj1<T>{},
                 .ftol=T{0.0},
@@ -188,8 +188,8 @@ int main(){
 
     // or if direction does not matter, and maximum accuracy is desired, you can use the following constructor:
     {
-        std::cout << "\n---------- Using SingleObjectiveSolver class with simpler constructor ----------" << std::endl;
-        SingleObjectiveSolver<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
+        std::cout << "\n---------- Using SingleStaticEventStepper class with simpler constructor ----------" << std::endl;
+        SingleStaticEventStepper<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
             Obj1<T>{},
             MyOdeRhs{},
             T{0.0}, // initial time

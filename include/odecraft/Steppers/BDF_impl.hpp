@@ -3,7 +3,7 @@
 
 
 #include <odecraft/Steppers/BDF.hpp>
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 
 namespace ode{
 

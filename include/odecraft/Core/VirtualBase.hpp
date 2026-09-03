@@ -2,7 +2,7 @@
 #define ODECRAFT_VIRTUAL_BASE_HPP
 
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
-#include <odecraft/Core/Events.hpp>
+#include <odecraft/Events/Events.hpp>
 #include <polybox/polybox.hpp>
 #include <odecraft/Core/SolverFactory.hpp>
 
@@ -18,8 +18,6 @@ template<typename T, size_t N=0>
 class OdeSolver{
 
 public:
-
-    virtual ~OdeSolver() = default;
 
     // ODE PROPERTIES
     virtual void                get_rhs(T* out, const T& t, const T* q) const = 0;
@@ -63,17 +61,16 @@ public:
     // MODIFIERS
     virtual bool                do_advance() = 0;
     virtual bool                do_advance_by(T interval) = 0;
-
     virtual bool                do_advance_until(T time) = 0;
     virtual bool                do_advance_until(T time, observer_t<T> observer) = 0;
     virtual bool                do_advance_until(T time, observer_t<T> observer, View1D<T> checkpoints) = 0;
-
     virtual BoxedInterp<T, N>   do_interpolate_until(T time) = 0;
     virtual BoxedInterp<T, N>   do_interpolate_until(T time, observer_t<T> observer) = 0;
-
     virtual void                do_reset() = 0;
     virtual void                do_kill(std::string message = "") = 0;
     virtual bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) = 0;
+
+    virtual ~OdeSolver() = default;
 
 protected:
 
@@ -82,7 +79,6 @@ protected:
     OdeSolver(OdeSolver&&) noexcept = default;
     OdeSolver& operator=(const OdeSolver&) = default;
     OdeSolver& operator=(OdeSolver&&) noexcept = default;
-
 };
 
 
@@ -103,11 +99,15 @@ public:
     virtual bool                            do_advance_to_event(const std::vector<std::string>& event_names) = 0;
     virtual bool                            do_advance_to_event(const T& tmax, const std::vector<std::string>& event_names) = 0;
 
+    ~OdeRichSolver() = default;
+
 protected:
 
     OdeRichSolver() = default;
-
-    DEFAULT_RULE_OF_FOUR(OdeRichSolver)
+    OdeRichSolver(const OdeRichSolver& other) = default;
+    OdeRichSolver(OdeRichSolver&& other) noexcept = default;
+    OdeRichSolver& operator=(const OdeRichSolver& other) = default;
+    OdeRichSolver& operator=(OdeRichSolver&& other) noexcept = default;
 };
 
 

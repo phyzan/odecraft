@@ -110,6 +110,13 @@ concept hasJacFunc =
     };
 
 template<typename F>
+concept isNullable = 
+    requires(F f) {
+        f = nullptr;
+        { f == nullptr } -> std::convertible_to<bool>;
+    };
+
+template<typename F>
 concept hasNullableJac =
     requires(F f) {
         f.Jac = nullptr;
@@ -169,6 +176,11 @@ using objfun_t = std::function<T(const T&, const T*)>;
 // f(T* out, const T& t, const T* q) -> void
 template<typename T>
 using rhs_t = std::function<void(T*, const T&, const T*)>;
+
+
+// f(T* out, const T& t)
+template<typename T>
+using interp_t = std::function<void(T*, const T&)>;
 
 // f(time, state_vector, optional_address)
 template<typename T>
@@ -441,20 +453,20 @@ class State{
 
 public:
 
-    State(const T* data, size_t Nsys) : _data(data), _nsys(Nsys) {}
+    State(const T* data, size_t Nsys) : data_(data), nsys_(Nsys) {}
 
-    const T& t() const {return _data[0];}
+    const T& t() const {return data_[0];}
 
-    const T& habs() const {return _data[1];}
+    const T& habs() const {return data_[1];}
 
-    const T* vector() const {return _data + 2;}
+    const T* vector() const {return data_ + 2;}
 
-    size_t nsys() const {return _nsys;}
+    size_t nsys() const {return nsys_;}
 
 protected:
 
-    const T* _data;
-    size_t _nsys;
+    const T* data_;
+    size_t nsys_;
 };
 
 

@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_FINDIFF_HPP
 #define ODECRAFT_FINDIFF_HPP
 
-#include <odecraft/Tools.hpp>
+#include <odecraft/Toolkit/Tools.hpp>
 #include <limits>
 
 namespace ode{
