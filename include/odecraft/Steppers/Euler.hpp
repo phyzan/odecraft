@@ -23,13 +23,11 @@ public:
 
     Stepper method() const;
 
-    auto local_interp() const;
-
 protected:
 
     StepResult  adapt_impl(T* res, const T* state);
-
     void        interp_impl(T* result, const T& t) const;
+    auto        local_interp() const;
 
 };
 

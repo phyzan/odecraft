@@ -1,7 +1,7 @@
 #ifndef ODECRAFT_RUNGEKUTTA_IMPL_HPP
 #define ODECRAFT_RUNGEKUTTA_IMPL_HPP
 
-#include <odecraft/Steppers/RungeKutta.hpp>
+#include "RungeKutta.hpp" // IWYU pragma: keep
 
 namespace ode{
 
@@ -71,8 +71,7 @@ void rk4_interp(T* out, const T& t, const T& t1, const T& t2, const T* y1, const
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-template<typename... Type>
-RK4<T, N, SP, OdeType, Derived>::RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, Type&&... extras) : Base(ode, t0, q0, rtol, atol, 0, 0, stepsize, dir, std::forward<Type>(extras)...),
+RK4<T, N, SP, OdeType, Derived>::RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T> events) : Base(ode, t0, q0, rtol, atol, 0, 0, stepsize, dir, std::move(events)),
 #ifdef ODECRAFT_RK4_DENSE
 K(9, q0.size())
 #else

@@ -228,6 +228,8 @@ public:
     CustomLocalInterpolator(U&& callable, T t1, T t2, const T* y1, const T* y2, size_t size, int left_bdr, int right_bdr);
 
     DEFAULT_RULE_OF_FOUR(CustomLocalInterpolator)
+    
+    std::unique_ptr<Interpolator<T, N>> clone() const override;
 
     void _call_impl(T* result, const T& t) const override;
 
@@ -240,6 +242,11 @@ private:
 template<typename T, size_t N, typename Callable>
 template<typename U>
 CustomLocalInterpolator<T, N, Callable>::CustomLocalInterpolator(U&& callable, T t1, T t2, const T* y1, const T* y2, size_t size, int left_bdr, int right_bdr) : LocalInterpolator<T, N>(t1, t2, y1, y2, size, left_bdr, right_bdr), _callable(std::forward<U>(callable)) {}
+
+template<typename T, size_t N, typename Callable>
+std::unique_ptr<Interpolator<T, N>> CustomLocalInterpolator<T, N, Callable>::clone() const{
+    return std::make_unique<CustomLocalInterpolator<T, N, Callable>>(*this);
+}
 
 template<typename T, size_t N, typename Callable>
 void CustomLocalInterpolator<T, N, Callable>::_call_impl(T* result, const T& t) const{

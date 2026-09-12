@@ -2,6 +2,7 @@
 #define ODECRAFT_DOP853_HPP
 
 #include <odecraft/Core/RichSolver/RichBase.hpp>
+#include <odecraft/Steppers/DOPRI.hpp>
 
 
 namespace ode{
@@ -69,17 +70,14 @@ public:
 
     Stepper method() const;
 
-    auto local_interp() const;
-
     void Reset();
 
 protected:
 
     void        ReAdjust(const T* new_vector);
-
     StepResult  adapt_impl(T* res, const T* state);
-
     void        interp_impl(T* result, const T& t) const;
+    auto        local_interp() const;
 
 private:
 

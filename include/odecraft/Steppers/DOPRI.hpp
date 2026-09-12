@@ -1,18 +1,64 @@
 #ifndef ODECRAFT_DOPRI_HPP
 #define ODECRAFT_DOPRI_HPP
 
-//https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method
-
+/**
+ * @file DOPRI.hpp
+ * @brief Machinery shared by the explicit Runge-Kutta steppers.
+ *
+ * Scratch storage, the Butcher-tableau holder, and the method-agnostic step-size control and
+ * dense-output assembly used by RK23, RK45 and DOP853. The solvers themselves live in
+ * RK23_DOPRI.hpp and RK45_DOPRI.hpp; this header carries nothing specific to either.
+ */
 
 #include <odecraft/Core/RichSolver/RichBase.hpp>
 
 
-namespace ode {
 
-namespace detail{
 
-template<typename T, size_t NSYS, size_t NCOUNT> class StaticRKScratch;
-template<typename T, size_t NSYS, size_t NCOUNT> class DynamicRKScratch;
+namespace ode::detail{
+
+template<typename T, size_t NSYS, size_t NCOUNT>
+class StaticRKScratch{
+
+public:
+
+    StaticRKScratch(size_t nsys){
+        assert(nsys == NSYS && "RKScratch: nsys must match template parameter NSYS for fixed-size systems.");
+    }
+
+    std::array<T, NSYS*NCOUNT> stage_scratch() const {return std::array<T, NSYS*NCOUNT>{};}
+    std::array<T, NSYS> rhs_scratch() const {return std::array<T, NSYS>{};}
+    std::array<T, NSYS> fsal_scratch() const {return std::array<T, NSYS>{};}
+    std::array<T, NSYS+2> state_scratch() const {return std::array<T, NSYS+2>{};}
+
+};
+
+
+// Heap-backed stage scratch: runtime-sized systems, and any scalar that is not trivially
+// constructible/copyable (mpfr::mpreal and friends), where a fresh stack array per step would
+// mean constructing and destroying nsys*NCOUNT heap-owning objects on every attempt.
+template<typename T, size_t NSYS, size_t NCOUNT>
+class DynamicRKScratch{
+
+public:
+
+    DynamicRKScratch(size_t nsys) : stage_scratch_(nsys * NCOUNT), rhs_scratch_(nsys),
+                                    fsal_scratch_(nsys), state_scratch_(nsys + 2) {
+        assert(nsys > 0 && "RKScratch: nsys must be greater than zero.");
+    }
+
+    std::vector<T>& stage_scratch() const {return stage_scratch_;}
+    std::vector<T>& rhs_scratch() const {return rhs_scratch_;}
+    std::vector<T>& fsal_scratch() const {return fsal_scratch_;}
+    std::vector<T>& state_scratch() const {return state_scratch_;}
+
+private:
+    mutable std::vector<T> stage_scratch_;
+    mutable std::vector<T> rhs_scratch_;
+    mutable std::vector<T> fsal_scratch_;
+    mutable std::vector<T> state_scratch_;
+
+};
 
 // Same rule as the solver's own scratch (see scratch_is_static in BaseSolver.hpp): automatic
 // storage only for a compile-time size and a trivial scalar; everything else is heap-backed
@@ -53,7 +99,6 @@ template<typename T, auto Generator>
 using CoefTable = std::conditional_t<std::is_arithmetic_v<T>, StaticCoefTable<T, Generator>, DynamicCoefTable<T, Generator>>;
 
 
-
 // ============================================================================
 // Shared explicit Runge-Kutta building blocks, used by RK23, RK45 and DOP853.
 // The per-stage arithmetic itself (e.g. h * (a21*K0 + ...)) stays hardcoded in each
@@ -61,26 +106,9 @@ using CoefTable = std::conditional_t<std::is_arithmetic_v<T>, StaticCoefTable<T,
 // (step-size control, dense-output coefficient assembly) is shared here.
 // ============================================================================
 
-/// @brief Build the dense-output polynomial coefficient matrix (n x order) from stage
 /// derivatives K (Nstages+1 rows) and interpolation weights P (Nstages+1 x order).
 template<typename T>
 void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n);
-
-
-template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-T rk45_step_impl(T* result, const T* state, const T& h, size_t nsys,
-                 const T* K0, T* K, T* KF, T* r,
-                 const T& rtol, const T& atol,
-                 const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs);
-
-/// @brief One Bogacki-Shampine 3(2) stage sweep. Same contract as rk45_step_impl: `K` holds
-/// stages K1..K2 (Nstages-1 rows of n), `KF` the final FSAL stage, `K0` the derivative at the
-/// start of the step. Returns the scaled error norm.
-template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-T rk23_step_impl(T* result, const T* state, const T& h, size_t nsys,
-                 const T* K0, T* K, T* KF, T* r,
-                 const T& rtol, const T& atol,
-                 const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs);
 
 /// @brief Shared step-size control loop: repeatedly calls step_fn(res, state, h) -> err_norm,
 /// halving/growing habs until the local error is accepted (mirrors scipy/boost step control).
@@ -93,157 +121,6 @@ StepResult rk_adapt_step(T* res, const T* state, size_t n,
 
 } // namespace ode::detail
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
-class RK23 : public detail::BaseDispatcher<GetDerived<RK23<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>{
 
-    using Base = detail::BaseDispatcher<GetDerived<RK23<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>;
-
-public:
-
-    static constexpr size_t Nstages       = 3;
-    static constexpr size_t Norder        = 3;
-    static constexpr size_t INTERP_ORDER  = 3;
-    static constexpr int    ERR_EST_ORDER = 2;
-    static constexpr bool   IS_IMPLICIT   = false;
-
-
-    RK23(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
-
-    DEFAULT_RULE_OF_FOUR(RK23)
-
-    Stepper  method() const;
-
-    auto        local_interp() const;
-
-    void        Reset();
-
-protected:
-
-    void        ReAdjust(const T* new_vector);
-
-    StepResult  adapt_impl(T* res, const T* state);
-
-    void        interp_impl(T* result, const T& t) const;
-
-private:
-
-    using Atype = Array2D<T, Nstages, Nstages, Allocation::Stack>;
-    using Btype = Array1D<T, Nstages, Allocation::Stack>;
-    using Ctype = Array1D<T, Nstages, Allocation::Stack>;
-    using Etype = Array1D<T, Nstages+1, Allocation::Stack>;
-    using Ptype = Array2D<T, Nstages+1, INTERP_ORDER, Allocation::Stack>;
-
-    static constexpr Atype Amatrix();
-    static constexpr Btype Bmatrix();
-    static constexpr Ctype Cmatrix();
-    static constexpr Etype Ematrix();
-    static constexpr Ptype Pmatrix();
-
-    T           step_impl(T* result, const T* state, const T& h);
-
-    void        set_coef_matrix() const;
-
-    detail::CoefTable<T, &Amatrix> A;
-    detail::CoefTable<T, &Bmatrix> B;
-    detail::CoefTable<T, &Cmatrix> C;
-    detail::CoefTable<T, &Ematrix> E;
-    detail::CoefTable<T, &Pmatrix> P;
-
-    detail::RKScratchSpace<T, N, Nstages-1>              scratch_space;
-    T                                                   h_last_ = 0; // replayed by set_coef_matrix
-    mutable Array1D<T, N>                               K0_;  // derivative at the start of the step
-    mutable Array1D<T, N>                               KF_;  // final (FSAL) stage
-    mutable Array2D<T, N, 0>                            coef_mat_;
-    mutable bool                                        mat_is_set_ = false;
-
-    T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1); // Boost uses -1/(error_order+1) for both increase and decrease
-    T INC_EXP = T(-1)/T(Norder);
-    T MIN_ERR = T(1)/pow(T(5), Norder);
-};
-
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
-class RK45 : public detail::BaseDispatcher<GetDerived<RK45<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>{
-
-    using Base = detail::BaseDispatcher<GetDerived<RK45<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>;
-
-public:
-
-    static constexpr size_t Nstages       = 6;
-    static constexpr size_t Norder        = 5;
-    static constexpr size_t INTERP_ORDER  = 4;
-    static constexpr int    ERR_EST_ORDER = 4;
-    static constexpr bool   IS_IMPLICIT   = false;
-
-    RK45(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
-
-    DEFAULT_RULE_OF_FOUR(RK45)
-
-    Stepper method() const;
-
-    auto local_interp() const;
-
-    void        Reset();
-
-protected:
-
-    void        ReAdjust(const T* new_vector);
-
-    StepResult  adapt_impl(T* res, const T* state);
-
-    void        interp_impl(T* result, const T& t) const;
-
-private:
-
-    using Atype = Array2D<T, Nstages, Nstages, Allocation::Stack>;
-    using Btype = Array1D<T, Nstages, Allocation::Stack>;
-    using Ctype = Array1D<T, Nstages, Allocation::Stack>;
-    using Etype = Array1D<T, Nstages+1, Allocation::Stack>;
-    using Ptype = Array2D<T, Nstages+1, INTERP_ORDER, Allocation::Stack>;
-
-    static constexpr Atype Amatrix();
-    static constexpr Btype Bmatrix();
-    static constexpr Ctype Cmatrix();
-    static constexpr Etype Ematrix();
-    static constexpr Ptype Pmatrix();
-
-    T           step_impl(T* result, const T* state, const T& h);
-
-    void        set_coef_matrix() const;
-
-    detail::CoefTable<T, &Amatrix> A;
-    detail::CoefTable<T, &Bmatrix> B;
-    detail::CoefTable<T, &Cmatrix> C;
-    detail::CoefTable<T, &Ematrix> E;
-    detail::CoefTable<T, &Pmatrix> P;
-
-    detail::RKScratchSpace<T, N, Nstages-1> scratch_space;
-    T                                       h_last_ = 0; // step size of the last sweep, replayed by set_coef_matrix
-    mutable Array1D<T, N>                   K0_;
-    mutable Array1D<T, N>                   KF_;
-    mutable Array2D<T, N, 0>                coef_mat;
-    mutable bool                            mat_is_set = false;
-
-    T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1); // Boost uses -1/(error_order+1) for both increase and decrease
-    T INC_EXP = T(-1)/T(Norder);
-    T MIN_ERR = T(1)/pow(T(5), Norder);
-};
-
-namespace detail{
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Stepper::RK23, T, N, SP, OdeType, Derived>{
-    using type = RK23<T, N, SP, OdeType, Derived>;
-};
-
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Stepper::RK45, T, N, SP, OdeType, Derived>{
-    using type = RK45<T, N, SP, OdeType, Derived>;
-};
-
-} // namespace ode::detail
-
-} // namespace ode
 
 #endif // ODECRAFT_DOPRI_HPP

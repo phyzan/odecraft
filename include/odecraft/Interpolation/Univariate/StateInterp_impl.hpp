@@ -486,12 +486,10 @@ void LinkedInterpolator<T, N, INTERPOLATOR>::expand_by_owning(pbox::Box<Interpol
     int dir = interpolant->dir();
     if (_can_replace_last_with(*interpolant)){
         boxes_.back() = std::move(interpolant);
-    }
-    else if(_get_last().can_link_with(*interpolant)){
+    } else if(_get_last().can_link_with(*interpolant)){
         boxes_.push_back(std::move(interpolant));
         boxes_[size()-2]->link_with(*boxes_[size()-1]);
-    }
-    else{
+    } else {
         this->_throw_invalid_interpolant(*interpolant);
     }
 

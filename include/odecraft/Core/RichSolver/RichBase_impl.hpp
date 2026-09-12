@@ -54,49 +54,6 @@ RichSolver<Derived, T, N, SP, OdeType>::RichSolver(OdeType ode, T t0, View1D<T, 
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<typename... Args>
-bool RichSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
-
-    // When restarting from a masked event, then at the next step, the last state vector will display the masked state, whether the mask was delayed or not
-    
-    if (evt_col.size() == 0){
-        return Base::Adv_Impl(std::forward<Args>(args)...);
-    } else if (this->at_canon_event()) {
-        const MaskedState<T>* ms = evt_col.masked_state();
-        assert(ms != nullptr && "Solver is at a canon event but has no masked state. Report bug.");
-        if (this->current_event().event->mask_delayed()){
-            ODECRAFT_CALL_DERIVED(ReAdjust, ms->masked_vector.data());
-        } // if the mask is not delayed, the state has already been ReAdjusted
-    }
-    
-    if (this->is_at_new_state()){
-        if (!Base::Adv_Impl(std::forward<Args>(args)...)){
-            // new event detection pass was triggered in this command
-            return false;
-        } else if (!this->push_event_queue()){
-            is_at_event = false;
-            is_at_canon_event = false; // is_event_waiting has been set to false in the previous Adv_Impl call, no need to set it again here
-        }
-        return true;
-    }else if (is_event_waiting){
-        if (Base::Adv_Impl(evt_col.get_time(size_t(detection_idx+1)), std::forward<Args>(args)...)){
-            if (!this->push_event_queue()){
-                is_at_event = false;
-                is_at_canon_event = false;
-            }
-            return true;
-        } else {
-            return false;
-        }
-    }else{
-        is_at_event = false;
-        is_at_canon_event = false;
-        return Base::Adv_Impl(std::forward<Args>(args)...);
-    }
-}
-
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool RichSolver<Derived, T, N, SP, OdeType>::advance_to_event(const std::vector<size_t>& event_idx){
     for (size_t idx : event_idx){
         if (idx >= evt_col.size()){
@@ -227,6 +184,48 @@ bool RichSolver<Derived, T, N, SP, OdeType>::at_canon_event() const{
 
 // ============================================================================
 
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+template<typename... Args>
+bool RichSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
+
+    // When restarting from a masked event, then at the next step, the last state vector will display the masked state, whether the mask was delayed or not
+    
+    if (evt_col.size() == 0){
+        return Base::Adv_Impl(std::forward<Args>(args)...);
+    } else if (this->at_canon_event()) {
+        const MaskedState<T>* ms = evt_col.masked_state();
+        assert(ms != nullptr && "Solver is at a canon event but has no masked state. Report bug.");
+        if (this->current_event().event->mask_delayed()){
+            ODECRAFT_CALL_DERIVED(ReAdjust, ms->masked_vector.data());
+        } // if the mask is not delayed, the state has already been ReAdjusted
+    }
+    
+    if (this->is_at_new_state()){
+        if (!Base::Adv_Impl(std::forward<Args>(args)...)){
+            // new event detection pass was triggered in this command
+            return false;
+        } else if (!this->push_event_queue()){
+            is_at_event = false;
+            is_at_canon_event = false; // is_event_waiting has been set to false in the previous Adv_Impl call, no need to set it again here
+        }
+        return true;
+    }else if (is_event_waiting){
+        if (Base::Adv_Impl(evt_col.get_time(size_t(detection_idx+1)), std::forward<Args>(args)...)){
+            if (!this->push_event_queue()){
+                is_at_event = false;
+                is_at_canon_event = false;
+            }
+            return true;
+        } else {
+            return false;
+        }
+    }else{
+        is_at_event = false;
+        is_at_canon_event = false;
+        return Base::Adv_Impl(std::forward<Args>(args)...);
+    }
+}
 
 } // namespace ode
 

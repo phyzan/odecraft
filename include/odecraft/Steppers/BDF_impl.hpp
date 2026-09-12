@@ -2,11 +2,29 @@
 #define ODECRAFT_BDF_IMPL_HPP
 
 
-#include <odecraft/Steppers/BDF.hpp>
-#include <odecraft/Toolkit/Tools.hpp>
+#include "BDF.hpp"
 
 namespace ode{
 
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+BDF<T, N, SP, OdeType, Derived>::BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events) : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)), _J(q0.size(), q0.size()), _B(q0.size(), q0.size()), _LU(q0.size()), _R((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _U((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _RU((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _f(q0.size()), _dy(q0.size()), _b(q0.size()), _scale(q0.size()), _ypred(q0.size()), _psi(q0.size()), _d(q0.size()), _error(q0.size()), _error_m(q0.size()), _error_p(q0.size()) {
+    
+    if (rtol == 0){
+        rtol = 100*std::numeric_limits<T>::epsilon();
+#ifndef ODECRAFT_NO_WARN
+        this->cerr(GetStr("Warning: rtol=0 not allowed in the BDF method. Setting rtol = ", rtol));
+#endif
+    }
+    _newton_tol = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol, ndspan::min<T>(T(3)/100, pow(rtol, T(1)/T(2))));
+
+    if (this->is_running() && q0.data() != nullptr){
+        if (this->validate_ics_impl(t0, q0.data())){
+            this->_reset_impl_alone();
+        }else{
+            this->kill("Initial Jacobian contains nan or inf");
+        }
+    }
+}
 
 template<typename T, size_t N>
 LUResult<T, N>::LUResult(size_t Nsys) : LU(Nsys, Nsys), piv(Nsys) {}
@@ -143,28 +161,6 @@ void bdf_interp(T* result, const T& t, const T& t2, const T& h, const T* D, size
             sum += D[(j+1)*size+i] * p;
         }
         result[i] = D[i] + sum;
-    }
-}
-
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-template<typename... Type>
-BDF<T, N, SP, OdeType, Derived>::BDF(private_tag, OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, Type&&... extras) : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::forward<Type>(extras)...), _J(q0.size(), q0.size()), _B(q0.size(), q0.size()), _LU(q0.size()), _R((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _U((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _RU((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _f(q0.size()), _dy(q0.size()), _b(q0.size()), _scale(q0.size()), _ypred(q0.size()), _psi(q0.size()), _d(q0.size()), _error(q0.size()), _error_m(q0.size()), _error_p(q0.size()) {
-    
-    if (rtol == 0){
-        rtol = 100*std::numeric_limits<T>::epsilon();
-#ifndef ODECRAFT_NO_WARN
-        this->cerr(GetStr("Warning: rtol=0 not allowed in the BDF method. Setting rtol = ", rtol));
-#endif
-    }
-    _newton_tol = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol, ndspan::min<T>(T(3)/100, pow(rtol, T(1)/T(2))));
-
-    if (this->is_running() && q0.data() != nullptr){
-        if (this->validate_ics_impl(t0, q0.data())){
-            this->_reset_impl_alone();
-        }else{
-            this->kill("Initial Jacobian contains nan or inf");
-        }
     }
 }
 
@@ -414,16 +410,31 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     return StepResult::Success;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-auto BDF<T, N, SP, OdeType, Derived>::local_interp() const{
-    return [D=_D[interp_idx], order=_order, t2=this->interp_new_state_ptr()[0], n=this->nsys(), h = this->stepsize()*this->direction()](T* out, const T& t){
-        bdf_interp<T>(out, t, t2, h, D.data(), order, n);
-    };
-}
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
- void BDF<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
-    bdf_interp<T>(result, t, this->interp_new_state_ptr()[0], this->stepsize()*this->direction(), _D[interp_idx].data(), _order, this->nsys());
+auto BDF<T, N, SP, OdeType, Derived>::local_interp() const{
+    return [D = _D[interp_idx],
+            order=_order,
+            t2=this->interp_new_state_ptr()[0],
+            n=this->nsys(),
+            h = this->stepsize()*this->direction()]
+            (T* out, const T& t){
+                bdf_interp<T>(out, t, t2, h, D.data(), order, n);
+            };
+}
+
+
+template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+void BDF<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
+    bdf_interp<T>(
+        result,
+        t,
+        this->interp_new_state_ptr()[0],
+        this->stepsize()*this->direction(),
+        _D[interp_idx].data(),
+        _order,
+        this->nsys()
+    );
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -556,15 +567,6 @@ void BDF<T, N, SP, OdeType, Derived>::_set_psi(T* psi){
         }
     }
 }
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-bool BDF<T, N, SP, OdeType, Derived>::_resize_step(T& factor, const T& min_step, const T& max_step){
-    //factor should be positive
-    bool res = resize_step(factor, min_step, max_step); //automatically changes factor if needed
-    _change_D(factor);
-    return res;
-}
-
 
 } // namespace ode
 

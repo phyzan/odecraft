@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15...3.26)
 
 project(odecraft LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # ----------- Main odecraft interface target ---------------
 
 add_library(odecraft INTERFACE)
@@ -19,6 +21,17 @@ option(ODECRAFT_RK4_DENSE "Enable accurate RK4 dense output for the RK4 solver (
 option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
 option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
 option(ODECRAFT_USE_FLAT_AUTODIFF "Use the flat dual layout for compile-time sized systems (dynamic ones stay nested)" OFF)
+option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazy::LazyType<mpfr::mpreal> instead of plain mpfr::mpreal" ON)
+# ON when odecraft is configured directly, OFF when another project pulls it in via
+# add_subdirectory/FetchContent: a consumer that only wants the header-only `ode` interface
+# should not pay to compile a library it never links. PROJECT_IS_TOP_LEVEL needs CMake >= 3.21.
+if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
+   (NOT DEFINED PROJECT_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR))
+    set(ODECRAFT_BUILD_CRAFTED_DEFAULT ON)
+else()
+    set(ODECRAFT_BUILD_CRAFTED_DEFAULT OFF)
+endif()
+option(ODECRAFT_BUILD_CRAFTED "Build the pre-compiled ode::crafted interface (src/*.cpp) alongside the header-only one" ${ODECRAFT_BUILD_CRAFTED_DEFAULT})
 option(DEBUG "Enable debug build (-O0 -g3, asserts enabled) instead of the optimized release build" OFF)
 
 target_compile_definitions(odecraft INTERFACE
@@ -26,17 +39,19 @@ target_compile_definitions(odecraft INTERFACE
     $<$<BOOL:${ODECRAFT_NO_WARN}>:ODECRAFT_NO_WARN>
     $<$<BOOL:${ODECRAFT_NO_NAN_CHECK}>:ODECRAFT_NO_NAN_CHECK>
     $<$<BOOL:${ODECRAFT_USE_FLAT_AUTODIFF}>:ODECRAFT_USE_FLAT_AUTODIFF>
+    $<$<BOOL:${ODECRAFT_USE_LAZY_MPREAL}>:ODECRAFT_USE_LAZY_MPREAL>
 )
 
-if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
-   (NOT DEFINED PROJECT_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR))
-    set(ODECRAFT_BUILD_TESTS_DEFAULT ON)
-else()
-    set(ODECRAFT_BUILD_TESTS_DEFAULT OFF)
-endif()
-option(ODECRAFT_BUILD_TESTS "Build the odecraft_tests executable from tests/src/*.cpp" ${ODECRAFT_BUILD_TESTS_DEFAULT})
 
-if(ODECRAFT_BUILD_TESTS)
+set(ODECRAFT_DEBUG_BUILD OFF)
+if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(ODECRAFT_DEBUG_BUILD ON)
+endif()
+
+# ode::crafted is compiled for mpreal_t as well as the built-in floats, so it needs lazy::mpfr
+# (mpreal.h plus the mpfr/gmp system libraries). LAZY_ENABLE_MPREAL is consumed while xdiff is
+# configured below, hence setting it here.
+if(ODECRAFT_BUILD_CRAFTED)
     set(LAZY_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
 endif()
 
@@ -70,7 +85,18 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
 set(BUILD_APPLICATIONS OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# Keep qhull out of compile_commands.json. It is vendored C code we never edit, and it
+# outnumbers odecraft's own entries roughly 8:1 -- which matters because clangd infers the
+# flags for a *header* by interpolating from the nearest database entry. Pick a qhull entry
+# for something under include/ and you get -Iexternal/qhull/src with no -Iinclude and no
+# C++20, so every odecraft header lights up with bogus "file not found" errors.
+set(ODECRAFT_EXPORT_CC_SAVED ${CMAKE_EXPORT_COMPILE_COMMANDS})
+set(CMAKE_EXPORT_COMPILE_COMMANDS OFF)
+
 add_subdirectory(external/qhull EXCLUDE_FROM_ALL)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ${ODECRAFT_EXPORT_CC_SAVED})
 
 add_library(odecraft_qhull INTERFACE)
 add_library(odecraft::qhull ALIAS odecraft_qhull)
@@ -89,64 +115,66 @@ target_link_libraries(odecraft INTERFACE
 )
 
 #===========================================================================================
-#                           Tests (combined into a single executable)
+#                     Pre-compiled interface (namespace ode::crafted)
 #===========================================================================================
-# Each tests/src/*.cpp (besides main.cpp) implements a void test_<name>() entry point declared
-# in the matching tests/include/<name>.hpp, and tests/src/main.cpp includes those headers and
-# calls each in turn. All of tests/src/*.cpp are compiled and linked into one odecraft_tests
-# executable.
+# The headers under include/odecraft/Compiled/ expose the library with every template
+# parameter but the scalar type pinned down (dynamic system size, std::function callables),
+# and each one has exactly one translation unit here that explicitly instantiates it for some arithmetic types. Consumers of ode::crafted therefore never instantiate a
+# solver themselves; they link these objects instead.
 #
-# Only built when odecraft is configured directly (not when pulled in via add_subdirectory by
-# another project), so consumers who only want the interface never build or even see this
-# target.
+# The list is in dependency order, each unit only instantiating what no earlier one already
+# has. Every Compiled/ header carries matching `extern template` declarations, so a later
+# unit -- and any consumer -- reuses those instantiations rather than repeating them.
+#
+# This is additive: the header-only interface in namespace `ode` is untouched, still comes
+# from odecraft::odecraft alone, and needs none of this.
 
-if(ODECRAFT_BUILD_TESTS)
-    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(ODECRAFT_BUILD_CRAFTED)
+    set(ODECRAFT_CRAFTED_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Toolkit.cpp        # set_mpreal_prec
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Interpolators.cpp  # dense output
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Events.cpp         # event detection
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/OdeHistory.cpp     # OdeResult / OdeSolution
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Euler.cpp          # one unit per stepper
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/RungeKutta.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/RK23_DOPRI.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/RK45_DOPRI.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/DOP853.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/BDF.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Steppers.cpp       # runtime factories over the steppers
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ODE.cpp            # high-level driver
 
-    file(GLOB ODECRAFT_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/src/*.cpp)
-
-    add_executable(odecraft_tests ${ODECRAFT_TEST_SOURCES})
-    target_include_directories(odecraft_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/include)
-    target_link_libraries(odecraft_tests PRIVATE odecraft::odecraft lazy::mpfr)
-
-    set(ODECRAFT_TEST_COMPILE_OPTIONS
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wshadow
-        -Wno-sign-conversion
-        -fopenmp
+        # Variational solvers. Split one unit per stepper for the same reason the plain
+        # steppers are: each compiles its whole stepper again for the augmented 2N system
+        # (a different OdeType, so nothing is shared with the units above), and as a single
+        # unit that work dominated the build's wall-clock.
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_Euler.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RungeKutta.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK23_DOPRI.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK45_DOPRI.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_DOP853.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_BDF.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos.cpp          # variational driver + factory
     )
-    set(ODECRAFT_TEST_LINK_OPTIONS -fopenmp)
 
-    # -finline-limit is a GCC-only spelling; clang and MSVC reject/ignore it.
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        list(APPEND ODECRAFT_TEST_COMPILE_OPTIONS -finline-limit=10000)
-    endif()
+    add_library(odecraft_crafted STATIC ${ODECRAFT_CRAFTED_SOURCES})
+    add_library(odecraft::crafted ALIAS odecraft_crafted)
 
-    set(ODECRAFT_DEBUG_BUILD OFF)
-    if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(ODECRAFT_DEBUG_BUILD ON)
-    endif()
+    # PUBLIC: anything linking odecraft::crafted also gets the headers and the header-only
+    # interface, so <odecraft/Compiled/odecraft.hpp> is all a consumer needs to include.
+    target_link_libraries(odecraft_crafted PUBLIC odecraft::odecraft lazy::mpfr)
+
+    # Tools.hpp includes <omp.h> and the steppers use `#pragma omp simd`, so OpenMP is not
+    # optional here; it is PUBLIC so consumers link the runtime too.
+    target_compile_options(odecraft_crafted PRIVATE
+        -Wall -Wextra -Wpedantic -Wshadow -Wno-sign-conversion -Wno-unused-parameter
+    )
+    target_compile_options(odecraft_crafted PUBLIC -fopenmp)
+    target_link_options(odecraft_crafted PUBLIC -fopenmp)
 
     if(ODECRAFT_DEBUG_BUILD)
-        list(APPEND ODECRAFT_TEST_COMPILE_OPTIONS -O0 -g3 -ggdb3 -fsanitize=address -fno-omit-frame-pointer -UNDEBUG -Wconversion)
-        message(STATUS "ODECRAFT_DEBUG_BUILD=ON (asserts enabled)")
-        list(APPEND ODECRAFT_TEST_LINK_OPTIONS -fsanitize=address)
+        target_compile_options(odecraft_crafted PRIVATE -O0 -g3 -UNDEBUG)
     else()
-        list(APPEND ODECRAFT_TEST_COMPILE_OPTIONS -Wno-unused-parameter -O3 -DNDEBUG -g0 -fno-math-errno -fno-trapping-math -ffunction-sections -fdata-sections)
-        list(APPEND ODECRAFT_TEST_LINK_OPTIONS -Wl,--gc-sections -Wl,--as-needed)
-
-        include(CheckIPOSupported)
-        check_ipo_supported(RESULT ODECRAFT_IPO_SUPPORTED OUTPUT ODECRAFT_IPO_ERROR LANGUAGES CXX)
-        if(ODECRAFT_IPO_SUPPORTED)
-            set_target_properties(odecraft_tests PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
-        else()
-            message(STATUS "IPO/LTO not enabled: ${ODECRAFT_IPO_ERROR}")
-        endif()
-        message(STATUS "ODECRAFT_DEBUG_BUILD=OFF (asserts disabled via NDEBUG)")
+        target_compile_options(odecraft_crafted PRIVATE -O3 -DNDEBUG -g0 -fno-math-errno -fno-trapping-math)
     endif()
-
-    target_compile_options(odecraft_tests PRIVATE ${ODECRAFT_TEST_COMPILE_OPTIONS})
-    target_link_options(odecraft_tests PRIVATE ${ODECRAFT_TEST_LINK_OPTIONS})
 endif()

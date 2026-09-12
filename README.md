@@ -48,42 +48,86 @@ Submodules can be updated via
 git submodule update --recursive
 ```
 
-## C++ / CMake
+## Building **OdeCraft**
 
-### Macros
+Optionally, you can build the project from source using CMake, which compiles specific template instantiations of the `ode` namespace, and provides all compiled interface in the `ode::crafted` namespace. This can substantially reduce compile times for external projects, but since it does that by using type-erasing wrappers like `std::function`, this comes at a small runtime performance cost.
 
-CMake options that toggle preprocessor macros across the library, its bundled dependencies, and the `odecraft_tests` executable:
+For maximum performance, use lambdas or functors where possible, without building the project.
 
-| CMake Option | Macro | Effect |
-|--------------|-------|--------|
-| `ODECRAFT_RK4_DENSE` | `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, but for large ODE systems this can be expensive. |
-| `ODECRAFT_NO_WARN` | `ODECRAFT_NO_WARN` | Disable ODE solver console warnings. |
-| `ODECRAFT_NO_NAN_CHECK` | `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
-| `ODECRAFT_USE_FLAT_AUTODIFF` | `ODECRAFT_USE_FLAT_AUTODIFF` | Store automatic-differentiation duals in `xdiff`'s flat layout (a single contiguous array) for systems whose size `N` is known at compile time. Dynamically sized systems (`N == 0`) stay on the nested layout either way, since the flat one needs its variable count at compile time. Off by default, so every system uses the nested layout. |
-| `DEBUG` | — | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
-| `ODECRAFT_BUILD_TESTS` | — | Build the `odecraft_tests` executable from `tests/src/*.cpp`. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
+### Building the library
 
-See useful [macros](https://github.com/phyzan/xdiff#macros) for the `xdiff` submodule.
+Configure the project with some [options](#CMake-options) and build it:
+```bash
+cmake -S . -B build \
+  -DXDIFF_LAZY_NESTED_DUAL=ON \
+  -DLAZY_MPFR_RND=MPFR_RNDN \
+  -DXDIFF_FAST=ON \
+  -DXDIFF_LEIBNIZ_OPT=OFF \
+  -DXDIFF_SCALAR_OPTIMIZATIONS=ON \
+  -DODECRAFT_RK4_DENSE=OFF \
+  -DODECRAFT_NO_WARN=ON \
+  -DODECRAFT_NO_NAN_CHECK=ON \
+  -DODECRAFT_USE_FLAT_AUTODIFF=OFF \
+  -DODECRAFT_USE_LAZY_MPREAL=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
 
-## Linking via CMake
+This produces `build/libodecraft_crafted.a`. Similarly, the tests and tutorials can be configured from their own directories:
+
+```bash
+cd tests     && cmake -S . -B build && cmake --build build -j
+cd tutorials && cmake -S . -B build && cmake --build build -j
+```
+
+Each pulls **OdeCraft** in as a subproject, so there is nothing to install or configure first. Add
+`-DDEBUG=ON` to either, for an `-O0` build with asserts (and AddressSanitizer for the tests).
+
+### Linking the compiled interface
+
+In an external project, request the build and link `odecraft::crafted` on top of the headers:
+
+```cmake
+set(ODECRAFT_BUILD_CRAFTED ON CACHE BOOL "" FORCE)
+add_subdirectory(path/to/odecraft)
+
+target_link_libraries(your_target PRIVATE odecraft::crafted)
+```
+
+`odecraft::crafted` links `odecraft::odecraft` publicly, so `<odecraft/Compiled/odecraft.hpp>` is
+all you need to include.
+
+Guard the link with `if(TARGET odecraft::crafted)` if the build is conditional in your project.
+
+Note that `ODECRAFT_BUILD_CRAFTED` defaults to `OFF` for consumers, so a project that only wants
+the header-only `ode` interface pays nothing for a library it never links.
+
+## Linking headers via CMake
+
+In an external project, use
 
 ```cmake
 add_subdirectory(path/to/odecraft)
 target_link_libraries(your_target PRIVATE odecraft::odecraft)
 ```
-This gives you `<odecraft/...>`, `<xdiff/...>` etc. includes, the required C++20 standard, and [macros](#macros) (toggle with e.g. `-D<MACRO_NAME>=ON`)
+This gives you `<odecraft/...>`, `<xdiff/...>` etc. includes, the required C++20 standard, and [options](#CMake-options) (toggle with e.g. `-D<OPTION>=ON`)
 
-**Building and running the test suite:**
-```bash
-cmake -S . -B build
-cmake --build build
-./build/odecraft_tests
-```
-or, with some macros enabled at configure time:
-```bash
-cmake -S . -B build -DDEBUG=ON
-cmake --build build
-```
+## CMake options
+
+CMake options that toggle preprocessor macros across the library and its bundled dependencies:
+
+| CMake Option | Effect |
+|--------------|-------|
+| `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, but for large ODE systems this can be expensive. |
+| `ODECRAFT_NO_WARN` | Disable ODE solver console warnings. |
+| `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
+| `ODECRAFT_USE_FLAT_AUTODIFF` | Store automatic-differentiation duals in `xdiff`'s flat layout (a single contiguous array) for systems whose size `N` is known at compile time. Dynamically sized systems (`N == 0`) stay on the nested layout either way, since the flat one needs its variable count at compile time. Off by default, so every system uses the nested layout. |
+| `DEBUG` | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
+| `ODECRAFT_BUILD_CRAFTED` | Build the API for the `ode::crafted` namespace. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
+| `ODECRAFT_USE_LAZY_MPREAL` | Compile `ode::crafted`'s `mpreal_t` as `lazy::LazyType<mpfr::mpreal>` instead of plain `mpfr::mpreal`. The lazy wrapper elides temporaries in compound expressions, a large win for MPFR where every temporary is a heap allocation. **On by default**; turn it off for plain `mpfr::mpreal`. Either way the type is spelled `mpreal_t`, so nothing else in your code changes. |
+
+See useful [options](https://github.com/phyzan/xdiff#macros) for the `xdiff` submodule.
+
 
 ---
 
@@ -97,6 +141,81 @@ cmake --build build
 - **Extensible**: Easily add new solvers or event types
 - **Template-based**: Allows for any numeric type including arbitrary precision (MPFR), supports automatic differentiation via [XDiff](https://github.com/phyzan/xdiff), lazy evaluation via [lazy](https://github.com/phyzan/lazy), and more
 - **Dynamical systems analysis**: Built-in support for variational equations and Lyapunov exponent calculations
+
+##
+
+The `ode::crafted` namespace provides headers linked to the compiled project. The template parameter `T` found in all the classes and functions in that namespace has been compiled for `float`, `double` and `long double`.
+
+Everything in it is the `ode` interface with every template parameter but `T` pinned down: the
+system size is dynamic (`N = 0`), every callable is type-erased, and every solver is
+`SolverPolicy::RichVirtual`. There is no policy to choose — a rich solver already *is* an
+`OdeSolver`, so if you do not need events, pass none and hold the result by `OdeSolver<T>`.
+
+Include `<odecraft/Compiled/odecraft.hpp>` for all of it, or a single header for one piece.
+
+**Vocabulary** — `Compiled/Toolkit.hpp`
+
+| Type | Signature |
+|------|-----------|
+| `rhs_t<T>` | `void(T* out, const T& t, const T* q)` |
+| `objfun_t<T>` | `T(const T& t, const T* q)` |
+| `observer_t<T>` | `bool(const T& t, const T* q, const T* t_ptr)` |
+| `interp_t<T>` | `void(T* out, const T& t)` |
+| `ode_t<T>` | `OdeData<rhs_t<T>, rhs_t<T>>` — the one system type the interface accepts |
+| `mpreal_t` | `lazy::LazyType<mpfr::mpreal>`, or plain `mpfr::mpreal` with `ODECRAFT_USE_LAZY_MPREAL=OFF` — the fourth compiled scalar |
+
+`ode_t<T>`'s Jacobian is optional: leave it null and the implicit steppers fall back to finite
+differences. Supply one where you can — `BDF` and the variational solvers benefit most, and with a
+type-erased Rhs there is no autodiff to fall back on.
+
+**Arbitrary precision.** `mpreal_t` is compiled alongside `float`, `double` and `long double`.
+
+| Function | Purpose |
+|----------|---------|
+| `set_mpreal_prec(prec)` | Set the working precision in bits. Dispatches to `lazy::set_default_mpreal_prec` or `mpfr::mpreal::set_default_prec` depending on the backend. |
+| `get_default_prec()` | The precision that new `mpreal_t` values are created with. Named after, and forwarding to, `mpfr::mpreal::get_default_prec`. |
+
+Call `set_mpreal_prec` **before** constructing anything on `mpreal_t`: MPFR fixes an object's
+precision at construction, so raising it afterwards leaves existing values behind. Compile the tutorials and run the `MPRealCrafted` [example](tutorials/MPRealCrafted.cpp) to see how to use `mpreal_t` in a solver, using the compiled interface.
+
+**Warning**: `set_mpreal_prec` only affects the current thread (as the `mpfr` library does).
+
+
+**Solvers and stepping** — `Compiled/SolverBase.hpp`, `Compiled/Steppers.hpp`
+
+| Name | Purpose |
+|------|---------|
+| `OdeSolver<T>`, `OdeRichSolver<T>` | Abstract interfaces; the latter adds event detection |
+| `BoxedRichSolver<T>`, `BoxedInterp<T>` | Owning handles |
+| `make_rich_vsolver<T>(method, ode, t0, q0, rtol, atol, ...)` | Build a solver of any method |
+| `Euler<T>`, `RK4<T>`, `RK23<T>`, `RK45<T>`, `DOP853<T>`, `BDF<T>` | The concrete steppers, if you want one by name |
+
+**Integration front end** — `Compiled/ODE.hpp`, `Compiled/OdeHistory.hpp`
+
+| Name | Purpose |
+|------|---------|
+| `ODE<T>` | Owns a solver and records its trajectory |
+| `OdeResult<T>` | Sampled points, event hits and status of a finished run |
+| `OdeSolution<T>` | An `OdeResult` that also answers `operator()(t)` anywhere in range |
+
+**Events** — `Compiled/Events.hpp`
+
+| Name | Purpose |
+|------|---------|
+| `make_precise_event<T>(name, obj_fun, tol, dir, mask, delay_mask)` | Fires where `obj_fun` crosses zero |
+| `make_periodic_event<T>(name, period, mask, delay_mask)` | Fires every `period` time units |
+| `PreciseEvent<T>`, `PeriodicEvent<T>`, `EventList<T>`, `EventOptions` | The underlying types |
+
+**Dense output** — `Compiled/Interpolators.hpp`: `Interpolator<T>`, `LocalInterpolator<T>`,
+`LinkedInterpolator<T>`, `InterpObj<T>`.
+
+**Chaos** — `Compiled/Chaos.hpp`
+
+| Name | Purpose |
+|------|---------|
+| `make_variational_solver<T>(method, ode, t0, q0, delta_q0, period, ...)` | Solver for the augmented system |
+| `ChaoticSolver<T>` | Abstract variational solver; reports Lyapunov data |
+| `VariationalODE<T>` | Driver that also records renormalisation times and Lyapunov values |
 
 ---
 

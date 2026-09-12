@@ -9,8 +9,7 @@ namespace ode{
 // EventBase implementations
 
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
-EventBase<Derived, EP, T, MaskFunc>::EventBase(std::string name) : name_(std::move(name)) {
-    static_assert(std::is_same_v<MaskFunc, std::nullptr_t>, "MaskFunc must be std::nullptr_t for this constructor");
+EventBase<Derived, EP, T, MaskFunc>::EventBase(std::string name) requires std::is_same_v<MaskFunc, std::nullptr_t> : name_(std::move(name)) {
     if (name_.empty()){
         throw std::runtime_error("Please provide a non-empty name when instanciating an Event class");
     }
@@ -35,7 +34,7 @@ const std::string& EventBase<Derived, EP, T, MaskFunc>::name() const{
 }
 
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
-constexpr bool EventBase<Derived, EP, T, MaskFunc>::is_masked() const{
+bool EventBase<Derived, EP, T, MaskFunc>::is_masked() const{
     if constexpr (std::is_same_v<MaskFunc, std::nullptr_t>){
         return false;
     } else if constexpr (isNullable<MaskFunc>){
@@ -141,7 +140,7 @@ void EventBase<Derived, EP, T, MaskFunc>::reset_impl(int direction){
 // PreciseEvent implementations
 
 template<typename T, isObjFun<T> Target, typename MaskFunc, EventPolicy EP, typename Derived>
-PreciseEvent<T, Target, MaskFunc, EP, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir) : Base(std::move(name)), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {}
+PreciseEvent<T, Target, MaskFunc, EP, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir) requires std::is_same_v<MaskFunc, std::nullptr_t> : Base(std::move(name)), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {}
 
 template<typename T, isObjFun<T> Target, typename MaskFunc, EventPolicy EP, typename Derived>
 PreciseEvent<T, Target, MaskFunc, EP, Derived>::PreciseEvent(std::string name, Target objfun, T event_tol, int dir, MaskFunc mask, bool delay_mask) : Base(std::move(name), std::move(mask), delay_mask), target(std::move(objfun)), crossing_dir(dir), ftol(event_tol) {}
@@ -160,7 +159,7 @@ int PreciseEvent<T, Target, MaskFunc, EP, Derived>::sign_change_dir() const{
 // PeriodicEvent implementations
 
 template<typename T, typename MaskFunc, EventPolicy EP, typename Derived>
-PeriodicEvent<T, MaskFunc, EP, Derived>::PeriodicEvent(std::string name, T period) : Base(name), period_(period) {}
+PeriodicEvent<T, MaskFunc, EP, Derived>::PeriodicEvent(std::string name, T period) requires std::is_same_v<MaskFunc, std::nullptr_t> : Base(name), period_(period) {}
 
 template<typename T, typename MaskFunc, EventPolicy EP, typename Derived>
 PeriodicEvent<T, MaskFunc, EP, Derived>::PeriodicEvent(std::string name, T period, MaskFunc mask, bool delay_mask) : Base(name, std::move(mask), delay_mask), period_(period) {}
