@@ -154,7 +154,7 @@ public:
     const std::string&      name() const;
 
     /// @brief Check if this event has a mask function.
-    constexpr bool          is_masked() const;
+    bool                    is_masked() const;
 
     /// @brief Check if the mask is delayed (showing original state until mask is applied).
     bool                    mask_delayed() const;
@@ -203,10 +203,10 @@ protected:
     using Main = EventBase<Derived, EP, T, MaskFunc>;
 
     /**
-     * @brief Construct an event with optional mask.
+     * @brief Construct an unmasked event. Only available when there is no mask type to supply.
      * @param name      Unique event name.
      */
-    EventBase(std::string name);
+    EventBase(std::string name) requires std::is_same_v<MaskFunc, std::nullptr_t>;
 
     /**
      * @brief Construct an event with optional mask.
@@ -291,7 +291,7 @@ public:
         Target objfun,
         T event_tol=1e-20,
         int dir=0
-    );
+    ) requires std::is_same_v<MaskFunc, std::nullptr_t>;
 
     /**
      * @brief Construct a zero-crossing event.
@@ -352,7 +352,7 @@ public:
      * @param name      Unique event name.
      * @param period    Time interval between triggers.
      */ 
-    PeriodicEvent(std::string name, T period);
+    PeriodicEvent(std::string name, T period) requires std::is_same_v<MaskFunc, std::nullptr_t>;
 
 
     /**

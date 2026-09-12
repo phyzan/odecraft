@@ -31,84 +31,6 @@ BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::interpolate_until(cons
 
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<typename... Args>
-bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
-    const int d = this->direction();
-    if constexpr (sizeof...(Args) > 0){
-        T time_floor = nearest_time(args...);
-        if (this->is_at_new_state() && (time_floor*d <= t_new()*d)){
-            return false;
-        } else if (this->is_at_new_state()){
-            decltype(auto) scratch_state = this->scratch_.state();
-            StepResult result = this->adapt_impl(scratch_state.data(), this->new_state_ptr());
-            if (validate_it(result, scratch_state.data())){
-                // ======== update internal states ========
-                std::swap(old_state_, new_state_);
-                std::swap(new_state_, scratch_state);
-                for (size_t i=0; i<scratch_state.size(); i++){
-                    true_state_[i] = new_state_[i];
-                }
-                use_new_state_ = true;
-                step_count_++;
-                // ==========================================
-                T new_floor;
-                if (ODECRAFT_CALL_DERIVED(RequestTimeFloor, new_floor)){
-                    assert((new_floor*d > t_old()*d && new_floor*d <= t_new()*d) && "Invalid floor requested, with additional requests");
-                    time_floor = nearest_time(new_floor, time_floor);
-                }
-                
-                if (time_floor*d < t_new()*d){
-                    this->move_state(time_floor);
-                }
-                return true;
-            }else{
-                return false;
-            }
-        } else if (time_floor*d < t_new()*d){
-            this->move_state(time_floor);
-            return true;
-        } else {
-            this->move_state(t_new());
-            return true;
-        }
-    } else if (this->is_at_new_state()){
-        decltype(auto) scratch_state = this->scratch_.state();
-        StepResult result = this->adapt_impl(scratch_state.data(), this->new_state_ptr());
-        if (validate_it(result, scratch_state.data())){
-            // ======== update internal states ========
-                std::swap(old_state_, new_state_);
-                std::swap(new_state_, scratch_state);
-                for (size_t i=0; i<scratch_state.size(); i++){
-                    true_state_[i] = new_state_[i];
-                }
-                use_new_state_ = true;
-                step_count_++;
-            // ==========================================
-            T new_floor;
-            if (ODECRAFT_CALL_DERIVED(RequestTimeFloor, new_floor) && new_floor*d < t_new()*d){
-                assert((new_floor*d > t_old()*d && new_floor*d <= t_new()*d) && "Invalid floor requested without additional requests.");
-                this->move_state(new_floor);
-            }
-            return true;
-        } else {
-            return false;
-        }
-    } else {
-        this->move_state(t_new());
-        return true;
-    }
-}
-
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<typename... U>
-T BaseSolver<Derived, T, N, SP, OdeType>::nearest_time(const U&... t) const{
-    static_assert(sizeof...(U) > 0, "BaseSolver::nearest_time requires at least one argument");
-    return nearest_time_priv(t...);
-}
-
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 template<typename Callable, typename ArrayLike>
 bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
     const T& time,
@@ -205,17 +127,17 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
 
 }
 
-
-
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 template<typename Callable>
 BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_until(const T& time, Callable&& observer){
 
-    pbox::Box<LinkedInterpolator<T, N>> interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t_old(), this->vector_old().data(), this->nsys());
+    pbox::Box<LinkedInterpolator<T, N>> interp;
     bool current_state_is_new = false;
     if (!this->is_at_new_state()){
-        interp->expand_by_owning(this->state_interpolator(0, -1));
+        BoxedInterp<T, N> first_step = this->state_interpolator(0, -1);
+        interp = pbox::make_box<LinkedInterpolator<T, N>>(first_step.operator->());
     }else{
+        interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t(), this->vector().data(), this->nsys());
         current_state_is_new = true;
     }
 
@@ -226,7 +148,7 @@ BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_un
             bool obs_res;
             if constexpr (isObserver<Callable, T>){
                 obs_res = observer(t, q, t_ptr);
-            } else{
+            } else {
                 obs_res = true;
             }
             if (obs_res){
@@ -256,37 +178,6 @@ BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_un
         return interp;
     } else {
         return BoxedInterp<T, N>();
-    }
-}
-
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<typename A, typename... Rest>
-const T& BaseSolver<Derived, T, N, SP, OdeType>::nearest_time_priv(const A& t_a, const Rest&... t_rest) const{
-    if constexpr (sizeof...(Rest) > 0){
-        return nearest_time_helper(t_a, t_rest...);
-    } else {
-        return t_a;
-    }
-}
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<typename A, typename B, typename... Rest>
-const T& BaseSolver<Derived, T, N, SP, OdeType>::nearest_time_helper(const A& t_a, const B& t_b, const Rest&... t_rest) const{
-    if constexpr (sizeof...(Rest) > 0){
-        return nearest_time_helper(nearest_of(t_a, t_b), t_rest...);
-    }else{
-        return nearest_of(t_a, t_b);
-    }
-}
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-template<typename A, typename B>
-const T& BaseSolver<Derived, T, N, SP, OdeType>::nearest_of(const A& t_a, const B& t_b) const{
-    if (this->direction() == 1){
-        return (t_a < t_b ? t_a : t_b);
-    }else{
-        return (t_a > t_b ? t_a : t_b);
     }
 }
 

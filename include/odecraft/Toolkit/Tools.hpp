@@ -14,7 +14,7 @@
 #include <ndspan/ndspan.hpp>
 
 
-#define ODE_LAMBDA(out, t, q) [=](auto* out, const auto& t, auto q) -> void 
+#define ODECRAFT_LAMBDA(out, t, q) [=](auto* out, const auto& t, auto q) -> void 
 
 namespace ode {
 

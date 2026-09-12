@@ -23,12 +23,9 @@ class RK4 : public detail::BaseDispatcher<GetDerived<RK4<T, N, SP, OdeType, Deri
 
 public:
 
-    template<typename... Type>
-    RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, Type&&... extras);
+    RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
 
     Stepper method() const;
-
-    auto  local_interp() const;
 
     void        Reset();
 
@@ -41,9 +38,8 @@ protected:
     StepResult  adapt_impl(T* res, const T* state);
 
     void        interp_impl(T* out, const T& t) const;
-
+    auto        local_interp() const;
     void        ReAdjust(const T* new_vector);
-
     void        set_interp_data() const;
 
     // 4 stages of size N, plus one auxiliary array. if ODECRAFT_RK4_DENSE, K has 4 extra stages for dense output. So visually K = [k1, k2, k3, k4, aux | k1, k2, l3, k4 ]

@@ -6,6 +6,7 @@
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/Events/Events.hpp>
 #include <odecraft/DenseOde/OdeInt.hpp>
+#include "OdeInt_mem_impl.hpp" // IWYU pragma: keep
 
 
 
@@ -60,12 +61,6 @@ size_t EventCounter<T, N>::total()const{
 }
 
 // ODE implementations
-template<typename T, size_t N>
-template<hasRhsFunc<T> OdeType>
-ODE<T, N>::ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Stepper method) : ODE(q0.size()){
-    init(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events), method);
-}
-
 template<typename T, size_t N>
 ODE<T, N>::ODE(size_t nsys) : event_data_(nsys){
     orbit_data_.nsys = nsys;
@@ -210,6 +205,83 @@ bool ODE<T, N>::rich_integrate(
         std::move(observer)
     );
 }
+
+template<typename T, size_t N>
+bool ODE<T, N>::diverges() const{
+    return solver_->get_diverges();
+}
+
+template<typename T, size_t N>
+bool ODE<T, N>::is_dead() const{
+    return solver_->get_is_dead();
+}
+
+template<typename T, size_t N>
+size_t ODE<T, N>::n_points() const{
+    return orbit_data_.t.size();
+}
+
+template<typename T, size_t N>
+View1D<T> ODE<T, N>::t()const{
+    return View1D<T>{orbit_data_.t.data(), this->n_points()};
+}
+
+template<typename T, size_t N>
+View2D<T, 0, N> ODE<T, N>::q()const{
+    return View2D<T, 0, N>{orbit_data_.q.data(), this->n_points(), this->nsys()};
+}
+
+template<typename T, size_t N>
+const T& ODE<T, N>::t(size_t i)const{
+    assert(i < this->n_points() && "Index out of range");
+    return orbit_data_.t[i];
+}
+
+template<typename T, size_t N>
+View1D<T, N> ODE<T, N>::q(size_t i)const{
+    return View1D<T, N>(orbit_data_.q.data() + i*this->nsys(), this->nsys());
+}
+
+template<typename T, size_t N>
+const OrbitData<T>& ODE<T, N>::event_data(const std::string& event) const{
+    return event_data_.data(event);
+}
+
+template<typename T, size_t N>
+double ODE<T, N>::runtime()const{
+    return runtime_;
+}
+
+template<typename T, size_t N>
+const OdeRichSolver<T, N>* ODE<T, N>::solver()const{
+    return solver_.get_raw_pointer();
+}
+
+template<typename T, size_t N>
+void ODE<T, N>::clear(){
+    orbit_data_.clear_points();
+    event_data_.clear_points();
+    std::ranges::fill(cached_idx_, 0);
+    register_state();
+}
+
+template<typename T, size_t N>
+void ODE<T, N>::reset(){
+    runtime_ = 0;
+    solver_->do_reset();
+    this->clear();
+}
+
+template<typename T, size_t N>
+void ODE<T, N>::register_state(){
+    orbit_data_.add_point(solver_->get_time(), solver_->get_vector().data());
+}
+
+template<typename T, size_t N>
+void ODE<T, N>::register_event(size_t i){
+    event_data_.add_event(i, solver_->get_time(), solver_->get_vector().data());
+}
+
 
 template<typename T, size_t N>
 template<typename ArrayType, typename Callable>
@@ -359,74 +431,6 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
     return success;
 }
 
-
-
-template<typename T, size_t N>
-bool ODE<T, N>::diverges() const{
-    return solver_->get_diverges();
-}
-
-template<typename T, size_t N>
-bool ODE<T, N>::is_dead() const{
-    return solver_->get_is_dead();
-}
-
-template<typename T, size_t N>
-size_t ODE<T, N>::n_points() const{
-    return orbit_data_.t.size();
-}
-
-template<typename T, size_t N>
-View1D<T> ODE<T, N>::t()const{
-    return View1D<T>{orbit_data_.t.data(), this->n_points()};
-}
-
-template<typename T, size_t N>
-View2D<T, 0, N> ODE<T, N>::q()const{
-    return View2D<T, 0, N>{orbit_data_.q.data(), this->n_points(), this->nsys()};
-}
-
-template<typename T, size_t N>
-const T& ODE<T, N>::t(size_t i)const{
-    assert(i < this->n_points() && "Index out of range");
-    return orbit_data_.t[i];
-}
-
-template<typename T, size_t N>
-View1D<T, N> ODE<T, N>::q(size_t i)const{
-    return View1D<T, N>(orbit_data_.q.data() + i*this->nsys(), this->nsys());
-}
-
-template<typename T, size_t N>
-const OrbitData<T>& ODE<T, N>::event_data(const std::string& event) const{
-    return event_data_.data(event);
-}
-
-template<typename T, size_t N>
-double ODE<T, N>::runtime()const{
-    return runtime_;
-}
-
-template<typename T, size_t N>
-const OdeRichSolver<T, N>* ODE<T, N>::solver()const{
-    return solver_.get_raw_pointer();
-}
-
-template<typename T, size_t N>
-void ODE<T, N>::clear(){
-    orbit_data_.clear_points();
-    event_data_.clear_points();
-    std::ranges::fill(cached_idx_, 0);
-    register_state();
-}
-
-template<typename T, size_t N>
-void ODE<T, N>::reset(){
-    runtime_ = 0;
-    solver_->do_reset();
-    this->clear();
-}
-
 template<typename T, size_t N>
 template<hasRhsFunc<T> OdeType>
 void ODE<T, N>::init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Stepper method){
@@ -438,17 +442,6 @@ void ODE<T, N>::init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_s
         event_data_.allocate_event(event_coll.event(i).name());
     }
 }
-
-template<typename T, size_t N>
-void ODE<T, N>::register_state(){
-    orbit_data_.add_point(solver_->get_time(), solver_->get_vector().data());
-}
-
-template<typename T, size_t N>
-void ODE<T, N>::register_event(size_t i){
-    event_data_.add_event(i, solver_->get_time(), solver_->get_vector().data());
-}
-
 
 } // namespace ode
 

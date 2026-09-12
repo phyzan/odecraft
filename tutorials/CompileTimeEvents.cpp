@@ -130,7 +130,7 @@ int main(){
             },
             OdeData{
                     // passing .Rhs as a lambda and .Jac as nullptr automatically deduces the template parameters for OdeData, so we don't need to explicitly specify them.
-                    .Rhs=ODE_LAMBDA(out, t, q){
+                    .Rhs=ODECRAFT_LAMBDA(out, t, q){
                         out[0] = q[1];
                         out[1] = -q[0];
                     },

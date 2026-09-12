@@ -14,7 +14,7 @@ void test_lazy_scalar(){
 
     auto solver = getSolver<Stepper::BDF, SolverPolicy::Static>(
         OdeData{
-            .Rhs=ODE_LAMBDA(out, t, y){ 
+            .Rhs=ODECRAFT_LAMBDA(out, t, y){ 
                 out[0] = y[1];
                 out[1] = -y[0];
             }

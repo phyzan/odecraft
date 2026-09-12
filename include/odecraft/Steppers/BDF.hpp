@@ -59,9 +59,7 @@ class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, N, SP, OdeType>, Der
 
 public:
 
-    BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {}) : BDF(private_tag{}, ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)) {}
-
-    auto  local_interp() const;
+    BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
 
     DEFAULT_RULE_OF_FOUR(BDF)
 
@@ -82,12 +80,11 @@ protected:
 
     StepResult      adapt_impl(T* res, const T* state);
     void            interp_impl(T* result, const T& t) const;
+    auto            local_interp() const;
     void            ReAdjust(const T* new_vector);
     bool            validate_ics_impl(T t0, const T* q0) const;
 
 private:
-    template<typename... Type>
-    BDF(private_tag, OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, Type&&... extras);
 
     void    _reset_impl_alone();
 
@@ -98,8 +95,6 @@ private:
     void _set_prediction(T* y);
 
     void _set_psi(T* psi);
-
-    bool _resize_step(T& factor, const T& min_step, const T& max_step);
 
     JacMat<T, N> _J;
     mutable JacMat<T, N> _B;

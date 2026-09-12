@@ -34,7 +34,7 @@ void crossing_test(Stepper method) {
     pbox::Box<OdeRichSolver<Scalar, nsys>> solver = make_solver<UtilPolicy::RichVirtual>(
         method,
         OdeData{.Rhs=
-            ODE_LAMBDA(out, /*t*/, q) {
+            ODECRAFT_LAMBDA(out, /*t*/, q) {
                 const Scalar omega{1}; // angular frequency
                 out[0] = q[1];
                 out[1] = - omega*omega*q[0];

@@ -2,7 +2,6 @@
 #define ODECRAFT_DOP853_IMPL_HPP
 
 #include <odecraft/Steppers/DOP853.hpp>
-#include <odecraft/Steppers/DOPRI_impl.hpp>
 
 namespace ode{
 
