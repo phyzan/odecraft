@@ -20,6 +20,21 @@ namespace ode::crafted{
 using ::ode::EventCounter;
 
 /**
+ * @brief The polymorphic driver base: what every driver in the compiled interface *is*.
+ *
+ * ODE and VariationalODE are both one of these, and they are siblings rather than one
+ * deriving from the other -- both are constructor wrappers over their own ode:: base. So a
+ * handle that may hold either, `pbox::owner<OdeDriver<T>>`, has to be declared on this.
+ * Declaring it on ODE<T> instead would compile, but ode::ODE<T, 0>::clone() returns the base,
+ * and pbox::owner would static_cast that back down to the wrapper -- slicing a
+ * VariationalODE on every copy.
+ *
+ * Construct through ODE or VariationalODE; hold and pass around an OdeDriver.
+ */
+template<typename T>
+using OdeDriver = ::ode::ODE<T, 0>;
+
+/**
  * @brief Owns a solver and records its trajectory.
  *
  * A thin wrapper over ode::ODE<T, 0> that exists only to pin the system type. The underlying

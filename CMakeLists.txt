@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 3.15...3.26)
 
 project(odecraft LANGUAGES CXX)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Only when odecraft is the project being configured.
+if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
+   (NOT DEFINED PROJECT_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR))
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
 
 # ----------- Main odecraft interface target ---------------
 
