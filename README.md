@@ -209,6 +209,26 @@ precision at construction, so raising it afterwards leaves existing values behin
 **Dense output** — `Compiled/Interpolators.hpp`: `Interpolator<T>`, `LocalInterpolator<T>`,
 `LinkedInterpolator<T>`, `InterpObj<T>`.
 
+**Field interpolation** — `Compiled/NdInterpolators.hpp`
+
+Unlike everything above, this family is not parameterised on the scalar type: values are
+`double` throughout and the free parameter is the dimension, pinned at `0` (dynamic, decided
+at construction) with the virtual interface on. So these are plain types, not templates.
+
+| Name | Purpose |
+|------|---------|
+| `VirtualNdInterpolator`, `VirtualVectorField` | Abstract bases every type below is reachable through |
+| `RegularGridInterpolator`, `RegularGrid` | Multilinear interpolation on a rectilinear grid |
+| `ScatteredNdInterpolator`, `DelaunayTri`, `TriPtr` | Barycentric interpolation on a scattered cloud |
+| `RegularVectorField`, `ScatteredVectorField` | Vector-valued fields; they integrate their own streamlines |
+| `CoordType` | Which coordinate system a `RegularVectorField`'s components are in |
+| `field_values_t`, `grid_axes_t` | The containers the constructors take — see below |
+
+The constructors are templated on the container holding the values, and only one
+instantiation is compiled. Build a `field_values_t` (a dynamic-rank `View<double>`) and
+reshape it to the layout the constructor documents; passing any other container instantiates
+the constructor in your own translation unit instead of linking it.
+
 **Chaos** — `Compiled/Chaos.hpp`
 
 | Name | Purpose |
