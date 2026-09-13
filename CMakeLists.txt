@@ -143,6 +143,9 @@ if(ODECRAFT_BUILD_CRAFTED)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/BDF.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Steppers.cpp       # runtime factories over the steppers
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ODE.cpp            # high-level driver
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/NdInterpolators.cpp # regular / scattered field interpolation
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/RegularVectorField.cpp   # one unit per vector field: each
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ScatteredVectorField.cpp # compiles its own streamline solvers
 
         # Variational solvers. Split one unit per stepper for the same reason the plain
         # steppers are: each compiles its whole stepper again for the augmented 2N system
