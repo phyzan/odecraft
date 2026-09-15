@@ -1,5 +1,5 @@
-#ifndef ODECRAFT_RUNGEKUTTA_HPP
-#define ODECRAFT_RUNGEKUTTA_HPP
+#ifndef ODECRAFT_RK4_HPP
+#define ODECRAFT_RK4_HPP
 
 
 #include <odecraft/Core/RichSolver/RichBase.hpp>
@@ -66,4 +66,4 @@ struct SolverTypeGetter<Stepper::RK4, T, N, SP, OdeType, Derived>{
 } // namespace ode
 
 
-#endif // ODECRAFT_RUNGEKUTTA_HPP
+#endif // ODECRAFT_RK4_HPP

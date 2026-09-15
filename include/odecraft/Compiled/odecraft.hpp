@@ -5,9 +5,6 @@
  * @file Compiled/odecraft.hpp
  * @brief Single include for the whole pre-compiled `ode::crafted` interface.
  *
- * Include this and link `odecraft::compiled`. Nothing here instantiates a solver in your
- * translation unit -- the library ships those, for float, double and long double.
- *
  * The header-only interface in namespace `ode` is a separate thing and is not pulled in by
  * this header: use <odecraft/odecraft.hpp> for that. The two can coexist in one program,
  * and even in one translation unit.

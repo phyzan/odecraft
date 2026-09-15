@@ -6,7 +6,7 @@
 // stepper is needed -- the other five are extern-declared in Compiled/Chaos.hpp.
 #include <odecraft/Core/BaseSolver/BaseSolver_impl.hpp>
 #include <odecraft/Core/RichSolver/RichBase_impl.hpp>
-#include <odecraft/Steppers/RungeKutta_impl.hpp>
+#include <odecraft/Steppers/RK4_impl.hpp>
 #include <odecraft/Chaos/VariationalSolvers_impl.hpp>
 
 // Variational RK4, for every scalar type. One unit per stepper: each one compiles the whole

@@ -5,7 +5,7 @@
  * @file RK23_DOPRI.hpp
  * @brief Bogacki-Shampine 3(2) adaptive Runge-Kutta stepper.
  *
- * Builds on the shared explicit Runge-Kutta machinery in DOPRI.hpp.
+ * Builds on the shared adaptive Runge-Kutta machinery in DOPRI.hpp.
  */
 
 #include <odecraft/Steppers/DOPRI.hpp>

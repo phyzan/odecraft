@@ -9,8 +9,8 @@
  * parameter but the scalar type `T` pinned down: the system size is dynamic (N = 0) and
  * every callable is type-erased into a std::function (rhs_t, objfun_t, observer_t, ...).
  * That leaves `T` as the only parameter left to instantiate, and the library ships those
- * instantiations for float, double and long double, so a translation unit that only uses
- * `ode::crafted` never has to instantiate a solver itself.
+ * instantiations for specific scalar types, so a translation unit that only uses
+ * `ode::crafted` never has to compile a solver itself.
  *
  * The price is the usual one for type erasure: no compile-time system size, no autodiff
  * Jacobians (a std::function cannot be called on dual numbers), and an indirect call per
