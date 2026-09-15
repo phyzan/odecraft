@@ -11,7 +11,7 @@
 
 #include <odecraft/Compiled/SolverBase.hpp>
 #include <odecraft/Compiled/Euler.hpp>
-#include <odecraft/Compiled/RungeKutta.hpp>
+#include <odecraft/Compiled/RK4.hpp>
 #include <odecraft/Compiled/RK23_DOPRI.hpp>
 #include <odecraft/Compiled/RK45_DOPRI.hpp>
 #include <odecraft/Compiled/DOP853.hpp>

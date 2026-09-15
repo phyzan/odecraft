@@ -5,7 +5,7 @@
  * @file RK45_DOPRI.hpp
  * @brief Dormand-Prince 5(4) adaptive Runge-Kutta stepper.
  *
- * Builds on the shared explicit Runge-Kutta machinery in DOPRI.hpp.
+ * Builds on the shared adaptive Runge-Kutta machinery in DOPRI.hpp.
  */
 
 #include <odecraft/Steppers/DOPRI.hpp>

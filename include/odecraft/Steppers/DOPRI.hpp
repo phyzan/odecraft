@@ -3,7 +3,7 @@
 
 /**
  * @file DOPRI.hpp
- * @brief Machinery shared by the explicit Runge-Kutta steppers.
+ * @brief Machinery shared by the adaptive Runge-Kutta steppers.
  *
  * Scratch storage, the Butcher-tableau holder, and the method-agnostic step-size control and
  * dense-output assembly used by RK23, RK45 and DOP853. The solvers themselves live in
@@ -100,7 +100,7 @@ using CoefTable = std::conditional_t<std::is_arithmetic_v<T>, StaticCoefTable<T,
 
 
 // ============================================================================
-// Shared explicit Runge-Kutta building blocks, used by RK23, RK45 and DOP853.
+// Shared adaptive Runge-Kutta building blocks, used by RK23, RK45 and DOP853.
 // The per-stage arithmetic itself (e.g. h * (a21*K0 + ...)) stays hardcoded in each
 // solver's step_impl for performance; only the surrounding, method-agnostic machinery
 // (step-size control, dense-output coefficient assembly) is shared here.

@@ -357,7 +357,7 @@ Currently, the following solver classes are provided, overriding the proper `Bas
 |--------|------|-------|-------------|
 | `Euler` | Explicit | 1 | Basic Euler method |
 | `RK23` | Explicit | 2/3 | Runge-Kutta 2(3) with adaptive stepping |
-| `RK45` | Explicit | 4/5 | Dormand-Prince method (recommended for most problems) |
+| `RK45` | Explicit | 4/5 | Runge-Kutta 4(5) with adaptive stepping |
 | `DOP853` | Explicit | 8 | High-order method with excellent dense output |
 | `BDF` | Implicit | 1-5 | Backward Differentiation Formula for stiff problems |
 | `RK4` | Explicit | 4 | Classic Runge-Kutta method with fixed step size |
@@ -513,28 +513,37 @@ The `SolverPolicy` template parameter controls inheritance and feature availabil
 ```
 odecraft/
 ├── include/
-│   └── odecraft/                    # All headers, header-only
-│       ├── Core/                    # Foundation & base classes
-│       │   ├── VirtualBase.hpp      # Virtual interfaces & solver policies
+│   └── odecraft/                    # All headers
+│       ├── Toolkit/                 # Shared foundation
+│       │   ├── Tools.hpp            # Utilities, shared concepts & OdeData
+│       │   └── FinDiff.hpp          # Finite difference Jacobian approximation
+│       │
+│       ├── Core/                    # Solver foundation & base classes
+│       │   ├── SolverFactory.hpp    # Stepper/SolverPolicy enums & solver factories
+│       │   ├── VirtualBase.hpp      # OdeSolver / OdeRichSolver virtual interfaces
 │       │   ├── VirtualTraits.hpp    # Traits for virtual solvers
-│       │   ├── BaseSolver.hpp       # CRTP base solver
-│       │   ├── RichBase.hpp         # Event-aware solver extension
-│       │   ├── Events.hpp           # Event detection system
-│       │   ├── FinDiff.hpp          # Finite difference utilities
-│       │   ├── StaticEventStepper.hpp  # Objective-based solver interface
-│       │   ├── SolverFactory.hpp    # Factory for solver instantiation
-│       │   └── *_impl.hpp           # Implementation files
+│       │   ├── BaseSolver/          # CRTP base solver
+│       │   │   └── BaseSolver.hpp
+│       │   └── RichSolver/          # Event-aware solver extension
+│       │       └── RichBase.hpp
+│       │
+│       ├── Events/                  # Event detection system
+│       │   └── Events.hpp
+│       │
+│       ├── Objectives/              # Compile-time event stepping
+│       │   └── StaticEventStepper.hpp
 │       │
 │       ├── Steppers/                # Concrete solver implementations
 │       │   ├── Steppers.hpp         # Common solver includes
 │       │   ├── Euler.hpp            # Simple Euler method (1st order)
-│       │   ├── RungeKutta.hpp       # Generic Runge-Kutta framework
-│       │   ├── DOPRI.hpp            # Runge-Kutta RK23, RK45 (adaptive)
+│       │   ├── RK4.hpp              # Constant-step classical RK4 method
+│       │   ├── DOPRI.hpp            # Dormand-Prince framework
+│       │   ├── RK23_DOPRI.hpp       # RK23 (adaptive)
+│       │   ├── RK45_DOPRI.hpp       # RK45 (adaptive)
 │       │   ├── DOP853.hpp           # High-order explicit RK (8th order)
-│       │   ├── BDF.hpp              # Implicit solver for stiff systems
-│       │   └── *_impl.hpp           # Implementation files
+│       │   └── BDF.hpp              # Implicit solver for stiff systems
 │       │
-│       ├── Interpolation/           # Dense output & interpolation
+│       ├── Interpolation/           # Dense output & field interpolation
 │       │   ├── NdInterpolator.hpp   # N-dimensional interpolator base
 │       │   ├── VectorFields.hpp     # Sampled vector field interpolation
 │       │   ├── Regular/             # Regular grid interpolation
@@ -543,24 +552,34 @@ odecraft/
 │       │   ├── Scattered/           # Scattered data interpolation
 │       │   │   ├── Delaunay.hpp     # Delaunay triangulation
 │       │   │   └── ScatteredNdInterpolator.hpp
-│       │   ├── Univariate/          # 1D interpolation
-│       │   │   └── StateInterp.hpp  # State interpolation for solvers
-│       │   └── *_impl.hpp           # Implementation files
+│       │   └── Univariate/          # 1D interpolation
+│       │       └── StateInterp.hpp  # Dense output between solver steps
 │       │
 │       ├── Chaos/                   # Dynamical systems analysis
-│       │   ├── VariationalSolvers.hpp    # Lyapunov exponent computation
-│       │   └── VariationalSolvers_impl.hpp
+│       │   └── VariationalSolvers.hpp    # Lyapunov exponent computation
 │       │
 │       ├── DenseOde/                # High-level ODE wrapper
-│       │   ├── OdeInt.hpp           # Dense-output integration front end
-│       │   └── OdeInt_impl.hpp      # Implementation
+│       │   └── OdeInt.hpp           # Dense-output integration front end
 │       │
 │       ├── OdeResult/               # Integration result storage
-│       │   ├── OdeResult.hpp        # Result container
-│       │   └── OdeResult_impl.hpp   # Implementation
+│       │   └── OdeResult.hpp        # Result container
 │       │
-│       ├── Tools.hpp                # Utilities, shared concepts & OdeData
-│       └── odecraft.hpp             # Main include (all headers)
+│       ├── Compiled/                # The pre-compiled `ode::crafted` interface
+│       │   ├── Toolkit.hpp          # Shared vocabulary (rhs_t, ode_t, mpreal_t, ...)
+│       │   ├── SolverBase.hpp       # Abstract solver interfaces
+│       │   ├── Steppers.hpp         # All steppers (Euler, RK4, ...)
+│       │   ├── Events.hpp           # Runtime events
+│       │   ├── Interpolators.hpp    # Dense output
+│       │   ├── NdInterpolators.hpp  # Grid / scattered field interpolation
+│       │   ├── ODE.hpp              # ODE<T> integration front end
+│       │   ├── OdeHistory.hpp       # OdeResult<T> / OdeSolution<T>
+│       │   ├── Chaos.hpp            # Variational solvers
+│       │   └── odecraft.hpp         # All of `ode::crafted`
+│       │
+│       └── odecraft.hpp             # Main include for the header-only `ode` interface
+│
+├── src/                             # Explicit template instantiations of `ode::crafted`,
+│                                    #   one translation unit per Compiled/ header
 │
 ├── external/                        # Git submodules (bundled header-only dependencies)
 │   ├── xdiff/                       # Automatic differentiation library (bundles its own `lazy` + `mpreal` submodules)
@@ -569,19 +588,29 @@ odecraft/
 │   └── qhull/                       # Convex hull library (for Delaunay triangulation)
 │
 ├── tests/                           # C++ test suite, compiled into one odecraft_tests executable
+│   ├── CMakeLists.txt               # Standalone project, pulls odecraft in as a subproject
 │   ├── include/                     # One <name>.hpp per test file, declaring void test_<name>()
 │   └── src/                         # One <name>.cpp per test file, implementing it; main.cpp calls them all
 │
 ├── tutorials/                       # Standalone example programs referenced from the README
+│   ├── CMakeLists.txt               # Standalone project, pulls odecraft in as a subproject
 │   ├── ArbitraryPrecision.cpp       # Arbitrary-precision (mpreal / lazy) usage
+│   ├── Autodiff.cpp                 # Automatic differentiation vs analytic / finite-difference Jacobians
 │   ├── CompileTimeEvents.cpp        # Compile-time event system usage
+│   ├── MPRealCrafted.cpp            # mpreal_t through the compiled `ode::crafted` interface
 │   └── RuntimeEvents.cpp            # Runtime (polymorphic) event system usage
 │
 ├── .clang-tidy                      # clang-tidy check configuration
-├── CMakeLists.txt                   # odecraft::odecraft interface target + odecraft_tests build
+├── CMakeLists.txt                   # odecraft::odecraft interface target + odecraft::crafted library
 ├── LICENSE
 └── README.md
 ```
+
+Headers that declare templates are paired with an `X_impl.hpp` holding their out-of-line
+definitions, and a few also with an `X_mem_impl.hpp` carrying the templated member functions
+that the compiled interface cannot instantiate ahead of time. Include the plain header for the
+declarations, or the `_impl` one to get the definitions too — `<odecraft/odecraft.hpp>` and
+`<odecraft/Compiled/odecraft.hpp>` pull in everything their respective interfaces need.
 
 ---
 

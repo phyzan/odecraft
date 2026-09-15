@@ -6,7 +6,7 @@
 #include <odecraft/Steppers/RK23_DOPRI_impl.hpp> // IWYU pragma: keep
 #include <odecraft/Steppers/RK45_DOPRI_impl.hpp> // IWYU pragma: keep
 #include <odecraft/Steppers/DOP853_impl.hpp> // IWYU pragma: keep
-#include <odecraft/Steppers/RungeKutta_impl.hpp> // IWYU pragma: keep
+#include <odecraft/Steppers/RK4_impl.hpp> // IWYU pragma: keep
 #include <odecraft/Steppers/BDF_impl.hpp> // IWYU pragma: keep
 
 #endif // ODECRAFT_STEPPERS_IMPL_HPP

@@ -26,15 +26,15 @@ option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
 option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
 option(ODECRAFT_USE_FLAT_AUTODIFF "Use the flat dual layout for compile-time sized systems (dynamic ones stay nested)" OFF)
 option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazy::LazyType<mpfr::mpreal> instead of plain mpfr::mpreal" ON)
-# ON when odecraft is configured directly, OFF when another project pulls it in via
-# add_subdirectory/FetchContent: a consumer that only wants the header-only `ode` interface
-# should not pay to compile a library it never links. PROJECT_IS_TOP_LEVEL needs CMake >= 3.21.
+
+# ON when odecraft is configured directly, OFF when another project pulls it in via add_subdirectory/FetchContent
 if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
    (NOT DEFINED PROJECT_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR))
     set(ODECRAFT_BUILD_CRAFTED_DEFAULT ON)
 else()
     set(ODECRAFT_BUILD_CRAFTED_DEFAULT OFF)
 endif()
+
 option(ODECRAFT_BUILD_CRAFTED "Build the pre-compiled ode::crafted interface (src/*.cpp) alongside the header-only one" ${ODECRAFT_BUILD_CRAFTED_DEFAULT})
 option(DEBUG "Enable debug build (-O0 -g3, asserts enabled) instead of the optimized release build" OFF)
 
@@ -140,7 +140,7 @@ if(ODECRAFT_BUILD_CRAFTED)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Events.cpp         # event detection
         ${CMAKE_CURRENT_SOURCE_DIR}/src/OdeHistory.cpp     # OdeResult / OdeSolution
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Euler.cpp          # one unit per stepper
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/RungeKutta.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/RK4.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/RK23_DOPRI.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/RK45_DOPRI.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/DOP853.cpp
@@ -156,7 +156,7 @@ if(ODECRAFT_BUILD_CRAFTED)
         # (a different OdeType, so nothing is shared with the units above), and as a single
         # unit that work dominated the build's wall-clock.
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_Euler.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RungeKutta.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK4.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK23_DOPRI.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK45_DOPRI.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_DOP853.cpp

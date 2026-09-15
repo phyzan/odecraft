@@ -1,7 +1,7 @@
-#ifndef ODECRAFT_RUNGEKUTTA_IMPL_HPP
-#define ODECRAFT_RUNGEKUTTA_IMPL_HPP
+#ifndef ODECRAFT_RK4_IMPL_HPP
+#define ODECRAFT_RK4_IMPL_HPP
 
-#include "RungeKutta.hpp" // IWYU pragma: keep
+#include "RK4.hpp" // IWYU pragma: keep
 
 namespace ode{
 
@@ -187,4 +187,4 @@ void RK4<T, N, SP, OdeType, Derived>::set_interp_data() const{
 
 } // namespace ode
 
-#endif // ODECRAFT_RUNGEKUTTA_IMPL_HPP
+#endif // ODECRAFT_RK4_IMPL_HPP
