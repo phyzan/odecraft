@@ -139,9 +139,13 @@ bool RichSolver<Derived, T, N, SP, OdeType>::RequestTimeFloor(T& out) {
     // no need to call Base::RequestTimeFloor, the Base class does not request it.
     detection_idx = -1; // reset detection index at the start of a new detection round
     // do not also set is_at_event to false, as the Adv_Impl might fail and the step should remain in the same state.
-    if ((is_event_waiting = evt_col.detect_all_between(this->old_state(), this->new_state(), [this](T* q_out, const T& t){
-        this->interp_impl(q_out, t);
-    }))){
+    if ((is_event_waiting = evt_col.detect_all_between(
+        this->old_state(),
+        this->new_state(),
+        [this](T* q_out, const T& t){
+            this->interp(q_out, t);
+        }
+    ))){
         // is_event_waiting has been set to true, preparing the push_event_queue for the first event
         if (Base::RequestTimeFloor(out)){
             out = this->nearest_time(out, evt_col.get_time(0));
@@ -188,14 +192,12 @@ bool RichSolver<Derived, T, N, SP, OdeType>::at_canon_event() const{
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 template<typename... Args>
 bool RichSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
-
-    // When restarting from a masked event, then at the next step, the last state vector will display the masked state, whether the mask was delayed or not
     
     if (evt_col.size() == 0){
         return Base::Adv_Impl(std::forward<Args>(args)...);
     } else if (this->at_canon_event()) {
         const MaskedState<T>* ms = evt_col.masked_state();
-        assert(ms != nullptr && "Solver is at a canon event but has no masked state. Report bug.");
+        assert(ms != nullptr && "Solver is at a canon event but has no masked state");
         if (this->current_event().event->mask_delayed()){
             ODECRAFT_CALL_DERIVED(ReAdjust, ms->masked_vector.data());
         } // if the mask is not delayed, the state has already been ReAdjusted
@@ -206,11 +208,12 @@ bool RichSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
             // new event detection pass was triggered in this command
             return false;
         } else if (!this->push_event_queue()){
+            // is_event_waiting has been set to false in the previous Adv_Impl call, no need to set it again here
             is_at_event = false;
-            is_at_canon_event = false; // is_event_waiting has been set to false in the previous Adv_Impl call, no need to set it again here
+            is_at_canon_event = false;
         }
         return true;
-    }else if (is_event_waiting){
+    } else if (is_event_waiting){
         if (Base::Adv_Impl(evt_col.get_time(size_t(detection_idx+1)), std::forward<Args>(args)...)){
             if (!this->push_event_queue()){
                 is_at_event = false;
@@ -220,7 +223,7 @@ bool RichSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
         } else {
             return false;
         }
-    }else{
+    } else {
         is_at_event = false;
         is_at_canon_event = false;
         return Base::Adv_Impl(std::forward<Args>(args)...);

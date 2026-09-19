@@ -19,7 +19,7 @@ BDF<T, N, SP, OdeType, Derived>::BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol,
 
     if (this->is_running() && q0.data() != nullptr){
         if (this->validate_ics_impl(t0, q0.data())){
-            this->_reset_impl_alone();
+            this->reset_impl_alone();
         }else{
             this->kill("Initial Jacobian contains nan or inf");
         }
@@ -112,14 +112,6 @@ Array1D<T> arange(size_t a, size_t b){
 }
 
 template<typename T>
-void cumprod(T* res, const T* x, size_t size){
-    res[0] = x[0];
-    for (size_t i=1; i<size; i++){
-        res[i] = res[i-1]*x[i];
-    }
-}
-
-template<typename T>
 BDFCONSTS<T>::BDFCONSTS(){
     KAPPA = {0, -T(185)/1000, -T(1)/9, -T(823)/10000, -T(415)/10000, 0};
     GAMMA[0] = 0;
@@ -206,11 +198,11 @@ Stepper BDF<T, N, SP, OdeType, Derived>::method() const {
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void BDF<T, N, SP, OdeType, Derived>::Reset(){
     Base::Reset();
-    this->_reset_impl_alone();
+    this->reset_impl_alone();
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::_reset_impl_alone(){
+void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
     T t0 = this->ics().t();
     T h0 = this->ics().habs() * this->direction();
     const T* q0 = this->ics().vector();
@@ -258,11 +250,11 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 
     if (stepsize > max_step){
         habs = max_step;
-        _change_D(max_step/stepsize);
+        this->change_D(max_step/stepsize);
     }
     else if (stepsize < h_min){
         habs = h_min;
-        _change_D(h_min/stepsize);
+        this->change_D(h_min/stepsize);
     }
     else{
         habs = stepsize;
@@ -274,7 +266,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         if (habs < h_min){
             return StepResult::MinStepError; // TODO: The algorithm does not work properly when we go below min_step.
         }else if (habs > max_step){
-            _change_D(max_step/habs);
+            this->change_D(max_step/habs);
             habs = max_step;
             interp_idx = int(_idx_D);
             return StepResult::Success; // The step is acceptet, but the stepsize is limited by max_step.
@@ -284,12 +276,12 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         
         t_new = t + habs * this->direction();
 
-        _set_prediction(_ypred.data());
+        this->set_prediction(_ypred.data());
         #pragma omp simd
         for (size_t i=0; i<nsys; i++){
             _scale[i] = atol + rtol * abs<T>(_ypred[i]);
         }
-        _set_psi(_psi.data());
+        this->set_psi(_psi.data());
 
         converged = false;
         c = habs * this->direction() / BDF_COEFS.ALPHA[_order];
@@ -308,7 +300,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
                 _valid_LU = true;
             }
 
-            conv_result = _solve_bdf_system(y_new, _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
+            conv_result = this->solve_bdf_system(y_new, _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
             if (conv_result.flag != StepResult::Success){
                 return conv_result.flag;
             }
@@ -327,7 +319,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         if (!converged){
             factor = T(1)/2;
             habs *= factor;
-            _change_D(factor);
+            this->change_D(factor);
             _valid_LU = false;
             continue;
         }
@@ -342,7 +334,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         if (_error_norms[1] > 1){
             factor = max<T>(this->MIN_FACTOR, safety * pow(_error_norms[1], T(-1)/(_order+1)));
             habs *= factor;
-            _change_D(factor);
+            this->change_D(factor);
         }
         else{
             step_accepted = true;
@@ -404,7 +396,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     auto candidate_factor = safety * max_factor;
     factor = std::min<T>(this->MAX_FACTOR, candidate_factor);
     habs *= factor;
-    _change_D(factor);
+    this->change_D(factor);
     _valid_LU = false;
     interp_idx = int(_idx_D);
     return StepResult::Success;
@@ -438,7 +430,7 @@ void BDF<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-NewtConv BDF<T, N, SP, OdeType, Derived>::_solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale){
+NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale){
     d.fill(0);
     size_t n = this->nsys();
     std::copy(y_pred, y_pred + n, y);
@@ -492,7 +484,7 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::_solve_bdf_system(T* y, const T* y_pre
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::_change_D(const T& factor){
+void BDF<T, N, SP, OdeType, Derived>::change_D(const T& factor){
     T* R = _R.data();
     T* U = _U.data();
     T* RU = _RU.data();
@@ -533,7 +525,7 @@ void BDF<T, N, SP, OdeType, Derived>::_change_D(const T& factor){
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::_set_prediction(T* y){
+void BDF<T, N, SP, OdeType, Derived>::set_prediction(T* y){
     size_t n=this->nsys();
     T* D = _D[_idx_D].data();
 
@@ -550,7 +542,7 @@ void BDF<T, N, SP, OdeType, Derived>::_set_prediction(T* y){
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::_set_psi(T* psi){
+void BDF<T, N, SP, OdeType, Derived>::set_psi(T* psi){
     size_t n = this->nsys();
     const T* D = _D[_idx_D].data();
     const T* g = BDF_COEFS.GAMMA.data();

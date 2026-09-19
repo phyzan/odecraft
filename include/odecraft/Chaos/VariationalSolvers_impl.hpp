@@ -10,13 +10,17 @@ namespace ode::chaos{
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
 VariationalOdeSys<T, N, OdeType>::VariationalOdeSys(OdeType ode, size_t ode_nsys, T atol) : ode_(std::move(ode)), scratch(ode_nsys), nsys_(ode_nsys), atol_(std::move(atol)) {
-    if constexpr (N > 0){
-        assert(N==ode_nsys && "Incorrect number of equations in VariationalOdeSys");
-    }
+    assert((N == 0 || N == ode_nsys) && "Incorrect number of equations in VariationalOdeSys");
+
+    const char* err_msg = "Variational ODE systems that do not provide a Jacobian function for the main ODE system require a non-zero `atol` to compute the stepsize for finite differences";
 
     if constexpr (JP_MAIN == JacPolicy::Nullable){
         if (ode_.Jac == nullptr && atol_ == 0){
-            throw std::runtime_error("Variational ODE systems that do not provide a Jacobian function for the main ODE system require a non-zero tolerance to compute the stepsize for finite differences");
+            throw std::runtime_error(err_msg);
+        }
+    } else if constexpr (JP_MAIN == JacPolicy::Approx) {
+        if (atol_ == 0){
+            throw std::runtime_error(err_msg);
         }
     }
 }
@@ -447,6 +451,7 @@ void VariationalSolver<S, T, N, SP, OdeType, Derived>::JacMain(T* out, const T& 
 
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void VariationalSolver<S, T, N, SP, OdeType, Derived>::ReAdjust(const T* /*new_vector*/){
+    // assertion, not an error, as the ReAdjust member function is restricted to the internal machinery and not intended for public use.
     assert(false && "ReAdjust is not supported in VariationalSolver because it would interfere with the renormalization process.");
 }
 

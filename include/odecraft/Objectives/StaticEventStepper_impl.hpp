@@ -92,15 +92,29 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
             } else {
                 crossed = old_sgn > 0 && new_sign <= 0;
             }
+
             if ((detected[I] = crossed)){
-                values[I] = bisect<T, RootPolicy::Right>([&](const T& t){
-                    this->interp_impl(worker.data(), t);
-                    return std::get<I>(obj).func(t, worker.data());
-                }, this->t_old(), this->t_new(), std::get<I>(obj).ftol);
+                const T* s_new = this->interp_new_state_ptr();
+                const T& t_new = s_new[0];
+                const T& t_old = this->t_old();
+                const T* q_old = this->old_state_ptr()+2;
+                const T* q_new = s_new + 2;
+                values[I] = bisect<T, RootPolicy::Right>(
+                    [&](const T& t){
+                        this->interp_impl(worker.data(), t);
+                        return std::get<I>(obj).func(t, worker.data());
+                    },
+                    t_old,
+                    t_new,
+                    std::get<I>(obj).func(t_old, q_old),
+                    std::get<I>(obj).func(t_new, q_new),
+                    std::get<I>(obj).ftol
+                );
                 my_floor = this->nearest_time(my_floor, values[I]);
             }
         }
     );
+
     if (base_floor){
         out = this->nearest_time(my_floor, out);
     } else {

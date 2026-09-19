@@ -55,6 +55,7 @@ void rk4_step(RhsType&& rhs, T* y_new, const T& t, const T& h, const T* y, T* k,
 
 template<typename T>
 void rk4_interp(T* out, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* y1dot, const T* y2dot, size_t n){
+    assert( (t != t1 && t != t2) && "rk4_interp must only be called on the open interval");
     T h = t2 - t1;
     T theta = (t - t1) / h;
 

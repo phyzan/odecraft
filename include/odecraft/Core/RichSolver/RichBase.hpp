@@ -91,7 +91,9 @@ public:
     void                        show_state(int prec=8) const;
 
     // MODIFIERS
-
+    /// @brief Resets the solver to its initial state, clearing any event detections.
+    void                        Reset();
+    
     /**
      * @brief Advance the solver until an event is detected.
      *
@@ -124,9 +126,6 @@ public:
     bool                        do_advance_to_event(const T& tmax, const std::vector<size_t>& event_idx = {}) { return advance_to_event(tmax, event_idx); }
     bool                        do_advance_to_event(const std::vector<std::string>& event_names) { return advance_to_event(event_names); }
     bool                        do_advance_to_event(const T& tmax, const std::vector<std::string>& event_names) { return advance_to_event(tmax, event_names); }
-
-    /// @brief Resets the solver to its initial state, clearing any event detections.
-    void                        Reset();
 
     RichSolver() = delete;
 

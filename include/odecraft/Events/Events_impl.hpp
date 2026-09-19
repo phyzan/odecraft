@@ -51,12 +51,16 @@ bool EventBase<Derived, EP, T, MaskFunc>::mask_delayed() const{
 
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
 void EventBase<Derived, EP, T, MaskFunc>::apply_mask(T* out, const T& t, const T* q) const{
-    assert(this->is_masked() && "Default mask() implementation requires that mask != nullptr");
-    if constexpr (std::is_same_v<MaskFunc, std::nullptr_t>){
-        assert(false && "apply_mask called when MaskFunc is std::nullptr_t");
-    } else {
-        mask_(out, t, q);
+
+    if constexpr (!std::is_same_v<MaskFunc, std::nullptr_t>){
+        if (this->is_masked()){
+            mask_(out, t, q);
+            return;
+        }
     }
+    throw std::runtime_error("Event has not been initialized with a mask function");
+
+
 }
 
 
@@ -97,7 +101,10 @@ void EventBase<Derived, EP, T, MaskFunc>::setup(T t_start, size_t n_sys, int dir
     // checks that it has not been already setup
     // no other modifiers can be called if setup has not been called yet
     assert(!this->is_setup_ && "Setup takes place only once");
-    assert(abs(direction)==1 && "Invalid direction");
+
+    if (abs(direction) != 1){
+        throw std::domain_error("Event direction must be 1 or -1");
+    }
     worker.resize(n_sys);
     direction_ = direction;
     is_setup_ = true;

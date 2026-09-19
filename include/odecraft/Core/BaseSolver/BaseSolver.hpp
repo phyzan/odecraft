@@ -84,7 +84,7 @@ template<typename T, size_t N>
 inline constexpr bool scratch_is_static = (N > 0) && std::is_trivially_copyable_v<T>
                                           && std::is_trivially_default_constructible_v<T>;
 
-// Scratch storage. If a function requires s scratch buffer for a state vector,
+// Scratch storage. If a function requires a scratch buffer for a state vector,
 // meaning that the size is (nsys+2), then the scratch buffer is allocated on the stack
 // if the system size is known at compile time and the scalar type is trivially copyable and default constructible (e.g. double)
 // Otherwise, it is allocated on the heap once in the constructor and reused (e.g. mpfr::mpreal or dynamic size system of any type).
@@ -281,6 +281,7 @@ public:
      * @brief Interpolate the solution at a time within the last step interval.
      * @param[out] out Output array for interpolated state (size Nsys).
      * @param[in]  t      Time to interpolate at (must be in [t_old, t_new]).
+     * @throws std::out_of_range if `t` is outside the last step interval.
     */
     void                interp(T* out, const T& t) const;
 
@@ -371,6 +372,7 @@ public:
     /**
      * @brief Advance until (this->t() + interval*direction) is reached
      * @param interval Unsigned interval to integrate
+     * @throws std::logic_error if the interval is negative
     */
     bool                advance_by(T interval);
 
@@ -380,7 +382,8 @@ public:
      * @param y0      New initial state vector (size Nsys).
      * @param stepsize Initial step size (0 = auto-compute).
      * @param direction Integration direction for the new ICs (+1 forward, -1 backward, 0 for unchanged).
-     * @return True if ICs were valid and set successfully. Otherwise returns false and nothing happens.
+     * @return True if ICs were valid and set successfully. Otherwise returns false and nothing happens. 
+     * @throws std::domain_error if the direction is not any of [-1, 0, 1]
      */
     bool                set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0);
 
@@ -499,7 +502,7 @@ protected:
     /**
      * @brief Interpolate solution at time t using method-specific interpolation.
      * @param[out] result Output array for interpolated state (size Nsys).
-     * @param[in]  t      Time to interpolate at.
+     * @param[in]  t      Time to interpolate at, in the open interval between two states
      * @note Must be implemented by derived class.
      */
     void                    interp_impl(T* result, const T& t) const;
@@ -539,9 +542,7 @@ protected:
 
     // ================================================================================
 
-
     struct Accessor : Derived {
-
         ODECRAFT_ACCESSOR(adapt_impl)
         ODECRAFT_ACCESSOR(interp_impl)
         ODECRAFT_ACCESSOR(local_interp)
@@ -632,6 +633,9 @@ private:
 
     bool    validate_it(StepResult result, const T* state);
     void    set_state(const T& time, T* state);
+
+    bool lt(const T& t_a, const T& t_b) const;
+    bool le(const T& t_a, const T& t_b) const;
 
     template<typename Callable, typename ArrayType>
     bool    generic_advance_until(

@@ -425,8 +425,8 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
         } else {
             *out = std::move(res);
         }
-    } else{
-        assert (interpolate == false && "Output must be provided to return interpolation results");
+    } else {
+        assert (interpolate == false && "Output must be provided to return interpolation result");
     }
     return success;
 }

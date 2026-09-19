@@ -5,9 +5,7 @@
 #include <complex>
 #include <chrono>
 #include <functional>
-#include <omp.h>
 #include <cmath>
-#include <sstream>
 #include <xdiff/xdiff.hpp>
 #include <polybox/polybox.hpp>
 #include <xdiff/tools.hpp>
@@ -240,14 +238,33 @@ bool allEqual(const T* a, const T* b, size_t n){
     return true;
 }
 
+
+/**
+ * @brief Find an equation root using the bisection method
+ * 
+ * @tparam T : Scalar type
+ * @tparam RP : When the solution is found, choose between the left, middle or right converged values
+ * @tparam Callable f(x)
+ * @param f The function to find the root of
+ * @param a lower root bound
+ * @param b upper root bound
+ * @param fa f(a)
+ * @param fb f(b)
+ * @param ftol convergence tolerance: Find x such that f(x) <= ftol
+ * @return T 
+ * @throws std::logic_error if f(a) * f(b) > 0
+ */
 template<typename T, RootPolicy RP, typename Callable>
-T bisect(Callable&& f, T a, T b, const T& ftol){
+T bisect(Callable&& f, T a, T b, T fa, const T& fb, const T& ftol){
+    // The algorithm is such that f(a) and f(b), the initial bounds,
+    // are never called, but are passed as parameters
     T err = 2*ftol+1;
     T m = a;
-    T fa = f(a);
     T fm;
 
-    assert((fa * f(b) <= 0) && "Root not bracketed" );
+    if (fa * fb > 0){
+        throw std::logic_error("Root not bracketed in `bisect`");
+    }
     
     while (err > ftol){
         m = (a + b) / 2;
@@ -275,6 +292,19 @@ T bisect(Callable&& f, T a, T b, const T& ftol){
         return b;
     }
 }
+
+template<typename T, RootPolicy RP, typename Callable>
+T bisect(Callable&& f, const T& a, const T& b, const T& ftol){
+    T fa = f(a);
+    T fb = f(b);
+    return bisect<T, RP>(
+        std::forward<Callable>(f),
+        a,
+        b,
+        fa, fb, ftol
+    );
+}
+
 
 template<typename T>
 void inv_mat_row_major(T* out, const T* mat, size_t N, T* work, size_t* pivot) {
@@ -698,8 +728,6 @@ std::string GetStr(Args&&... args) {
     (out << ... << std::forward<Args>(args));
     return out.str();
 }
-
-
 
 inline void show_progress(int n, int target, const Clock& clock){
     std::cout << "\033[2K\rProgress: " << std::setprecision(2) << n*100./target << "%" <<   " : " << n << "/" << target << "  Time elapsed : " << clock.message() << "      Estimated duration: " << Clock::format_duration(target*clock.seconds()/n) << std::flush;
