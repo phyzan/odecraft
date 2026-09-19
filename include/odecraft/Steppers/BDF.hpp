@@ -45,9 +45,6 @@ template<typename T>
 Array1D<T> arange(size_t a, size_t b);
 
 template<typename T>
-void cumprod(T* res, const T* x, size_t size);
-
-template<typename T>
 void compute_R(T* R, size_t order, T factor);
 
 template<typename T>
@@ -67,6 +64,7 @@ public:
 
     static constexpr int ERR_EST_ORDER = 1;
     static constexpr bool IS_IMPLICIT = true;
+    static constexpr size_t NEWTON_MAXITER = 4;
 
     Stepper method() const;
 
@@ -75,8 +73,6 @@ protected:
     using Base = detail::BaseDispatcher<GetDerived<BDF<T, N, SP, OdeType>, Derived>, T, N, SP, OdeType>;
     using Dlike = Array2D<T, 0, N>;
     struct private_tag{};
-    friend Base::MainSolverType;
-    static constexpr size_t NEWTON_MAXITER = 4;
 
     StepResult      adapt_impl(T* res, const T* state);
     void            interp_impl(T* result, const T& t) const;
@@ -86,15 +82,15 @@ protected:
 
 private:
 
-    void    _reset_impl_alone();
+    void    reset_impl_alone();
 
-    NewtConv _solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale);
+    NewtConv solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale);
 
-    void _change_D(const T& factor);
+    void change_D(const T& factor);
 
-    void _set_prediction(T* y);
+    void set_prediction(T* y);
 
-    void _set_psi(T* psi);
+    void set_psi(T* psi);
 
     JacMat<T, N> _J;
     mutable JacMat<T, N> _B;

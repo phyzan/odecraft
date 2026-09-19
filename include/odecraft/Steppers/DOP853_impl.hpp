@@ -270,14 +270,7 @@ void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, con
     // coef_mat dimensions: size x order (7 columns for DOP853)
     // Implements the Horner-like scheme from scipy with alternating θ and (1-θ)
     // y(θ) = y_old + sum of terms with alternating θ and (1-θ) multiplications
-    if (t == t1){
-        std::copy(y1, y1 + size, result);
-        return;
-    }
-    else if (t == t2){
-        std::copy(y2, y2 + size, result);
-        return;
-    }
+    assert( (t != t1 && t != t2) && "coef_mat_interp_dop853 must only be called on the open interval");
 
     T h = t2 - t1;
     T x = (t - t1) / h;  // θ

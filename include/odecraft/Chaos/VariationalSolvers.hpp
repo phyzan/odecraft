@@ -116,6 +116,7 @@ public:
     // same as in BaseSolver, but we need to redefine it here for the variational system
     static constexpr JacPolicy JP_MAIN = getJacPolicy<T, N, OdeType>();
 
+    /// @throws std::runtime_error if the Jacobian function for the main ODE system is not provided and `atol` is zero.
     VariationalOdeSys(OdeType ode, size_t ode_nsys, T atol);
 
     // Readable aliases for the namespace-scope traits above. The constraints below

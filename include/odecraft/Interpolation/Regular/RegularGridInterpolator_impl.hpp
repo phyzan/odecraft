@@ -4,6 +4,7 @@
 #include <odecraft/Interpolation/Regular/RegularGridInterpolator.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
 
+
 namespace ode::interp::rgi{
 
 
@@ -154,8 +155,12 @@ template<int NDIM, bool AS_VIRTUAL>
 template<size_t... I>
 std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Stepper method, std::index_sequence<I...>) const{
     
-    assert(max_length > ds && max_length > 0 && ds > 0 && "max_length and ds must be positive, and max_length must be greater than ds");
-    assert(density > 1 && "Density must be greater than 1");
+    if (density <= 1){
+        throw std::domain_error("Density must be greater than 1 in streamplot_data");
+    } else if (max_length <= ds || max_length <= 0 || ds <= 0){
+        throw std::domain_error("max_length and ds must be positive, and max_length must be greater than ds");
+    }
+    
     EventList<double> events{};
     pbox::Box<OdeRichSolver<double, NDIM>> solver = make_solver<UtilPolicy::RichVirtual>(method,
         OdeData{

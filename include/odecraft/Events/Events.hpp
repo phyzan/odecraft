@@ -159,7 +159,14 @@ public:
     /// @brief Check if the mask is delayed (showing original state until mask is applied).
     bool                    mask_delayed() const;
 
-    /// @brief Apply the mask transformation to a state.
+    /**
+     * @brief Apply the mask transformation to a state.
+     * 
+     * @param out Output array
+     * @param t time
+     * @param q input array
+     * @throws std::runtime_error if the event has no mask
+     */
     void                    apply_mask(T* out, const T& t, const T* q) const;
 
     /// @brief Get the ODE system size.
@@ -182,7 +189,14 @@ public:
 
     // ------------------------------ MODIFIERS -----------------------------------
 
-    /// @brief Initialize event for use with solver.
+    /**
+     * @brief Initialize event for use with solver.
+     * 
+     * @param t_start Starting time of event detection
+     * @param n_sys Ode system size
+     * @param direction Detection direction (+/- 1)
+     * @throws std::domain_error if the direction is not 1 or -1
+     */
     void                    setup(T t_start, size_t n_sys, int direction);
 
     /// @brief Attempt to locate event in an interval. f(T* out, T t) -> void fills the state vector at time t.

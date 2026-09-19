@@ -172,16 +172,27 @@ State<T> BaseSolver<Derived, T, N, SP, OdeType>::ics() const{
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::interp(T* out, const T& t) const{
-    assert((t*this->direction() >= this->t_old()*this->direction() && t*this->direction() <= this->interp_new_state_ptr()[0]*this->direction()) && "Out of bounds interpolation requested");
-    if (this->t_old() == this->t_new()){
-        const T* vector_new = this->new_state_ptr() + 2;
+    const T* new_state_ptr = this->interp_new_state_ptr();
+    const T& t_new = new_state_ptr[0];
+
+    if (t == this->t_old()) {
+        const T* vector_old = this->old_state_ptr() + 2;
+        std::copy(
+            vector_old,
+            vector_old + this->nsys(),
+            out
+        );
+    } else if (t == t_new){
+        const T* vector_new = new_state_ptr + 2;
         std::copy(
             vector_new,
             vector_new + this->nsys(),
             out
         );
-    } else {
+    } else if (lt(t_old(), t) && lt(t, t_new)){
         return interp_impl(out, t);
+    } else {
+        throw std::out_of_range("Out of bounds interpolation requested");
     }
 }
 
@@ -283,15 +294,20 @@ BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::interpolate_until(cons
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool BaseSolver<Derived, T, N, SP, OdeType>::advance_by(T interval){
-    assert(interval >= 0 && "Interval must be non-negative in advance_by. Its sign is determined by the solver's direction of integration.");
+    if (interval < 0){
+        throw std::logic_error("Interval must be non-negative in advance_by. Its sign is determined by the solver's direction of integration.");
+    }
     return this->advance_until(this->t() + interval*this->direction());
 }
 
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool BaseSolver<Derived, T, N, SP, OdeType>::set_ics(T t0, const T* y0, T stepsize, int direction){
+    
+    if (direction != 1 && direction != -1 && direction != 0){
+        throw std::domain_error("Integration direction must be 1, -1, or 0");
+    }
 
-    assert((direction == 1 || direction == -1 || direction == 0) && "Direction must be 1, -1, or 0");
     direction = (direction == 0) ? this->direction() : direction; // if 0, keep existing direction;
     if (this->validate_ics(t0, y0)){
         if (stepsize < 0) {
@@ -592,7 +608,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::move_state(const T& time){
     if (time != this->t_new()) {
         set_state(time, true_state_.data());
         is_at_new_state_ = false;
-    }else if (!this->is_at_new_state()){
+    } else if (!this->is_at_new_state()){
         // update the true state to the new state, because time is exactly at t_new
         is_at_new_state_ = true;
         true_state_ = new_state_;
@@ -606,6 +622,24 @@ void BaseSolver<Derived, T, N, SP, OdeType>::set_state(const T& time, T* state){
     interp(state+2, time);
 }
 
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+bool BaseSolver<Derived, T, N, SP, OdeType>::lt(const T& t_a, const T& t_b) const {
+    if (direction_ == 1){
+        return t_a < t_b;
+    } else {
+        return t_a > t_b;
+    }
+}
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+bool BaseSolver<Derived, T, N, SP, OdeType>::le(const T& t_a, const T& t_b) const {
+    if (direction_ == 1){
+        return t_a <= t_b;
+    } else {
+        return t_a >= t_b;
+    }
+}
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 template<typename... Args>
@@ -634,14 +668,14 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
                     time_floor = nearest_time(new_floor, time_floor);
                 }
                 
-                if (time_floor*d < t_new()*d){
+                if (lt(time_floor, t_new())){
                     this->move_state(time_floor);
                 }
                 return true;
             }else{
                 return false;
             }
-        } else if (time_floor*d < t_new()*d){
+        } else if (lt(time_floor, t_new())){
             this->move_state(time_floor);
             return true;
         } else {
@@ -662,7 +696,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
                 step_count_++;
             // ==========================================
             T new_floor;
-            if (ODECRAFT_CALL_DERIVED(RequestTimeFloor, new_floor) && new_floor*d < t_new()*d){
+            if (ODECRAFT_CALL_DERIVED(RequestTimeFloor, new_floor) && lt(new_floor, t_new())){
                 assert((new_floor*d > t_old()*d && new_floor*d <= t_new()*d) && "Invalid floor requested without additional requests.");
                 this->move_state(new_floor);
             }

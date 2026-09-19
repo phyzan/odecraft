@@ -300,7 +300,21 @@ const T& LocalInterpolator<T, N>::_t_max() const{
 
 template<typename T, size_t N>
 void LocalInterpolator<T, N>::_call_impl(T* result, const T& t) const{
-    return lin_interp(result, t, _interval.start(), _interval.end(), _q_old.data(), _q.data(), this->array_size());
+    if (t == _interval.start()){
+        std::copy(
+            _q_old.data(),
+            _q_old.data()+this->array_size(),
+            result
+        );
+    } else if (t == _interval.end()) {
+        std::copy(
+            _q.data(),
+            _q.data()+this->array_size(),
+            result
+        );
+    } else {
+        return lin_interp(result, t, _interval.start(), _interval.end(), _q_old.data(), _q.data(), this->array_size());
+    }
 }
 
 
@@ -630,14 +644,8 @@ void LinkedInterpolator<T, N, INTERPOLATOR>::_throw_invalid_interpolant(const In
 
 template<typename T>
 void lin_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, size_t size){
-    if (t == t1){
-        std::copy(y1, y1 + size, result);
-        return;
-    }
-    else if (t == t2){
-        std::copy(y2, y2 + size, result);
-        return;
-    }
+    assert( (t != t1 && t != t2) && "lin_interp must only be called on the open interval");
+
     #pragma omp simd
     for (size_t i=0; i<size; i++){
         result[i] = y1[i] + (y2[i]-y1[i])/(t2-t1) * (t-t1);
@@ -647,14 +655,7 @@ void lin_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, co
 template<typename T>
 void coef_mat_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* coef_mat, size_t order, size_t size){
     //coef_mat dimensions: size x order
-    if (t == t1){
-        std::copy(y1, y1 + size, result);
-        return;
-    }
-    else if (t == t2){
-        std::copy(y2, y2 + size, result);
-        return;
-    }
+    assert( (t != t1 && t != t2) && "coef_mat_interp must only be called on the open interval");
 
     T h = t2-t1;
     T x = (t-t1)/h;
