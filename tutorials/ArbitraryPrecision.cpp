@@ -1,5 +1,5 @@
 #include <odecraft/odecraft.hpp>
-#include <lazy/apps/mpfrLazy.hpp>
+#include <lazex/apps/lazex_mpreal.hpp>
 
 using namespace ode;
 
@@ -54,23 +54,23 @@ int main(){
     run<mpfr::mpreal>("mpfr::mpreal");
 
     /*
-    Run with arbitrary precision using lazy::LazyType<mpfr::mpreal> (set precision to 100 bits)
+    Run with arbitrary precision using lazex::LazyType<mpfr::mpreal> (set precision to 100 bits)
     This is a lazy evaluation wrapper, and drastically reduces the intermediate termporary
     allocations needed to evaluate an algebraic expressions, which become apparent
     when the numerical type performs heap allocations (like mpfr::mpreal does).
 
-    The lazy::LazyType<mpfr::mpreal> type is a drop-in replacement for mpfr::mpreal, and can be used
+    The lazex::LazyType<mpfr::mpreal> type is a drop-in replacement for mpfr::mpreal, and can be used
     in almost any context where mpfr::mpreal is used, producing the exact same results, but with significantly improved performance in many cases.
 
-    Calling lazy::set_default_mpreal_prec(100) automatically calls mpfr::mpreal::set_default_prec(100) internally, but also sets the precision to the currently allocated mpfr::mpreal objects that are
-    used as scratch space for lazy evaluation (see external/xdiff/external/lazy/README.md for more details).
+    Calling lazex::set_default_mpreal_prec(100) automatically calls mpfr::mpreal::set_default_prec(100) internally, but also sets the precision to the currently allocated mpfr::mpreal objects that are
+    used as scratch space for lazy evaluation (see external/xdiff/external/lazex/README.md for more details).
     */
-    lazy::set_default_mpreal_prec(100);
-    run<lazy::LazyType<mpfr::mpreal>>("LazyType<mpfr::mpreal>");
+    lazex::set_default_mpreal_prec(100);
+    run<lazex::LazyType<mpfr::mpreal>>("LazyType<mpfr::mpreal>");
 
     return 0;
 }
 
 /*
-g++ -std=c++20 -O3 -DNDEBUG -march=native -Iinclude -Iexternal/xdiff/include -Iexternal/xdiff/external/lazy/include -Iexternal/polybox/include -Iexternal/ndspan/include tutorials/ArbitraryPrecision.cpp -o arbitrary_precision -lmpfr -lgmp && ./arbitrary_precision
+g++ -std=c++20 -O3 -DNDEBUG -march=native -Iinclude -Iexternal/xdiff/include -Iexternal/xdiff/external/lazex/include -Iexternal/polybox/include -Iexternal/ndspan/include tutorials/ArbitraryPrecision.cpp -o arbitrary_precision -lmpfr -lgmp && ./arbitrary_precision
 */

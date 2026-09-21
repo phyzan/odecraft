@@ -1,15 +1,14 @@
-#include "lazy/src/core.hpp"
 #include <odecraft/odecraft.hpp>
-#include <lazy/apps/mpfrLazy.hpp>
+#include <lazex/apps/lazex_mpreal.hpp>
 
 using namespace ode;
 
 void test_lazy_scalar(){
     using A = mpfr::mpreal;
-    using T = lazy::LazyType<A>; //set T = A for performance comparison.
+    using T = lazex::LazyType<A>; //set T = A for performance comparison.
 
     // mpfr::mpreal::set_default_prec(256);
-    lazy::set_default_mpreal_prec(256);
+    lazex::set_default_mpreal_prec(256);
     auto y0 = std::vector<T>{1, -3};
 
     auto solver = getSolver<Stepper::BDF, SolverPolicy::Static>(

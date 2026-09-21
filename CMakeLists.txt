@@ -25,7 +25,7 @@ option(ODECRAFT_RK4_DENSE "Enable accurate RK4 dense output for the RK4 solver (
 option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
 option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
 option(ODECRAFT_USE_FLAT_AUTODIFF "Use the flat dual layout for compile-time sized systems (dynamic ones stay nested)" OFF)
-option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazy::LazyType<mpfr::mpreal> instead of plain mpfr::mpreal" ON)
+option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazex::LazyType<mpfr::mpreal> instead of plain mpfr::mpreal" ON)
 
 # ON when odecraft is configured directly, OFF when another project pulls it in via add_subdirectory/FetchContent
 if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
@@ -52,11 +52,11 @@ if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(ODECRAFT_DEBUG_BUILD ON)
 endif()
 
-# ode::crafted is compiled for mpreal_t as well as the built-in floats, so it needs lazy::mpfr
-# (mpreal.h plus the mpfr/gmp system libraries). LAZY_ENABLE_MPREAL is consumed while xdiff is
+# ode::crafted is compiled for mpreal_t as well as the built-in floats, so it needs lazex::mpfr
+# (mpreal.h plus the mpfr/gmp system libraries). LAZEX_ENABLE_MPREAL is consumed while xdiff is
 # configured below, hence setting it here.
 if(ODECRAFT_BUILD_CRAFTED)
-    set(LAZY_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
+    set(LAZEX_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
 endif()
 
 #===========================================================================================
@@ -169,7 +169,7 @@ if(ODECRAFT_BUILD_CRAFTED)
 
     # PUBLIC: anything linking odecraft::crafted also gets the headers and the header-only
     # interface, so <odecraft/Compiled/odecraft.hpp> is all a consumer needs to include.
-    target_link_libraries(odecraft_crafted PUBLIC odecraft::odecraft lazy::mpfr)
+    target_link_libraries(odecraft_crafted PUBLIC odecraft::odecraft lazex::mpfr)
 
     # Tools.hpp includes <omp.h> and the steppers use `#pragma omp simd`, so OpenMP is not
     # optional here; it is PUBLIC so consumers link the runtime too.

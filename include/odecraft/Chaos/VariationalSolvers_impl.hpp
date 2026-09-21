@@ -102,7 +102,7 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
         DualType<T, N, 1>::with_default_nvars(n,
             [&](){
                 decltype(auto) out_duals = scratch.duals(); // n size
-                ode_.Rhs(out_duals.data(), t, SeedVec<T, N, 1>{q, n, 1});
+                ode_.Rhs(out_duals.data(), t, SeedVec<T, N, 1>{q, int(n), 1});
                 std::fill(out+n, out+2*n, 0);
                 for (size_t j=0; j<n; j++){
                     out[j] = out_duals[j].value();
@@ -158,7 +158,7 @@ void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const
             [&](){
                 decltype(auto) out_dduals = scratch.dduals(); // n size
 
-                ode_.Rhs(out_dduals.data(), t, SeedVec<T, N, 2>{q, n, 2});
+                ode_.Rhs(out_dduals.data(), t, SeedVec<T, N, 2>{q, int(n), 2});
 
                 MutView<T, ndspan::Layout::F, 2*N, 2*N> m(out, 2*n, 2*n);
                 for (size_t i=0; i<n; i++){

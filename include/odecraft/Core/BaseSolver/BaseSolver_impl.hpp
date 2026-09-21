@@ -34,7 +34,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* out, const T& t, const T* q)
 
         const size_t nsys = this->nsys();
         DualType<T, N, 1>::with_default_nvars(nsys, [&](){
-            ode_.Rhs(out_duals.data(), t, SeedVec<T, N, 1>{q, nsys, 1});
+            ode_.Rhs(out_duals.data(), t, SeedVec<T, int(N), 1>{q, int(nsys), 1});
             for (size_t i=0; i<nsys; i++){
                 for (size_t j=0; j<nsys; j++){
                     jacmat(i, j) = out_duals[i].get_diff_wrt(j);

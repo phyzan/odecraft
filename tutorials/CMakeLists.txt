@@ -22,10 +22,10 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS STREQUAL "")
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
-# ArbitraryPrecision.cpp runs the solvers on mpfr::mpreal, so it needs lazy::mpfr, which only
-# exists when lazy is configured with this option. lazy is configured from inside odecraft's
+# ArbitraryPrecision.cpp runs the solvers on mpfr::mpreal, so it needs lazex::mpfr, which only
+# exists when lazex is configured with this option. lazex is configured from inside odecraft's
 # own CMakeLists, so this has to be set before pulling that in below.
-set(LAZY_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
+set(LAZEX_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
 
 file(GLOB ODECRAFT_TUTORIAL_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
@@ -82,11 +82,11 @@ foreach(tutorial_src IN LISTS ODECRAFT_TUTORIAL_SOURCES)
     target_link_options(${tutorial_name} PRIVATE ${ODECRAFT_TUTORIAL_LINK_OPTIONS})
 endforeach()
 
-# ArbitraryPrecision additionally needs the MPFR-enabled lazy target.
+# ArbitraryPrecision additionally needs the MPFR-enabled lazex target.
 if(TARGET ArbitraryPrecision)
-    if(TARGET lazy::mpfr)
-        target_link_libraries(ArbitraryPrecision PRIVATE lazy::mpfr)
+    if(TARGET lazex::mpfr)
+        target_link_libraries(ArbitraryPrecision PRIVATE lazex::mpfr)
     else()
-        message(FATAL_ERROR "ArbitraryPrecision needs lazy::mpfr; configure with -DLAZY_ENABLE_MPREAL=ON")
+        message(FATAL_ERROR "ArbitraryPrecision needs lazex::mpfr; configure with -DLAZEX_ENABLE_MPREAL=ON")
     endif()
 endif()

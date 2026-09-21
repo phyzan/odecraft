@@ -48,7 +48,7 @@ template<typename T, size_t N, size_t Order>
 using DualType = xdiff::Dual<T, (N == 0 ? -1 : int(N)), Order, dual_layout<N>>;
 
 template<typename T, size_t N, size_t Order>
-using SeedVec = xdiff::SeedVector<T, (N == 0 ? -1 : int(N)), Order, dual_layout<N>>;
+using SeedVec = xdiff::SeedVector<T, (N == 0 ? -1 : int(N)), int(Order), dual_layout<N>>;
 
 
 template<typename T, size_t N>
@@ -61,13 +61,13 @@ namespace detail {
 
 template<typename F, typename T, size_t N, size_t Order>
 concept supportsDualRhsAt =
-    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, Order> q) {
+    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, int(Order)> q) {
         { f.Rhs(out, t, q) } -> std::same_as<void>;
     };
 
 template<typename F, typename T, size_t N, size_t Order>
 concept supportsDualJacAt =
-    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, Order> q) {
+    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, int(Order)> q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
     };
 
