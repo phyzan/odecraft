@@ -19,7 +19,7 @@
  */
 
 #include <odecraft/Toolkit/Tools.hpp>
-#include <lazy/apps/mpfrLazy.hpp>
+#include <lazex/apps/lazex_mpreal.hpp>
 
 
 
@@ -33,7 +33,7 @@
 namespace ode::crafted{
 
 #ifdef ODECRAFT_USE_LAZY_MPREAL
-using mpreal_t = lazy::LazyType<mpfr::mpreal>;
+using mpreal_t = lazex::LazyType<mpfr::mpreal>;
 #else
 using mpreal_t = mpfr::mpreal;
 #endif

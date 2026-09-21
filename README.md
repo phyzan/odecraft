@@ -60,7 +60,7 @@ Configure the project with some [options](#CMake-options) and build it:
 ```bash
 cmake -S . -B build \
   -DXDIFF_LAZY_NESTED_DUAL=ON \
-  -DLAZY_MPFR_RND=MPFR_RNDN \
+  -DLAZEX_MPFR_RND=MPFR_RNDN \
   -DXDIFF_FAST=ON \
   -DXDIFF_LEIBNIZ_OPT=OFF \
   -DXDIFF_SCALAR_OPTIMIZATIONS=ON \
@@ -124,9 +124,9 @@ CMake options that toggle preprocessor macros across the library and its bundled
 | `ODECRAFT_USE_FLAT_AUTODIFF` | Store automatic-differentiation duals in `xdiff`'s flat layout (a single contiguous array) for systems whose size `N` is known at compile time. Dynamically sized systems (`N == 0`) stay on the nested layout either way, since the flat one needs its variable count at compile time. Off by default, so every system uses the nested layout. |
 | `DEBUG` | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
 | `ODECRAFT_BUILD_CRAFTED` | Build the API for the `ode::crafted` namespace. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
-| `ODECRAFT_USE_LAZY_MPREAL` | Compile `ode::crafted`'s `mpreal_t` as `lazy::LazyType<mpfr::mpreal>` instead of plain `mpfr::mpreal`. The lazy wrapper elides temporaries in compound expressions, a large win for MPFR where every temporary is a heap allocation. **On by default**; turn it off for plain `mpfr::mpreal`. Either way the type is spelled `mpreal_t`, so nothing else in your code changes. |
+| `ODECRAFT_USE_LAZY_MPREAL` | Compile `ode::crafted`'s `mpreal_t` as `lazex::LazyType<mpfr::mpreal>` instead of plain `mpfr::mpreal`. The lazy wrapper elides temporaries in compound expressions, a large win for MPFR where every temporary is a heap allocation. **On by default**; turn it off for plain `mpfr::mpreal`. Either way the type is spelled `mpreal_t`, so nothing else in your code changes. |
 
-See useful [options](https://github.com/phyzan/xdiff#macros) for the `xdiff` submodule.
+See useful [options](https://github.com/phyzan/xdiff#CMake-Options) for the `xdiff` submodule.
 
 
 ---
@@ -139,7 +139,7 @@ See useful [options](https://github.com/phyzan/xdiff#macros) for the `xdiff` sub
 - **Memory efficient**: Solvers preallocate memory for zero heap (de)allocations between steps
 - **Flexible solver policies**: Choose between static, rich, virtual, and rich-virtual solvers for performance vs. flexibility trade-offs
 - **Extensible**: Easily add new solvers or event types
-- **Template-based**: Allows for any numeric type including arbitrary precision (MPFR), supports automatic differentiation via [XDiff](https://github.com/phyzan/xdiff), lazy evaluation via [lazy](https://github.com/phyzan/lazy), and more
+- **Template-based**: Allows for any numeric type including arbitrary precision (MPFR), supports automatic differentiation via [XDiff](https://github.com/phyzan/xdiff), lazy evaluation via [LazeX](https://github.com/phyzan/lazex), and more
 - **Dynamical systems analysis**: Built-in support for variational equations and Lyapunov exponent calculations
 
 ##
@@ -162,7 +162,7 @@ Include `<odecraft/Compiled/odecraft.hpp>` for all of it, or a single header for
 | `observer_t<T>` | `bool(const T& t, const T* q, const T* t_ptr)` |
 | `interp_t<T>` | `void(T* out, const T& t)` |
 | `ode_t<T>` | `OdeData<rhs_t<T>, rhs_t<T>>` — the one system type the interface accepts |
-| `mpreal_t` | `lazy::LazyType<mpfr::mpreal>`, or plain `mpfr::mpreal` with `ODECRAFT_USE_LAZY_MPREAL=OFF` — the fourth compiled scalar |
+| `mpreal_t` | `lazex::LazyType<mpfr::mpreal>`, or plain `mpfr::mpreal` with `ODECRAFT_USE_LAZY_MPREAL=OFF` — the fourth compiled scalar |
 
 `ode_t<T>`'s Jacobian is optional: leave it null and the implicit steppers fall back to finite
 differences. Supply one where you can — `BDF` and the variational solvers benefit most, and with a
@@ -172,7 +172,7 @@ type-erased Rhs there is no autodiff to fall back on.
 
 | Function | Purpose |
 |----------|---------|
-| `set_mpreal_prec(prec)` | Set the working precision in bits. Dispatches to `lazy::set_default_mpreal_prec` or `mpfr::mpreal::set_default_prec` depending on the backend. |
+| `set_mpreal_prec(prec)` | Set the working precision in bits. Dispatches to `lazex::set_default_mpreal_prec` or `mpfr::mpreal::set_default_prec` depending on the backend. |
 | `get_default_prec()` | The precision that new `mpreal_t` values are created with. Named after, and forwarding to, `mpfr::mpreal::get_default_prec`. |
 
 Call `set_mpreal_prec` **before** constructing anything on `mpreal_t`: MPFR fixes an object's
@@ -413,20 +413,20 @@ int main(){
 ```
 
 However, `mpfr::mpreal` performs heap allocation when instantiated, and every intermediate algebraic expression
-creates a temporary `mpreal` object. This can be avoided by using the `lazy` library, which allows for lazy evaluation of expressions and avoids unnecessary temporaries. See the [lazy](https://github.com/phyzan/lazy) submodule for more details. In practice, it can be used exactly like `mpreal` in most cases, by simply replacing `mpfr::mpreal` with `lazy::LazyType<mpfr::mpreal>` in the code above, using
+creates a temporary `mpreal` object. This can be avoided by using the `lazex` library, which allows for lazy evaluation of expressions and avoids unnecessary temporaries. See the [lazex](https://github.com/phyzan/lazex) submodule for more details. In practice, it can be used exactly like `mpreal` in most cases, by simply replacing `mpfr::mpreal` with `lazex::LazyType<mpfr::mpreal>` in the code above, using
 ```cpp
-#include <lazy/apps/mpfrLazy.hpp>
+#include <lazex/apps/lazex_mpreal.hpp>
 ```
 and calling
 ```cpp
-lazy::set_default_mpreal_prec(prec);
+lazex::set_default_mpreal_prec(prec);
 ```
 instead of
 ```cpp
 mpfr::mpreal::set_default_prec(prec);
 ```
 
-For instance, this [example](tutorials/CompileTimeEvents.cpp) demonstrates the performance difference between `mpreal` and `lazy::LazyType<mpfr::mpreal>` for a simple harmonic oscillator.
+For instance, this [example](tutorials/CompileTimeEvents.cpp) demonstrates the performance difference between `mpreal` and `lazex::LazyType<mpfr::mpreal>` for a simple harmonic oscillator.
 
 Note that as the number of requested bits of precision increases, the performance difference diminishes,
 and the overhead of algebraic evaluations dominates.
@@ -582,7 +582,7 @@ odecraft/
 │                                    #   one translation unit per Compiled/ header
 │
 ├── external/                        # Git submodules (bundled header-only dependencies)
-│   ├── xdiff/                       # Automatic differentiation library (bundles its own `lazy` + `mpreal` submodules)
+│   ├── xdiff/                       # Automatic differentiation library (bundles its own `lazex` + `mpreal` submodules)
 │   ├── ndspan/                      # Multi-dimensional array views and utilities
 │   ├── polybox/                     # Wrapper for dynamically allocated types
 │   └── qhull/                       # Convex hull library (for Delaunay triangulation)
@@ -594,7 +594,7 @@ odecraft/
 │
 ├── tutorials/                       # Standalone example programs referenced from the README
 │   ├── CMakeLists.txt               # Standalone project, pulls odecraft in as a subproject
-│   ├── ArbitraryPrecision.cpp       # Arbitrary-precision (mpreal / lazy) usage
+│   ├── ArbitraryPrecision.cpp       # Arbitrary-precision (mpreal / lazex) usage
 │   ├── Autodiff.cpp                 # Automatic differentiation vs analytic / finite-difference Jacobians
 │   ├── CompileTimeEvents.cpp        # Compile-time event system usage
 │   ├── MPRealCrafted.cpp            # mpreal_t through the compiled `ode::crafted` interface

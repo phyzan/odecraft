@@ -214,5 +214,5 @@ int main(){
 }
 
 /*
-g++ -std=c++20 -O3 -Iinclude -Iexternal/xdiff/include -Iexternal/xdiff/external/lazy/include -Iexternal/polybox/include -Iexternal/ndspan/include tutorials/CompileTimeEvents.cpp -o compile_time_events && ./compile_time_events
+g++ -std=c++20 -O3 -Iinclude -Iexternal/xdiff/include -Iexternal/xdiff/external/lazex/include -Iexternal/polybox/include -Iexternal/ndspan/include tutorials/CompileTimeEvents.cpp -o compile_time_events && ./compile_time_events
 */
