@@ -60,7 +60,42 @@ template<SolverPolicy SP>
 constexpr bool is_rich = (SP == SolverPolicy::RichStatic || SP == SolverPolicy::RichVirtual);
 
 
+// Stepper -> string
+inline const char* integrator_name(Stepper method){
+    
+    switch (method){
+        case Stepper::Euler: return "Euler";
+        case Stepper::RK4: return "RK4";
+        case Stepper::RK23: return "RK23";
+        case Stepper::RK45: return "RK45";
+        case Stepper::DOP853: return "DOP853";
+        case Stepper::BDF: return "BDF";
+        default: throw std::runtime_error("Unknown integrator enum value");
+    }
+}
 
+// string -> Stepper
+inline Stepper getIntegrator(const char* name){
+    if (strcmp(name, "Euler") == 0){
+        return Stepper::Euler;
+    } else if (strcmp(name, "RK4") == 0){
+        return Stepper::RK4;
+    } else if (strcmp(name, "RK23") == 0){
+        return Stepper::RK23;
+    } else if (strcmp(name, "RK45") == 0){
+        return Stepper::RK45;
+    } else if (strcmp(name, "DOP853") == 0){
+        return Stepper::DOP853;
+    } else if (strcmp(name, "BDF") == 0){
+        return Stepper::BDF;
+    } else {
+        throw std::runtime_error("Unknown integrator name");
+    }
+}
+
+inline Stepper getIntegrator(const std::string& name){
+    return getIntegrator(name.c_str());
+}
 
 template<typename ReturnType, typename Callable, typename... Args>
 inline ReturnType choose_integrator_case(Stepper method, Callable&& callable, Args&&... args){

@@ -33,6 +33,11 @@ public:
     template<typename... Args>
     StaticEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args);
 
+    template<size_t I>
+    const auto& objective() const {
+        return std::get<I>(obj);
+    }
+
     void Reset();
 
     bool is_at_objective() const;
