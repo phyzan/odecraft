@@ -84,13 +84,9 @@ template<typename T, size_t N>
 inline constexpr bool scratch_is_static = (N > 0) && std::is_trivially_copyable_v<T>
                                           && std::is_trivially_default_constructible_v<T>;
 
-// Scratch storage. If a function requires a scratch buffer for a state vector,
-// meaning that the size is (nsys+2), then the scratch buffer is allocated on the stack
-// if the system size is known at compile time and the scalar type is trivially copyable and default constructible (e.g. double)
-// Otherwise, it is allocated on the heap once in the constructor and reused (e.g. mpfr::mpreal or dynamic size system of any type).
+
 template<typename T, size_t N>
-using ScratchState = Array1D<T, (N > 0 ? N+2 : 0),
-                           scratch_is_static<T, N> ? Allocation::Auto : Allocation::Heap>;
+using StepperState = Array1D<T, (N > 0 ? N+2 : 0)>;
 
 template<typename T, size_t N>
 class StaticSolverScratch{
@@ -101,7 +97,8 @@ public:
         assert(nsys == N && "SolverScratchSpace: nsys must match template parameter N for fixed-size systems.");
     }
 
-    ScratchState<T, N> state() const {return ScratchState<T, N>{};}
+    Array1D<T, N> vector() const {return Array1D<T, N>{};}
+    StepperState<T, N> state() const {return StepperState<T, N>{};}
     Array1D<T, 4*N> four_state_cache() const {return Array1D<T, 4*N>{};}
     Array1D<T, N> ics_cache() const {return Array1D<T, N>{};}
     Array1D<DualType<T, N, 1>, N> duals() const {return Array1D<DualType<T, N, 1>, N>{};}
@@ -115,14 +112,16 @@ class DynamicSolverScratch{
 
 public:
 
-    DynamicSolverScratch(size_t nsys) : state_(nsys+2), four_state_cache_(4*nsys), ics_cache_(nsys), duals_(nsys) {}
+    DynamicSolverScratch(size_t nsys) : vector_(nsys), state_(nsys+2), four_state_cache_(4*nsys), ics_cache_(nsys), duals_(nsys) {}
 
-    ScratchState<T, N>& state() const {return state_;}
+    Array1D<T, N>& vector() const {return vector_;}
+    StepperState<T, N>& state() const {return state_;}
     Array1D<T, 4*N>& four_state_cache() const {return four_state_cache_;}
     Array1D<T, N>& ics_cache() const {return ics_cache_;}
     Array1D<DualType<T, N, 1>, N>& duals() const {return duals_;}
 private:
-    mutable ScratchState<T, N> state_; // for trying the next step
+    mutable Array1D<T, N> vector_; // vector allocated for any other use
+    mutable StepperState<T, N> state_; // for trying the next step
     mutable Array1D<T, 4*N> four_state_cache_; // for approx jac and auto step
     mutable Array1D<T, N> ics_cache_; // for trying the next step with modified ICs
     mutable Array1D<DualType<T, N, 1>, N> duals_; // for autodiff when JP==JacPolicy::Autodiff
@@ -207,8 +206,8 @@ public:
     /// @brief Get the time value from the previous accepted step.
     const T&            t_old() const;
 
-    /// @brief Get a view of the current state vector.
-    View1D<T, N>        vector() const;
+    /// @brief Fills the values of an array with those of the current true state vector
+    void                fill_current_vector(T* out) const;
 
     /// @brief Get a view of the state vector from the newest computed step.
     View1D<T, N>        vector_new() const;
@@ -413,7 +412,7 @@ public:
     const T&            get_time() const { return t(); }
     const T&            get_new_time() const { return t_new(); }
     const T&            get_old_time() const { return t_old(); }
-    View1D<T, N>        get_vector() const { return vector(); }
+    void                get_current_vector(T* out) const { this->fill_current_vector(out); }
     View1D<T, N>        get_new_vector() const { return vector_new(); }
     View1D<T, N>        get_old_vector() const { return vector_old(); }
     State<T>            get_ics() const { return ics(); }
@@ -509,6 +508,8 @@ protected:
 
     auto                    local_interp() const;
 
+    void                fill_current_vector_impl(T* out) const;
+
     // ================================================================================
 
     // ========================= STATIC OVERRIDES (OPTIONAL) ==========================
@@ -525,7 +526,6 @@ protected:
     /**
     @brief Re-adjustment hook right before new_state modification. Derived should call base first.
     @param new_vector New state vector values (size Nsys).
-
     @note Nothing has changed yet when this is called; it's a chance to update any internal data before the state is modified. The new state will be set to (t(), stepsize(), new_vector),
     where t() is the true current time, which might lie between old_state and new_state (e.g. if an event occurred).
     */
@@ -549,6 +549,7 @@ protected:
         ODECRAFT_ACCESSOR_TEMPLATE(Adv_Impl)  // Template member function
         ODECRAFT_ACCESSOR(RequestTimeFloor)
         ODECRAFT_ACCESSOR(ReAdjust)
+        ODECRAFT_ACCESSOR(fill_current_vector_impl)
         ODECRAFT_ACCESSOR(validate_ics_impl)
     };
 
@@ -566,20 +567,21 @@ protected:
     /// @brief Get pointer to the initial conditions state data.
     const T*    ics_ptr() const;
 
-    /// @brief Get pointer to the current "true" state.
-    const T*    true_state_ptr() const;
-
-    /// @brief Get pointer to the previous "true" state.
-    const T*    last_true_state_ptr() const;
-
     /// @brief Get pointer to the most recently computed state.
     const T*    new_state_ptr() const;
 
+    /// @brief Borrow the scratch buffer for one state vector.
+    ///
+    /// Bind with `decltype(auto)`, never `auto`: DynamicSolverScratch hands out a
+    /// reference to a persistent member and StaticSolverScratch a by-value
+    /// temporary, and `auto` would copy the former and drop the size of the latter.
+    /// The buffer is shared, so fill it and consume it within one statement block,
+    /// and do not hold it across a call that may borrow it again. The only other
+    /// borrowers are the observer hand-offs in generic_advance_until().
+    decltype(auto) scratch_vector() const { return scratch_.vector(); }
+
     /// @brief Get pointer to the previous accepted state.
     const T*    old_state_ptr() const;
-
-    /// @brief Get pointer to the correct new state for interpolation
-    const T*    interp_new_state_ptr() const;
 
     /// @brief Print a warning that the solver is dead.
     void        warn_dead() const;
@@ -632,7 +634,6 @@ protected:
 private:
 
     bool    validate_it(StepResult result, const T* state);
-    void    set_state(const T& time, T* state);
 
     bool lt(const T& t_a, const T& t_b) const;
     bool le(const T& t_a, const T& t_b) const;
@@ -662,8 +663,8 @@ private:
     /// @brief Only use inside Adv_Impl (so that if the state here is updated, all derived classes are aware). Move the current state to a new time between the current time and the most recently adapted state. This is a lowlevel operation, so use carefully or the intended bahavior might break.
     void                    move_state(const T& time);
     
-    detail::ScratchState<T, N> ics_state_, old_state_, new_state_, true_state_, interp_state_;
-    T rtol_, atol_, min_step_, max_step_;
+    detail::StepperState<T, N> ics_state_, old_state_, new_state_;
+    T t_, habs_, rtol_, atol_, min_step_, max_step_;
     detail::SolverScratchSpace<T, N> scratch_;
     OdeType         ode_;
     size_t          nsys_ = N;
@@ -675,7 +676,6 @@ private:
     bool            diverges_ = false;
     bool            is_running_ = true;
     bool            ics_is_valid_ = false;
-    bool            use_new_state_ = true; //for interpolation purposes
     bool            is_at_new_state_ = true;
 };
 

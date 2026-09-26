@@ -146,15 +146,20 @@ protected:
     template<typename... Args>
     bool        Adv_Impl(Args&&... args);
 
-    /**
-     * @brief Re-adjustment hook for state changes at events.
-     * @param new_vector New state vector values (size Nsys).
-     */
+    /// @brief Re-adjustment hook for state changes at events.
     void ReAdjust(const T* new_vector);
 
     struct Accessor : Base::Accessor {};
     
     //================= STATIC OVERRIDES ======================
+    
+    /// @brief Current state, serving a pending immediate mask from the event collection.
+    ///
+    /// An immediate mask must show its transformed state as soon as the event is reported,
+    /// but the ReAdjust that writes it into new_state_ is deferred so that the step stays
+    /// interpolable for dense output. Between those two points the masked vector is read
+    /// from evt_col's MaskedState, which stores it outside the solver's state buffers.
+    void fill_current_vector_impl(T* out) const;
 
     bool    RequestTimeFloor(T& out);
     //=========================================================

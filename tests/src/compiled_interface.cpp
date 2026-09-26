@@ -78,7 +78,9 @@ static void run_steppers(){
             View1D<double>{q0.data(), 2}, 1e-10, 1e-10, 0, 0, stepsize, 1);
 
         solver->do_advance_until(tmax);
-        check_close(solver->get_vector()[0], std::cos(tmax), tol, std::string(name) + " x(2)");
+        auto qf = q0;
+        solver->get_current_vector(qf.data());
+        check_close(qf[0], std::cos(tmax), tol, std::string(name) + " x(2)");
     }
 }
 
@@ -99,12 +101,10 @@ static void run_ode_driver(){
 
     // Dense output: an OdeSolution answers at times that were never sampled.
     //
-    // Built on a fresh ODE rather than reusing the one above via reset(). BaseSolver::Reset()
-    // restores every state field except is_at_new_state_, so a reset solver reports that it is
-    // not at a new state and rich_integrate_until() then builds a dense-output interval over
-    // [t_old, t] == [t0, t0] and throws "Zero interval not allowed". That is a pre-existing
-    // header-only bug, unrelated to the compiled interface -- it reproduces just as readily
-    // through namespace ode.
+    // Built on a fresh ODE rather than reusing the one above, which has already integrated to
+    // t=10: asking that one for dense output up to the same t=10 is a zero-length span, and
+    // rich_integrate_until() then reports false instead of filling `solution`. Calling reset()
+    // first would work too; a fresh object just keeps the two checks independent.
     std::array<double, 2> q0b = {1.0, 0.0};
     ODE<double> ode_dense(ode_t<double>{.Rhs = rhs}, 0.0, View1D<double>{q0b.data(), 2},
                           1e-12, 1e-12, 0, 0, 0, 1, {}, Stepper::RK45);

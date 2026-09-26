@@ -58,6 +58,8 @@ public:
 
     const std::string& name(size_t i) const;
 
+    OrbitData<T>& data(size_t i);
+
     void allocate_event(const std::string& name);
 
     void add_event(size_t event_idx, const T& t, const T* q);

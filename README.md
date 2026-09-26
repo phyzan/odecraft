@@ -332,7 +332,7 @@ The `BaseSolver` class provides a common interface for all solvers, with the fol
 void                Rhs(T* out, const T& t, const T* q) const; // Compute the right-hand side of the ODE system
 void                Jac(T* out, const T& t, const T* q) const; // Compute the Jacobian of the ODE system (optional)
 const T&            t() const; // Get the current time
-View1D<T, N>        vector() const; // Get the current state vector
+View1D<T, N>        vector_new() const; // Get the state vector of the newest step
 State<T>            ics() const; // Get the initial conditions
 bool                is_running() const; // Check if the solver can still advance (e.g. has no NaNs/Infs)
 bool                is_dead() const; // Returns !is_running()
@@ -405,8 +405,8 @@ int main(){
     );
 
     solver->do_advance_until(1000);
-    const T& x = solver->get_vector()[0];
-    const T& v = solver->get_vector()[1];
+    const T& x = solver->get_new_vector()[0];
+    const T& v = solver->get_new_vector()[1];
     std::cout << "Final state: " << x << ", " << v << std::endl;
     return 0;
 }

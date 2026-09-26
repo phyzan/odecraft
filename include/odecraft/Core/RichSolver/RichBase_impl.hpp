@@ -43,7 +43,9 @@ std::vector<size_t> RichSolver<Derived, T, N, SP, OdeType>::toEventIdx(const std
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void RichSolver<Derived, T, N, SP, OdeType>::show_state(int prec) const{
-    SolverRichState<T, N>(this->vector().data(), this->t(), this->stepsize(), this->nsys(), this->diverges(), this->is_running(), this->step_count(), this->status(), this->current_event().event ? this->current_event().event->name() : "").show(prec);
+    decltype(auto) vector = this->scratch_vector();
+    this->fill_current_vector(vector.data());
+    SolverRichState<T, N>(vector.data(), this->t(), this->stepsize(), this->nsys(), this->diverges(), this->is_running(), this->step_count(), this->status(), this->current_event().event ? this->current_event().event->name() : "").show(prec);
 }
 
 // PUBLIC MODIFIERS
@@ -126,6 +128,20 @@ void RichSolver<Derived, T, N, SP, OdeType>::Reset(){
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+void RichSolver<Derived, T, N, SP, OdeType>::fill_current_vector_impl(T* out) const{
+    if (is_at_canon_event && !evt_col.event(current_idx).mask_delayed()){
+        // Immediate mask, ReAdjust still pending: the masked state is the current one, but
+        // it has not been written into new_state_ yet. A delayed mask deliberately falls
+        // through, since it shows the unmasked state until it has been processed.
+        const MaskedState<T>* ms = evt_col.masked_state();
+        assert(ms != nullptr && "Solver is at a canon event but has no masked state");
+        std::copy(ms->masked_vector.data(), ms->masked_vector.data() + this->nsys(), out);
+    } else {
+        Base::fill_current_vector_impl(out);
+    }
+}
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void RichSolver<Derived, T, N, SP, OdeType>::ReAdjust(const T* new_vector){
     Base::ReAdjust(new_vector);
     is_at_canon_event = false;
@@ -162,11 +178,14 @@ template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> 
 bool RichSolver<Derived, T, N, SP, OdeType>::push_event_queue(){
     if (is_event_waiting && evt_col.get_time(size_t(detection_idx+1)) == this->t()){
         current_idx = evt_col.get_event_idx(size_t(++detection_idx));
-        // determine if this one is a canon event
+        // determine if this one is a canon event. The ReAdjust that applies the mask is
+        // deferred to the next Adv_Impl for delayed and immediate masks alike: it collapses
+        // old_state_/new_state_, and until it runs this step stays interpolable, which is
+        // what lets dense output cover the part of it already traversed. An immediate mask
+        // still *reports* the masked state right away -- fill_current_vector serves it from
+        // evt_col's MaskedState, which holds it outside the solver's own buffers.
         if (const MaskedState<T>* ms = evt_col.masked_state()){
-            if ((is_at_canon_event = static_cast<bool>(ms->idx == current_idx)) && !evt_col.event(current_idx).mask_delayed()){
-                ODECRAFT_CALL_DERIVED(ReAdjust, ms->masked_vector.data());
-            }
+            is_at_canon_event = static_cast<bool>(ms->idx == current_idx);
         }
         // determine if there is another event after this one
         is_event_waiting = size_t(detection_idx) < evt_col.detection_size() - 1;
@@ -198,9 +217,8 @@ bool RichSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
     } else if (this->at_canon_event()) {
         const MaskedState<T>* ms = evt_col.masked_state();
         assert(ms != nullptr && "Solver is at a canon event but has no masked state");
-        if (this->current_event().event->mask_delayed()){
-            ODECRAFT_CALL_DERIVED(ReAdjust, ms->masked_vector.data());
-        } // if the mask is not delayed, the state has already been ReAdjusted
+        // Both mask kinds land here now; see push_event_queue for why it is deferred.
+        ODECRAFT_CALL_DERIVED(ReAdjust, ms->masked_vector.data());
     }
     
     if (this->is_at_new_state()){

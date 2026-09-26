@@ -78,7 +78,9 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
         while ((res = (this->is_running() && Accessor::call_Adv_Impl(*THIS, time))) && (time != this->t())){
             bool obs_res;
             if constexpr (isObserver<Callable, T>){
-                obs_res = observer(this->t(), this->true_state_ptr()+2, nullptr);
+                decltype(auto) vector = this->scratch_.vector();
+                this->fill_current_vector(vector.data());
+                obs_res = observer(this->t(), vector.data(), nullptr);
             } else{
                 obs_res = true;
             }
@@ -91,7 +93,9 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
         if (res){
             const T* t_ptr = (!explicit_steps || (has_checkpoints && t_dual == time)) ? &t_dual : nullptr;
             if constexpr (isObserver<Callable, T>){
-                observer(this->t(), this->true_state_ptr()+2, t_ptr);
+                decltype(auto) vector = this->scratch_.vector();
+                this->fill_current_vector(vector.data());
+                observer(this->t(), vector.data(), t_ptr);
             }            
             return true;
         } else {
@@ -131,14 +135,18 @@ template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> 
 template<typename Callable>
 BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_until(const T& time, Callable&& observer){
 
+    // The chain grows as alternating point / open-interval / point entries, and always ends
+    // on a point at the last time reached. Each callback bridges from that point to wherever
+    // the solver now is, rather than appending the whole [t_old, t_new] step: a step is only
+    // partly traversed whenever the solver stops inside it, so appending all of it overshoots.
+    // That overshoot used to be reconciled later, when the solver came back round to t_new
+    // exactly -- but after a masked event it restarts from the event and never reaches t_new,
+    // leaving the chain permanently past its own end.
     pbox::Box<LinkedInterpolator<T, N>> interp;
-    bool current_state_is_new = false;
-    if (!this->is_at_new_state()){
-        BoxedInterp<T, N> first_step = this->state_interpolator(0, -1);
-        interp = pbox::make_box<LinkedInterpolator<T, N>>(first_step.operator->());
-    }else{
-        interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t(), this->vector().data(), this->nsys());
-        current_state_is_new = true;
+    {
+        decltype(auto) vector = this->scratch_.vector();
+        this->fill_current_vector(vector.data());
+        interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t(), vector.data(), this->nsys());
     }
 
     const T t_start = this->t();
@@ -152,15 +160,25 @@ BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_un
                 obs_res = true;
             }
             if (obs_res){
-                if (this->is_at_new_state()){
-                    if (current_state_is_new){
-                        interp->expand_by_owning(this->state_interpolator(0, -1));
+                // (covered, t) always lies within the step now held: `covered` is either the
+                // previous t_new, which has become t_old, or a stop inside this same step.
+                // Narrow the step's interpolator to exactly that span. adjust_* only move
+                // the reported interval, bounded by the polynomial's own t1/t2, so the
+                // evaluation is untouched.
+                const T covered = interp->t_end();
+                if (lt(covered, t)){
+                    BoxedInterp<T, N> segment = this->state_interpolator(0, -1);
+                    if (covered != segment->t_start()){
+                        segment->adjust_start(covered);
                     }
-                    interp->expand_by_owning(std::make_unique<LocalInterpolator<T, N>>(this->t(), this->vector().data(), this->nsys()));
-                    current_state_is_new = true;
-                } else if (current_state_is_new) {
-                    interp->expand_by_owning(this->state_interpolator(0, -1));
-                    current_state_is_new = false;
+                    if (t != segment->t_end()){
+                        segment->adjust_end(t);
+                    }
+                    interp->expand_by_owning(std::move(segment));
+                    // q is the current vector at t, filled by generic_advance_until. It
+                    // aliases scratch_.vector(), so re-borrowing that here would overwrite
+                    // this very argument.
+                    interp->expand_by_owning(std::make_unique<LocalInterpolator<T, N>>(t, q, this->nsys()));
                 }
                 return true;
             } else {

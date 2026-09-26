@@ -6,6 +6,7 @@
 #include <odecraft/Toolkit/FinDiff.hpp>
 #include "VariationalSolvers_mem_impl.hpp" // IWYU pragma: keep
 
+
 namespace ode::chaos{
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
@@ -381,8 +382,10 @@ T VariationalSolver<S, T, N, SP, OdeType, Derived>::elapsed_time() const{
 
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 T VariationalSolver<S, T, N, SP, OdeType, Derived>::stretching_number() const{
+    // TODO : cache the stretching number, since calling fill_current_vector interpolates every time.
     const size_t nsys = this->nsys()/2;
-    return log(norm(this->true_state_ptr()+2+nsys, nsys));
+    this->fill_current_vector(this->worker.data());
+    return log(norm(this->worker.data()+nsys, nsys));
 }
 
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -727,7 +730,7 @@ bool VariationalSolver<S, T, N, SP, OdeType, Derived>::Adv_Impl(Args&&... args) 
         const size_t nsys = this->nsys()/2;
         t_last_ = t_next_;
         t_next_ = this->ics_ptr()[0] + (++np + 1UL)*period_*d;
-        std::copy(THIS->true_state_ptr()+2, THIS->true_state_ptr()+2 + 2*nsys, tmp_state_.data());
+        this->fill_current_vector(tmp_state_.data());
         logksi_last_ = logksi_;
         logksi_ += log(norm(tmp_state_.data()+nsys, nsys));
         detail::normalized(tmp_state_.data(), tmp_state_.data(), nsys);

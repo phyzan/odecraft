@@ -39,16 +39,17 @@ void test_single_objective(){
 
     T t_expected = period / 4.0;
     int crossings_found = 0;
-
+    std::array<T, 2> q;
     while (solver.is_running() && solver.t() < 5.0 * period){
         solver.advance();
         if (solver.is_at_objective()){
             crossings_found++;
+            solver.fill_current_vector(q.data());
             if (std::abs(solver.t() - t_expected) >= 1e-8){
                 std::cerr << "Error: crossing time inaccurate!" << std::endl;
-            } else if (std::abs(solver.vector()[0]) >= 1e-8){
+            } else if (std::abs(q[0]) >= 1e-8){
                 std::cerr << "Error: q[0] not near zero at crossing!" << std::endl;
-            } else if (std::abs(solver.vector()[1] + 1.0) >= 1e-6){
+            } else if (std::abs(q[1] + 1.0) >= 1e-6){
                 std::cerr << "Error: q[1] not near -1 at crossing!" << std::endl;
             } else {
                 std::cout << "  SUCCESSFULLY PASSED CROSSING\n";
@@ -99,17 +100,18 @@ void test_two_objectives(){
     T t1_expected = 3.0 * M_PI / 2.0;  // next expected obj1 (q[1]=0) crossing
     int crossings0_found = 0;
     int crossings1_found = 0;
-
+    std::array<T, 2> q;
     while (solver.is_running() && solver.t() < 5.0 * period){
         solver.advance();
         if (solver.is_at_objective()){
+            solver.fill_current_vector(q.data());
             if (solver.current_objective() == 0){
                 crossings0_found++;
                 if (std::abs(solver.t() - t0_expected) >= 1e-8){
                     std::cerr << "Error: obj0 crossing time inaccurate!" << std::endl;
-                } else if (std::abs(solver.vector()[0]) >= 1e-8){
+                } else if (std::abs(q[0]) >= 1e-8){
                     std::cerr << "Error: q[0] not near zero at obj0 crossing!" << std::endl;
-                } else if (std::abs(solver.vector()[1] + 1.0) >= 1e-6){
+                } else if (std::abs(q[1] + 1.0) >= 1e-6){
                     std::cerr << "Error: q[1] not near -1 at obj0 crossing!" << std::endl;
                 } else {
                     std::cout << "  SUCCESSFULLY PASSED OBJ0 CROSSING\n";
@@ -119,9 +121,9 @@ void test_two_objectives(){
                 crossings1_found++;
                 if (std::abs(solver.t() - t1_expected) >= 1e-8){
                     std::cerr << "Error: obj1 crossing time inaccurate!" << std::endl;
-                } else if (std::abs(solver.vector()[1]) >= 1e-8){
+                } else if (std::abs(q[1]) >= 1e-8){
                     std::cerr << "Error: q[1] not near zero at obj1 crossing!" << std::endl;
-                } else if (std::abs(solver.vector()[0] + 1.0) >= 1e-6){
+                } else if (std::abs(q[0] + 1.0) >= 1e-6){
                     std::cerr << "Error: q[0] not near -1 at obj1 crossing!" << std::endl;
                 } else {
                     std::cout << "  SUCCESSFULLY PASSED OBJ1 CROSSING\n";

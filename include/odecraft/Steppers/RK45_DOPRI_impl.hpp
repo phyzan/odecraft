@@ -143,24 +143,35 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 StepResult RK45<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     mat_is_set = false;
     std::copy(KF_.data(), KF_.data() + this->nsys(), K0_.data());
-    return detail::rk_adapt_step(res, state, this->nsys(),
-                          this->min_step(), this->max_step(), this->MIN_STEP,
-                          this->SAFETY, this->MAX_FACTOR, this->MIN_FACTOR,
-                          ERR_EXP, INC_EXP, MIN_ERR, this->direction(),
-                          [this](T* r, const T* s, const T& h){ return this->step_impl(r, s, h); });
+    return detail::rk_adapt_step(
+        res, state, this->nsys(),
+        this->min_step(),
+        this->max_step(),
+        this->MIN_STEP,
+        this->SAFETY,
+        this->MAX_FACTOR,
+        this->MIN_FACTOR,
+        ERR_EXP,
+        INC_EXP,
+        MIN_ERR,
+        this->direction(),
+        [this](T* r, const T* s, const T& h){
+            return this->step_impl(r, s, h);
+        }
+    );
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void RK45<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
     this->set_coef_matrix();
-    const T* d = this->interp_new_state_ptr();
+    const T* d = this->new_state_ptr();
     coef_mat_interp(result, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, coef_mat.data(), INTERP_ORDER, this->nsys());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto RK45<T, N, SP, OdeType, Derived>::local_interp() const{
     this->set_coef_matrix();
-    const T* d = this->interp_new_state_ptr();
+    const T* d = this->new_state_ptr();
     return [cm=this->coef_mat, t1=this->t_old(), t2=d[0], y1=Array1D<T, N>(this->old_state_ptr()+2, this->nsys()), y2=Array1D<T, N>(d+2, this->nsys()), n=this->nsys()](T* out, const T& t){
         coef_mat_interp(out, t, t1, t2, y1.data(), y2.data(), cm.data(), INTERP_ORDER, n);
     };

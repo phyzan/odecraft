@@ -529,7 +529,7 @@ StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void DOP853<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
     this->set_coef_matrix();
-    const T* d = this->interp_new_state_ptr();
+    const T* d = this->new_state_ptr();
     coef_mat_interp_dop853(result, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, coef_mat_.data(), INTERP_ORDER, this->nsys());
 }
 
@@ -537,7 +537,7 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 auto DOP853<T, N, SP, OdeType, Derived>::local_interp() const{
     this->set_coef_matrix();
     const T* s1 = this->old_state_ptr();
-    const T* s2 = this->interp_new_state_ptr();
+    const T* s2 = this->new_state_ptr();
     const size_t n = this->nsys();
 
     return [cm=this->coef_mat_, t1=s1[0], t2=s2[0], y1=Array1D<T, N>(s1+2, n), y2=Array1D<T, N>(s2+2, n), n](T* out, const T& t){

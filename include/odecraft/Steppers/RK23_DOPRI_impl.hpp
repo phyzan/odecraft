@@ -132,14 +132,14 @@ StepResult RK23<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void RK23<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
     this->set_coef_matrix();
-    const T* d = this->interp_new_state_ptr();
+    const T* d = this->new_state_ptr();
     coef_mat_interp(result, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, coef_mat_.data(), INTERP_ORDER, this->nsys());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto RK23<T, N, SP, OdeType, Derived>::local_interp() const{
     this->set_coef_matrix();
-    const T* d = this->interp_new_state_ptr();
+    const T* d = this->new_state_ptr();
     return [cm=this->coef_mat_, t1=this->t_old(), t2=d[0], y1=Array1D<T, N>(this->old_state_ptr()+2, this->nsys()), y2=Array1D<T, N>(d+2, this->nsys()), n=this->nsys()](T* out, const T& t){
         coef_mat_interp(out, t, t1, t2, y1.data(), y2.data(), cm.data(), INTERP_ORDER, n);
     };

@@ -19,7 +19,7 @@ Stepper Euler<T, N, SP, OdeType, Derived>::method() const{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void Euler<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
-    return lin_interp(result, t, this->t_old(), this->t_new(), this->old_state_ptr()+2, this->interp_new_state_ptr()+2, this->nsys());
+    return lin_interp(result, t, this->t_old(), this->t_new(), this->old_state_ptr()+2, this->new_state_ptr()+2, this->nsys());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -46,9 +46,15 @@ StepResult Euler<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state)
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto Euler<T, N, SP, OdeType, Derived>::local_interp() const{
-    return [t1=this->t_old(), t2=this->t_new(), y1=Array1D<T, N>(this->old_state_ptr()+2, this->nsys()), y2=Array1D<T, N>(this->interp_new_state_ptr()+2, this->nsys()), n=this->nsys()](T* out, const T& t){
-        lin_interp(out, t, t1, t2, y1.data(), y2.data(), n);
-    };
+    return
+        [t1=this->t_old(),
+            t2=this->t_new(),
+            y1=Array1D<T, N>(this->old_state_ptr()+2, this->nsys()),
+            y2=Array1D<T, N>(this->new_state_ptr()+2, this->nsys()),
+            n=this->nsys()]
+            (T* out, const T& t){
+                lin_interp(out, t, t1, t2, y1.data(), y2.data(), n);
+            };
 }
 
 

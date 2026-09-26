@@ -112,7 +112,7 @@ auto RK4<T, N, SP, OdeType, Derived>::local_interp() const{
         };
 #else
     set_interp_data();
-    const T* d = this->interp_new_state_ptr();
+    const T* d = this->new_state_ptr();
     size_t nsys = this->nsys();
     return [nsys, t1=this->t_old(), t2 = d[0], y1=Array1D<T, N>(this->old_state_ptr()+2, nsys), y2=Array1D<T, N>(d+2, nsys), y1dot=Array1D<T, N>(K.data(), nsys), y2dot=Array1D<T, N>(K.data()+nsys, nsys)](T* out, const T& t){
         rk4_interp(out, t, t1, t2, y1.data(), y2.data(), y1dot.data(), y2dot.data(), nsys);
@@ -157,7 +157,7 @@ void RK4<T, N, SP, OdeType, Derived>::interp_impl(T* out, const T& t) const{
     }, out, this->t_old(), t - this->t_old(), this->old_state_ptr()+2, K.data()+5*nsys, nsys, K.data() + 4*nsys);
 #else
     set_interp_data();
-    const T* d = this->interp_new_state_ptr();
+    const T* d = this->new_state_ptr();
     rk4_interp(out, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, K.data(), K.data()+nsys, nsys);
 #endif
 }
@@ -180,7 +180,7 @@ void RK4<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector){
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void RK4<T, N, SP, OdeType, Derived>::set_interp_data() const{
     if (!interp_data_set){
-        const T* d = this->interp_new_state_ptr();
+        const T* d = this->new_state_ptr();
         this->rhs(K.data()+this->nsys(), d[0], d+2);
         interp_data_set = true;
     }
