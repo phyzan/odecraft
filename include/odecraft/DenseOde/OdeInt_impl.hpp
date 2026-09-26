@@ -274,12 +274,18 @@ void ODE<T, N>::reset(){
 
 template<typename T, size_t N>
 void ODE<T, N>::register_state(){
-    orbit_data_.add_point(solver_->get_time(), solver_->get_vector().data());
+    orbit_data_.add_point(solver_->get_time(), solver_->get_new_vector().data());
+    // add_point appended nsys values, so the block starts nsys from the end.
+    T* q_last = orbit_data_.q.data() + orbit_data_.q.size() - this->nsys();
+    solver_->get_current_vector(q_last);
 }
 
 template<typename T, size_t N>
 void ODE<T, N>::register_event(size_t i){
-    event_data_.add_event(i, solver_->get_time(), solver_->get_vector().data());
+    event_data_.add_event(i, solver_->get_time(), solver_->get_new_vector().data());
+    OrbitData<T>& od = event_data_.data(i);
+    T* q_last = od.q.data() + od.q.size() - this->nsys();
+    solver_->get_current_vector(q_last);
 }
 
 

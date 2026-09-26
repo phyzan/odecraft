@@ -58,9 +58,10 @@ void crossing_test(Stepper method) {
 
     std::cout << "Event detected at t = " << solver->get_time() << "\n";
     std::cout << "State at event: ";
-    auto v = solver->get_vector();
+    auto yf = y0;
+    solver->get_current_vector(yf.data());
     for (size_t i = 0; i < 2; ++i) {
-        std::cout << v[i] << " ";
+        std::cout << yf[i] << " ";
     }
     std::cout << "\n" << std::endl;
 }

@@ -78,7 +78,7 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
     T my_floor = this->t_new();
     NDSPAN_FOR_LOOP(I, NOBJ,
         const int old_sgn = cached_sign[I];
-        const int new_sign = sgn(std::get<I>(obj).func(this->t_new(), this->vector().data()));
+        const int new_sign = sgn(std::get<I>(obj).func(this->t_new(), this->vector_new().data()));
         cached_sign[I] = new_sign;
         detected[I] = false;
         if (old_sgn != 0){
@@ -94,7 +94,7 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
             }
 
             if ((detected[I] = crossed)){
-                const T* s_new = this->interp_new_state_ptr();
+                const T* s_new = this->new_state_ptr();
                 const T& t_new = s_new[0];
                 const T& t_old = this->t_old();
                 const T* q_old = this->old_state_ptr()+2;
@@ -144,7 +144,7 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::get_nearest_floor(T& o
 template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
 void StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::cache_current_signs(){
     NDSPAN_FOR_LOOP(I, NOBJ,
-        cached_sign[I] = sgn(std::get<I>(obj).func(this->t(), this->vector().data()));
+        cached_sign[I] = sgn(std::get<I>(obj).func(this->t(), this->vector_new().data()));
     );
 }
 

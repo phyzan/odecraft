@@ -101,6 +101,12 @@ const std::string& EventData<T>::name(size_t i) const {
 }
 
 template<typename T>
+OrbitData<T>& EventData<T>::data(size_t i) {
+    assert(i < event_data_.size() && "Event index out of range");
+    return event_data_[i];
+}
+
+template<typename T>
 void EventData<T>::allocate_event(const std::string& name) {
     if (name.empty()){
         throw std::runtime_error("Event name cannot be empty");

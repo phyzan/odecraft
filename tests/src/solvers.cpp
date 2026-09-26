@@ -43,14 +43,18 @@ void run(const char* label){
     solver_2.advance_until(tmax);
 
 
-
-    if (solver_1.vector()[0] != solver_2.vector()[0] || solver_1.vector()[1] != solver_2.vector()[1]){
+    std::array<double, nsys> q1;
+    std::array<double, nsys> q2;
+    // solver_1.fill_
+    solver_1.fill_current_vector(q1.data());
+    solver_2.fill_current_vector(q2.data());
+    if (q1[0] != q2[0] || q1[1] != q2[1]){
         std::cerr << "Error: Stack and Heap solvers produced different results!" << std::endl;
     } else {
-        std::cout << "Result ( t = " << tmax << " ): x = " << solver_1.vector()[0] << ", xdot = " << solver_1.vector()[1] << std::endl;
+        std::cout << "Result ( t = " << tmax << " ): x = " << q1[0] << ", xdot = " << q1[1] << std::endl;
 
         std::array<double, 2> arr;
-        solver_1.Rhs(arr.data(), tmax, solver_1.vector().data());
+        solver_1.Rhs(arr.data(), tmax, q1.data());
         
         std::cout << "xdotdot = " << arr[0] << " " << arr[1] << std::endl;
     }

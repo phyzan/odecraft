@@ -143,12 +143,14 @@ int main(){
         make_event_list<T>(std::move(event_1), std::move(event_2))
     );
 
+    auto yf = y0;
     while (solver.advance() && solver.t() < 20){
         if (solver.at_event()){
+            solver.fill_current_vector(yf.data());
             std::cout << "\n----------- EVENT DETECTED -----------" << std::endl;
             std::cout << "Event detected at t = " << solver.t() << ", event name = " << solver.current_event().event->name() << std::endl;
             std::cout << "State at event: ";
-            auto v = solver.vector();
+            auto v = yf;
             for (size_t i = 0; i < 2; ++i) {
                 std::cout << v[i] << " ";
             }

@@ -105,7 +105,6 @@ private:
     mutable Array1D<T, N> _f, _dy, _b, _scale, _ypred, _psi, _d, _error, _error_m, _error_p;
     mutable std::array<T, 3> _error_norms;
     BDFCONSTS<T> BDF_COEFS;
-    int interp_idx = 0;
 
 };
 

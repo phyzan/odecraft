@@ -248,13 +248,13 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
             return 0;
         }
         int n_steps = 0;
-        const double* q_new;
+        auto q_new = ics;
 
 
         GetIdx(i_start, ics.data());
         while ((n_steps < max_pts) && rich_solver->do_advance_by(ds)){
-            q_new = rich_solver->get_vector().data();
-            GetIdx(i_curr, q_new);
+            rich_solver->get_current_vector(q_new.data());
+            GetIdx(i_curr, q_new.data());
             n_steps++;
             n_steps_tot++;
             if constexpr (NDIM > 0){

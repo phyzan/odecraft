@@ -160,7 +160,6 @@ void bdf_interp(T* result, const T& t, const T& t2, const T& h, const T* D, size
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void BDF<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector) {
     Base::ReAdjust(new_vector);
-    std::copy(_D[_idx_D].data(), _D[_idx_D].data() + this->nsys(), _D[2].data());
     _D[0].fill(0);
     _D[1].fill(0);
     std::copy(new_vector, new_vector + this->nsys(), _D[0].data());
@@ -173,7 +172,6 @@ void BDF<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector) {
     _n_eq_steps = 0;
     _valid_LU = false;
     _idx_D = 0;
-    interp_idx = 2;
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -221,7 +219,6 @@ void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
     _n_eq_steps = 0;
     _valid_LU = false;
     _idx_D = 0;
-    interp_idx = 0;
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -268,7 +265,6 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         }else if (habs > max_step){
             this->change_D(max_step/habs);
             habs = max_step;
-            interp_idx = int(_idx_D);
             return StepResult::Success; // The step is acceptet, but the stepsize is limited by max_step.
         }else if (habs < this->MIN_STEP){
             return StepResult::TinyStepError;
@@ -357,7 +353,6 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     }
 
     if (_n_eq_steps < _order + 1){
-        interp_idx = int(_idx_D);
         return StepResult::Success;
     }
 
@@ -398,16 +393,15 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     habs *= factor;
     this->change_D(factor);
     _valid_LU = false;
-    interp_idx = int(_idx_D);
     return StepResult::Success;
 }
 
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto BDF<T, N, SP, OdeType, Derived>::local_interp() const{
-    return [D = _D[interp_idx],
+    return [D = _D[_idx_D],
             order=_order,
-            t2=this->interp_new_state_ptr()[0],
+            t2=this->t_new(),
             n=this->nsys(),
             h = this->stepsize()*this->direction()]
             (T* out, const T& t){
@@ -421,9 +415,9 @@ void BDF<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
     bdf_interp<T>(
         result,
         t,
-        this->interp_new_state_ptr()[0],
+        this->t_new(),
         this->stepsize()*this->direction(),
-        _D[interp_idx].data(),
+        _D[_idx_D].data(),
         _order,
         this->nsys()
     );
