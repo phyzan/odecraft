@@ -664,7 +664,7 @@ private:
     void                    move_state(const T& time);
     
     detail::StepperState<T, N> ics_state_, old_state_, new_state_;
-    T t_, habs_, rtol_, atol_, min_step_, max_step_;
+    T time_, habs_, rtol_, atol_, min_step_, max_step_;
     detail::SolverScratchSpace<T, N> scratch_;
     OdeType         ode_;
     size_t          nsys_ = N;

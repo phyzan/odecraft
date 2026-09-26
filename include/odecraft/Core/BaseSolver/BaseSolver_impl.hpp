@@ -78,7 +78,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Jac(T* out, const T& t, const T* q,
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 const T& BaseSolver<Derived, T, N, SP, OdeType>::t() const{
-    return t_;
+    return time_;
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -394,7 +394,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Reset(){
         diverges_ = false;
         old_state_ = ics_state_;
         new_state_ = ics_state_;
-        t_ = ics_state_[0];
+        time_ = ics_state_[0];
         habs_ = ics_state_[1];
     }
 }
@@ -546,7 +546,7 @@ BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, 
         } else if (events.size() > 0){
             throw std::invalid_argument("Cannot instantiate a Solver with events when it is declared with a non-rich SolverPolicy");
         } else {
-            t_ = t0;
+            time_ = t0;
             habs_ = (stepsize == 0 ? this->auto_step(t0, q0.data()) : abs<T>(stepsize));
             ics_state_[0] = t0;
             ics_state_[1] = habs_;
@@ -606,12 +606,12 @@ void BaseSolver<Derived, T, N, SP, OdeType>::move_state(const T& time){
     assert( (time*direction() <= this->t_new()*direction()) && "Out of bounds time requested in move_state");
 
     if (time != this->t_new()) {
-        t_ = time;
+        time_ = time;
         is_at_new_state_ = false;
     } else if (!this->is_at_new_state()){
         // update the true state to the new state, because time is exactly at t_new
         is_at_new_state_ = true;
-        t_ = new_state_[0];
+        time_ = new_state_[0];
         habs_ = new_state_[1];
     }
 }
@@ -649,7 +649,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
                 // ======== update internal states ========
                 std::swap(old_state_, new_state_);
                 std::swap(new_state_, scratch_state);
-                t_ = new_state_[0];
+                time_ = new_state_[0];
                 habs_ = new_state_[1];
                 step_count_++;
                 // ==========================================
@@ -680,7 +680,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
             // ======== update internal states ========
                 std::swap(old_state_, new_state_);
                 std::swap(new_state_, scratch_state);
-                t_ = new_state_[0];
+                time_ = new_state_[0];
                 habs_ = new_state_[1];
                 step_count_++;
             // ==========================================
