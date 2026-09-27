@@ -435,13 +435,10 @@ void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T DOP853<T, N, SP, OdeType, Derived>::step_impl(T* result, const T* state, const T& h){
+T DOP853<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q){
     h_last_ = h; // remembered for the dense-output coefficients
-    const T& t = state[0];
-    T* __restrict__ q_new = result + 2;
     T* __restrict__ K = K_.data();
     T* __restrict__ r = df_tmp_.data();
-    const T* __restrict__ q = state + 2;
     const size_t n = this->nsys();
 
     const T* __restrict__ K0 = K;
@@ -508,7 +505,7 @@ T DOP853<T, N, SP, OdeType, Derived>::step_impl(T* result, const T* state, const
 
     // FSAL: K12 = f(t+h, q_new), also used for error estimation and the next step
     this->rhs(K + N_STAGES*n, t + h, q_new);
-    result[0] = t + h;
+    t_new = t + h;
 
     return dop853_error_norm(K, E3.data(), E5.data(), q, q_new, h, this->rtol(), this->atol(), N_STAGES, n);
 }
@@ -519,11 +516,22 @@ StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state
     T* dest = K_.data();
     const T* src = K_.data() + N_STAGES*this->nsys();
     std::copy(src, src + this->nsys(), dest);
-    return detail::rk_adapt_step(res, state, this->nsys(),
-                          this->min_step(), this->max_step(), this->MIN_STEP,
-                          this->SAFETY, this->MAX_FACTOR, this->MIN_FACTOR,
-                          ERR_EXP, INC_EXP, MIN_ERR, this->direction(),
-                          [this](T* r, const T* s, const T& h){ return this->step_impl(r, s, h); });
+    return detail::rk_adapt_step(
+        res, state, this->nsys(),
+        this->min_step(),
+        this->max_step(),
+        this->MIN_STEP,
+        this->SAFETY,
+        this->MAX_FACTOR,
+        this->MIN_FACTOR,
+        ERR_EXP,
+        INC_EXP,
+        MIN_ERR,
+        this->direction(),
+        [this](T& t_new, T* q_new, const T& t, const T& h, const T* q){
+            return this->step_impl(t_new, q_new, t, h, q);
+        }
+    );
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>

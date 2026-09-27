@@ -93,7 +93,7 @@ private:
     static constexpr AExtraType Amatrix_extra();
     static constexpr CExtraType Cmatrix_extra();
 
-    T           step_impl(T* result, const T* state, const T& h);
+    T           step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q);
 
     void        set_coef_matrix() const;
 

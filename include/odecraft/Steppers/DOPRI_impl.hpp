@@ -3,9 +3,9 @@
 
 #include <odecraft/Steppers/DOPRI.hpp>
 
-namespace ode{
 
-namespace detail{
+
+namespace ode::detail{
 
 template<typename T>
 XDIFF_FORCEINLINE void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n){
@@ -32,16 +32,17 @@ XDIFF_FORCEINLINE StepResult rk_adapt_step(T* res, const T* state, size_t n,
                           const T& safety, const T& max_factor, const T& min_factor,
                           const T& err_exp, const T& inc_exp, const T& min_err,
                           int direction, StepFn&& step_fn){
-    T& habs = res[1];
-    habs = state[1];
-    T* q_new = res + 2;
+    T time = state[0];
+    T habs = state[1];
+    const T* q = state + 2;
+    T t_new;
 
 
     bool step_accepted = false;
     T factor;
     while (!step_accepted){
         const T h = habs * direction;
-        const T err_norm = step_fn(res, state, h);
+        const T err_norm = step_fn(t_new, res+2, time, h, q);
 
         if (err_norm <= 1){
             step_accepted = true;
@@ -55,19 +56,23 @@ XDIFF_FORCEINLINE StepResult rk_adapt_step(T* res, const T* state, size_t n,
             set_max(factor, min_factor, safety * pow(err_norm, err_exp));
         }
 
-        if (!all_are_finite(q_new, n)){
+        if (!all_are_finite(res+2, n)){
+            res[1] = habs;
             return StepResult::NonFiniteError;
         } else if (habs < min_step_abs){
+            res[1] = habs;
             return StepResult::TinyStepError;
         } else if (!resize_step(factor, habs, min_step, max_step)){
             break;
         }
     }
+    res[0] = t_new;
+    res[1] = habs;
     return StepResult::Success;
 }
 
 } // namespace ode::detail
 
-} // namespace ode
+
 
 #endif // ODECRAFT_DOPRI_IMPL_HPP

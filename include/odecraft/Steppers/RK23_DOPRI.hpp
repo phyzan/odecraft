@@ -19,7 +19,7 @@ namespace detail{
 /// stages K1..K2 (Nstages-1 rows of n), `KF` the final FSAL stage, `K0` the derivative at the
 /// start of the step. Returns the scaled error norm.
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-T rk23_step_impl(T* result, const T* state, const T& h, size_t nsys,
+T rk23_step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
                  const T& rtol, const T& atol,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs);
@@ -69,7 +69,7 @@ private:
     static constexpr Etype Ematrix();
     static constexpr Ptype Pmatrix();
 
-    T           step_impl(T* result, const T* state, const T& h);
+    T           step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q);
 
     void        set_coef_matrix() const;
 
@@ -79,7 +79,7 @@ private:
     detail::CoefTable<T, &Ematrix> E;
     detail::CoefTable<T, &Pmatrix> P;
 
-    detail::RKScratchSpace<T, N, Nstages-1>              scratch_space;
+    detail::RKScratchSpace<T, N, Nstages-1>             scratch_space;
     T                                                   h_last_ = 0; // replayed by set_coef_matrix
     mutable Array1D<T, N>                               K0_;  // derivative at the start of the step
     mutable Array1D<T, N>                               KF_;  // final (FSAL) stage
