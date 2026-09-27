@@ -4,7 +4,6 @@
 #include <odecraft/Steppers/DOPRI.hpp>
 
 
-
 namespace ode::detail{
 
 template<typename T>

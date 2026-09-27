@@ -38,36 +38,15 @@ XDIFF_FORCEINLINE T rk23_step_impl(T& t_new, T* __restrict__ q_new, const T& t, 
     rhs(K3, t + h, q_new);
     t_new = t + h;
 
-    // Error norm.
-    //
-    // Split in two when the extent is a runtime value. Fused, the max reduction blocks
-    // vectorisation of the whole loop -- it is a floating-point MAX_EXPR, which GCC will not
-    // reassociate without -ffast-math, so every FP op per element runs scalar. Writing the
-    // scaled errors out first lets that pass, the expensive one, vectorise and leaves one
-    // compare per element behind: measured 20-44% faster from nsys=64 up, on gcc 13/14 and
-    // clang alike. `r` is dead by here, its last read being the rhs call above.
-    //
-    // A compile-time extent keeps the fused form: the loop is fully unrolled, so there is no
-    // loop-level reduction to vectorise and the extra pass is pure cost -- 2% at NSYS=4.
-    T err_max = 0;
-    if constexpr (NSYS == 0){
-        T* __restrict__ scaled_err = r;
-        for (size_t j = 0; j < n; j++) {
-            const auto err   = h * (E[0]*K0[j] + E[1]*K1[j] + E[2]*K2[j] + E[3]*K3[j]);
-            const auto scale = atol + rtol * (abs<T>(q[j]) + abs<T>(K0[j] * h));
-            scaled_err[j] = abs<T>(err) / scale;
-        }
-        for (size_t j = 0; j < n; j++) {
-            err_max = ndspan::max<T>(err_max, scaled_err[j]);
-        }
-    } else {
-        for (size_t j = 0; j < n; j++) {
-            const auto err   = h * (E[0]*K0[j] + E[1]*K1[j] + E[2]*K2[j] + E[3]*K3[j]);
-            const auto scale = atol + rtol * (abs<T>(q[j]) + abs<T>(K0[j] * h));
-            err_max = ndspan::max<T>(err_max, abs<T>(err) / scale);
-        }
+    // Error norm calculation
+
+    T* __restrict__ scaled_err = r;
+    for (size_t j = 0; j < n; j++) {
+        const auto err   = h * (E[0]*K0[j] + E[1]*K1[j] + E[2]*K2[j] + E[3]*K3[j]);
+        const auto scale = atol + rtol * (abs<T>(q[j]) + abs<T>(K0[j] * h));
+        scaled_err[j] = abs<T>(err) / scale;
     }
-    return err_max;
+    return *std::max_element(scaled_err, scaled_err + n);
 }
 
 } // namespace ode::detail

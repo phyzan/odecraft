@@ -345,7 +345,7 @@ T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q
         return 0;
     }
 
-    const auto denom = err5_norm_2 + T(1)/100 * err3_norm_2;
+    const auto denom = err5_norm_2 + err3_norm_2 / 100;
     return abs<T>(h) * err5_norm_2 / sqrt(denom * n);
 }
 
