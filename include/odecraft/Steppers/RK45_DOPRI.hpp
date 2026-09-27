@@ -16,7 +16,7 @@ namespace ode {
 namespace detail{
 
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-T rk45_step_impl(T* result, const T* state, const T& h, size_t nsys,
+T rk45_step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
                  const T& rtol, const T& atol,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs);
@@ -65,7 +65,7 @@ private:
     static constexpr Etype Ematrix();
     static constexpr Ptype Pmatrix();
 
-    T           step_impl(T* result, const T* state, const T& h);
+    T           step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q);
 
     void        set_coef_matrix() const;
 
