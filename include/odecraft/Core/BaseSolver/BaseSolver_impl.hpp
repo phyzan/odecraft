@@ -396,6 +396,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::Reset(){
         new_state_ = ics_state_;
         time_ = ics_state_[0];
         habs_ = ics_state_[1];
+        vector_is_cached_ = false;
     }
 }
 
@@ -419,6 +420,17 @@ const T* BaseSolver<Derived, T, N, SP, OdeType>::new_state_ptr() const{
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 const T* BaseSolver<Derived, T, N, SP, OdeType>::old_state_ptr() const{
     return this->old_state_.data();
+}
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+View1D<T, N> BaseSolver<Derived, T, N, SP, OdeType>::vector() const{
+    if (this->vector_is_cached_){
+        return View1D<T, N>{cached_vector_.data(), this->nsys()};
+    } else {
+        this->fill_current_vector(cached_vector_.data());
+        this->vector_is_cached_ = true;
+        return View1D<T, N>{cached_vector_.data(), this->nsys()};
+    }
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -456,6 +468,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::ReAdjust(const T* new_vector){
     std::copy(new_vector, new_vector + this->nsys(), vector);
     old_state_ = new_state_;
     is_at_new_state_ = true;
+    vector_is_cached_ = false;
     // By having old_state_ set to new_state_, we close the interpolation interval
     // as if restarting from new initial conditions
     // This is to ban interpolation temporarily until a new step is achived,
@@ -523,17 +536,18 @@ MutView<T, Layout::F, N, N> BaseSolver<Derived, T, N, SP, OdeType>::jac_view(T* 
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events) :
+    ode_(std::move(ode)),
     ics_state_(q0.size()+2),
     old_state_(q0.size()+2),
     new_state_(q0.size()+2),
+    scratch_(q0.size()),
     rtol_(rtol),
     atol_(atol),
     min_step_(min_step),
     max_step_(max_step == 0 ? inf<T>() : max_step),
-    scratch_(q0.size()),
-    ode_(std::move(ode)),
     nsys_(q0.size()),
-    direction_(direction){
+    direction_(direction),
+    cached_vector_(q0.size()){
         assert(this->nsys() > 0 && "Ode system size is 0");
         if (stepsize < 0){
             throw std::runtime_error("The stepsize argument cannot be negative");
@@ -603,7 +617,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::validate_it(StepResult result, cons
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::move_state(const T& time){
-    assert( (time*direction() <= this->t_new()*direction()) && "Out of bounds time requested in move_state");
+    assert( (this->le(time, this->t_new())) && "Out of bounds time requested in move_state");
 
     if (time != this->t_new()) {
         time_ = time;
@@ -637,6 +651,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::le(const T& t_a, const T& t_b) cons
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 template<typename... Args>
 bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
+    this->vector_is_cached_ = false;
     const int d = this->direction();
     if constexpr (sizeof...(Args) > 0){
         T time_floor = nearest_time(args...);

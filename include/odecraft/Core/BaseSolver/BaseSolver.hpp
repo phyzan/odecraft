@@ -200,14 +200,13 @@ public:
     /// @brief Get the current time value.
     const T&            t() const;
 
+    View1D<T, N>        vector() const;
+
     /// @brief Get the time value of the newest computed step.
     const T&            t_new() const;
 
     /// @brief Get the time value from the previous accepted step.
     const T&            t_old() const;
-
-    /// @brief Fills the values of an array with those of the current true state vector
-    void                fill_current_vector(T* out) const;
 
     /// @brief Get a view of the state vector from the newest computed step.
     View1D<T, N>        vector_new() const;
@@ -256,6 +255,9 @@ public:
 
     /// @brief Check if the solution has diverged (contains inf/nan).
     bool                diverges() const;
+
+    /// @brief Fills the values of an array with those of the current true state vector
+    void                fill_current_vector(T* out) const;
 
     /// @brief Get the current status message.
     const std::string&  status() const;
@@ -496,7 +498,7 @@ protected:
      * @param[out] state Output array for the new state [t, h, q...] (size Nsys+2).
      * @note Must be implemented by derived class.
      */
-    StepResult              adapt_impl(T* state, const T* old_state);
+    StepResult          adapt_impl(T* state, const T* old_state);
 
     /**
      * @brief Interpolate solution at time t using method-specific interpolation.
@@ -504,9 +506,9 @@ protected:
      * @param[in]  t      Time to interpolate at, in the open interval between two states
      * @note Must be implemented by derived class.
      */
-    void                    interp_impl(T* result, const T& t) const;
+    void                interp_impl(T* result, const T& t) const;
 
-    auto                    local_interp() const;
+    auto                local_interp() const;
 
     void                fill_current_vector_impl(T* out) const;
 
@@ -663,10 +665,10 @@ private:
     /// @brief Only use inside Adv_Impl (so that if the state here is updated, all derived classes are aware). Move the current state to a new time between the current time and the most recently adapted state. This is a lowlevel operation, so use carefully or the intended bahavior might break.
     void                    move_state(const T& time);
     
-    detail::StepperState<T, N> ics_state_, old_state_, new_state_;
-    T time_, habs_, rtol_, atol_, min_step_, max_step_;
-    detail::SolverScratchSpace<T, N> scratch_;
     OdeType         ode_;
+    detail::StepperState<T, N> ics_state_, old_state_, new_state_;
+    detail::SolverScratchSpace<T, N> scratch_;
+    T time_, habs_, rtol_, atol_, min_step_, max_step_;
     size_t          nsys_ = N;
     size_t          step_count_ = 0;
     mutable size_t  rhs_eval_count_ = 0;
@@ -677,6 +679,9 @@ private:
     bool            is_running_ = true;
     bool            ics_is_valid_ = false;
     bool            is_at_new_state_ = true;
+    mutable bool    vector_is_cached_ = false;
+    /// @brief Cold: only touched by vector(). Kept last so it never sits between hot fields.
+    mutable Array1D<T, N> cached_vector_;
 };
 
 
