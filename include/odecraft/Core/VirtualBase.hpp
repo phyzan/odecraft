@@ -29,6 +29,7 @@ public:
     virtual const T&            get_new_time() const = 0;
     virtual const T&            get_old_time() const = 0;
     virtual void                get_current_vector(T* out) const = 0;
+    virtual View1D<T, N>        get_vector() const = 0;
     virtual View1D<T, N>        get_new_vector() const = 0;
     virtual View1D<T, N>        get_old_vector() const = 0;
     virtual State<T>            get_ics() const = 0;
