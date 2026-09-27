@@ -415,6 +415,7 @@ public:
     const T&            get_new_time() const { return t_new(); }
     const T&            get_old_time() const { return t_old(); }
     void                get_current_vector(T* out) const { this->fill_current_vector(out); }
+    View1D<T, N>        get_vector() const { return this->vector(); }
     View1D<T, N>        get_new_vector() const { return vector_new(); }
     View1D<T, N>        get_old_vector() const { return vector_old(); }
     State<T>            get_ics() const { return ics(); }
