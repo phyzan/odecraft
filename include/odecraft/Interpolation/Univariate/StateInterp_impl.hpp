@@ -646,10 +646,11 @@ template<typename T>
 void lin_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, size_t size){
     assert( (t != t1 && t != t2) && "lin_interp must only be called on the open interval");
 
-    #pragma omp simd
-    for (size_t i=0; i<size; i++){
-        result[i] = y1[i] + (y2[i]-y1[i])/(t2-t1) * (t-t1);
-    }
+    auto interval = t2 - t1;
+    auto delta_t = t - t1;
+    simd_for<T>(size, [&](size_t i){
+        result[i] = y1[i] + (y2[i]-y1[i])/interval * delta_t;
+    });
 }
 
 template<typename T>

@@ -57,6 +57,42 @@ using JacMat = Array2D<T, N, N, Allocation::Auto, Layout::F>;
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
+namespace detail{
+
+/**
+ * @brief True for scalar types whose arithmetic maps onto SIMD registers.
+ */
+template<class T>
+struct is_vectorizable : std::bool_constant<
+       std::is_integral_v<T>
+    || std::is_same_v<T, float>
+    || std::is_same_v<T, double>> {};
+
+template<class T>
+inline constexpr bool is_simd_scalar_v =
+    is_vectorizable<std::remove_cv_t<T>>::value;
+
+} // namespace ode::detail
+
+
+/**
+ * @brief Runs body(i) for every i in [0, n), asking for SIMD only where it can be applied.
+ *     simd_for<T>(nsys, [&](size_t i){ out[i] += a * rhs[i]; });
+ */
+template<typename T, typename F>
+XDIFF_FORCEINLINE void simd_for(size_t n, F&& body){
+    if constexpr (detail::is_simd_scalar_v<T>){
+        #pragma omp simd
+        for (size_t i = 0; i < n; i++){
+            body(i);
+        }
+    } else {
+        for (size_t i = 0; i < n; i++){
+            body(i);
+        }
+    }
+}
+
 namespace detail {
 
 template<typename F, typename T, size_t N, size_t Order>
@@ -547,7 +583,7 @@ enum class JacPolicy : std::uint8_t{
     Autodiff,
     Exact,
     Nullable,
-    Approx
+    Approx,
 };
 
 

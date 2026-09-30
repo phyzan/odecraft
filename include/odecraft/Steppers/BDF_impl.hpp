@@ -104,10 +104,9 @@ void LUResult<T, N>::lu_solve(T* x, const T* b) const{
 template<typename T>
 Array1D<T> arange(size_t a, size_t b){
     Array1D<T> res(b-a);
-    #pragma omp simd
-    for (size_t i=0; i<(b-a); i++){
+    simd_for<T>(b-a, [&](size_t i){
         res[i] = a+i;
-    }
+    });
     return res;
 }
 
@@ -265,7 +264,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         }else if (habs > max_step){
             this->change_D(max_step/habs);
             habs = max_step;
-            return StepResult::Success; // The step is acceptet, but the stepsize is limited by max_step.
+            return StepResult::Success; // The step is accepted, but the stepsize is limited by max_step.
         }else if (habs < this->MIN_STEP){
             return StepResult::TinyStepError;
         }
@@ -273,10 +272,9 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         t_new = t + habs * this->direction();
 
         this->set_prediction(_ypred.data());
-        #pragma omp simd
-        for (size_t i=0; i<nsys; i++){
+        simd_for<T>(nsys, [&](size_t i){
             _scale[i] = atol + rtol * abs<T>(_ypred[i]);
-        }
+        });
         this->set_psi(_psi.data());
 
         converged = false;
@@ -321,11 +319,10 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         }
 
         safety = T(9)/10 * T(2UL * NEWTON_MAXITER + 1UL)/(2UL * NEWTON_MAXITER + conv_result.n_iter);
-        #pragma omp simd
-        for (size_t i=0; i<nsys; i++){
+        simd_for<T>(nsys, [&](size_t i){
             _scale[i] = atol + rtol * abs<T>(y_new[i]);
             _error[i] = BDF_COEFS.ERR_CONST[_order] * _d[i];
-        }
+        });
         _error_norms[1] = rms_norm(_error.data(), _scale.data(), nsys);
         if (_error_norms[1] > 1){
             factor = max<T>(this->MIN_FACTOR, safety * pow(_error_norms[1], T(-1)/(_order+1)));
@@ -346,10 +343,9 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     }
 
     for (size_t i = _order + 1; i -- > 0;) {
-        #pragma omp simd
-        for (size_t j=0; j<nsys; j++){
+        simd_for<T>(nsys, [&](size_t j){
             D[i*nsys + j] += D[(i+1)*nsys + j];
-        }
+        });
     }
 
     if (_n_eq_steps < _order + 1){
@@ -378,12 +374,12 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     }
 
     delta_order = -1;
-    max_factor = pow(_error_norms[0], T(-1)/(_order));
+    max_factor = pow(_error_norms[0], T(-1)/_order);
     for (size_t i=1; i<3; i++){
         T tmp = pow(_error_norms[i], T(-1)/(_order+i));
         if (tmp > max_factor){
             max_factor = tmp;
-            delta_order = int(i) - 1;
+            delta_order = static_cast<int>(i) - 1;
         }
     }
 
@@ -437,10 +433,9 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred
     for (size_t k=0; k<NEWTON_MAXITER; k++){
         this->rhs(_f.data(), t_new, y);
 
-        #pragma omp simd
-        for (size_t i=0; i<n; i++){
+        simd_for<T>(n, [&](size_t i){
             _b[i] = c * _f[i] - psi[i] - d[i];
-        }
+        });
         LU.lu_solve(_dy.data(), _b.data());
         dy_norm = rms_norm(_dy.data(), scale.data(), n);
 
@@ -455,11 +450,10 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred
             break;
         }
 
-        #pragma omp simd
-        for (size_t i=0; i<n; i++){
+        simd_for<T>(n, [&](size_t i){
             y[i] += _dy[i];
             d[i] += _dy[i];
-        }
+        });
 
         if (!all_are_finite(y, n)){
             flag = StepResult::NonFiniteError;
@@ -493,8 +487,7 @@ void BDF<T, N, SP, OdeType, Derived>::change_D(const T& factor){
 
     for (size_t i=0; i<n; i++){
         for (size_t k=0; k<n; k++){
-            T p =  R[i*n+k];
-            #pragma omp simd
+            auto p =  R[i*n+k];
             for (size_t j=0; j<n; j++){
                 RU[i * n+j] += p*U[k*n+j];
             }
@@ -504,15 +497,28 @@ void BDF<T, N, SP, OdeType, Derived>::change_D(const T& factor){
     Dlike& D_new = _D[1-_idx_D];
     const Dlike& D = _D[_idx_D];
 
-    for (size_t i=0; i<n; i++){
-        for (size_t j=0; j< nsys; j++){
-            T sum = 0;
-            for (size_t k=0; k<n; k++){
-                sum += RU[k*n+i]*D[k*nsys+j];
-            }
-            D_new[i*nsys+j] = sum;
+    for (size_t i = 0; i < n; i++) {
+        T* __restrict__ out = &D_new[i*nsys];
+        std::fill(out, out+nsys, 0);
+
+        for (size_t k = 0; k < n; k++) {
+            const T r = RU[k*n + i];
+            const T* __restrict__ row = &D[k*nsys];
+            simd_for<T>(nsys, [&](size_t j){
+                out[j] += r * row[j];
+            });
         }
     }
+
+    // for (size_t i=0; i<n; i++){
+    //     for (size_t j=0; j< nsys; j++){
+    //         T sum = 0;
+    //         for (size_t k=0; k<n; k++){
+    //             sum += RU[k*n+i]*D[k*nsys+j];
+    //         }
+    //         D_new[i*nsys+j] = sum;
+    //     }
+    // }
 
     _idx_D = 1 - _idx_D;
     _n_eq_steps = 0;
@@ -528,10 +534,9 @@ void BDF<T, N, SP, OdeType, Derived>::set_prediction(T* y){
     }
 
     for (size_t i=0; i < _order+1; i++){
-        #pragma omp simd
-        for (size_t j=0; j < n; j++){
+        simd_for<T>(n, [&](size_t j){
             y[j] += D[i * n + j];
-        }
+        });
     }
 }
 
@@ -547,10 +552,9 @@ void BDF<T, N, SP, OdeType, Derived>::set_psi(T* psi){
     }
     for (size_t i=1; i<_order+1; i++){
         //optimize
-        #pragma omp simd
-        for (size_t j=0; j<n; j++){
+        simd_for<T>(n, [&](size_t j){
             psi[j] += D[i * n + j] * g[i] / a;
-        }
+        });
     }
 }
 
