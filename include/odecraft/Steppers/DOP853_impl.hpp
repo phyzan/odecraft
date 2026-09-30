@@ -272,15 +272,14 @@ void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, con
     // y(θ) = y_old + sum of terms with alternating θ and (1-θ) multiplications
     assert( (t != t1 && t != t2) && "coef_mat_interp_dop853 must only be called on the open interval");
 
-    T h = t2 - t1;
-    T x = (t - t1) / h;  // θ
-    T one_minus_x = T(1) - x;  // (1-θ)
+    auto h = t2 - t1;
+    auto x = (t - t1) / h;  // theta
+    auto one_minus_x = 1 - x;  // (1 - theta)
 
     // Initialize result with 0 (NOT y_old - that gets added at the end)
-    #pragma omp simd
-    for (size_t i = 0; i < size; i++){
-        result[i] = T(0);
-    }
+    simd_for<T>(size, [&](size_t i){
+        result[i] = 0;
+    });
 
     // Horner-like scheme: process F coefficients from last to first
     // for i, f in enumerate(reversed(self.F)):
@@ -292,30 +291,26 @@ void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, con
         size_t i = order - 1 - idx;  // reversed index: 6, 5, 4, 3, 2, 1, 0
 
         // Add F[i] coefficient
-        #pragma omp simd
-        for (size_t j = 0; j < size; j++){
+        simd_for<T>(size, [&](size_t j){
             result[j] += coef_mat[j * order + i];
-        }
+        });
 
         // Multiply by θ or (1-θ) based on iteration
         if (idx % 2 == 0){
-            #pragma omp simd
-            for (size_t j = 0; j < size; j++){
+            simd_for<T>(size, [&](size_t j){
                 result[j] *= x;
-            }
+            });
         } else {
-            #pragma omp simd
-            for (size_t j = 0; j < size; j++){
+            simd_for<T>(size, [&](size_t j){
                 result[j] *= one_minus_x;
-            }
+            });
         }
     }
 
     // Add y_old at the end
-    #pragma omp simd
-    for (size_t i = 0; i < size; i++){
+    simd_for<T>(size, [&](size_t i){
         result[i] += y1[i];
-    }
+    });
 }
 
 template<typename T>
