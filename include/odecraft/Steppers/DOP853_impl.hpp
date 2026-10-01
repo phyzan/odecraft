@@ -511,7 +511,7 @@ StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state
     T* dest = K_.data();
     const T* src = K_.data() + N_STAGES*this->nsys();
     std::copy(src, src + this->nsys(), dest);
-    return detail::rk_adapt_step(
+    return detail::rk_adapt_step<N>(
         res, state, this->nsys(),
         this->min_step(),
         this->max_step(),
@@ -549,7 +549,7 @@ auto DOP853<T, N, SP, OdeType, Derived>::local_interp() const{
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr typename DOP853<T, N, SP, OdeType, Derived>::Atype DOP853<T, N, SP, OdeType, Derived>::Amatrix(){
+constexpr DOP853<T, N, SP, OdeType, Derived>::Atype DOP853<T, N, SP, OdeType, Derived>::Amatrix(){
     Atype result(N_STAGES, N_STAGES);
     auto full_A = DOP_COEFS<T>::make_A();
     for(size_t i = 0; i < N_STAGES; ++i){
@@ -561,12 +561,12 @@ constexpr typename DOP853<T, N, SP, OdeType, Derived>::Atype DOP853<T, N, SP, Od
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr typename DOP853<T, N, SP, OdeType, Derived>::Btype DOP853<T, N, SP, OdeType, Derived>::Bmatrix(){
+constexpr DOP853<T, N, SP, OdeType, Derived>::Btype DOP853<T, N, SP, OdeType, Derived>::Bmatrix(){
     return DOP_COEFS<T>::make_B();
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr typename DOP853<T, N, SP, OdeType, Derived>::Ctype DOP853<T, N, SP, OdeType, Derived>::Cmatrix(){
+constexpr DOP853<T, N, SP, OdeType, Derived>::Ctype DOP853<T, N, SP, OdeType, Derived>::Cmatrix(){
     Ctype result(N_STAGES);
     auto C = DOP_COEFS<T>::make_C();
     std::copy(C.data(), C.data() + N_STAGES, result.data());
@@ -574,7 +574,7 @@ constexpr typename DOP853<T, N, SP, OdeType, Derived>::Ctype DOP853<T, N, SP, Od
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr typename DOP853<T, N, SP, OdeType, Derived>::AExtraType DOP853<T, N, SP, OdeType, Derived>::Amatrix_extra(){
+constexpr DOP853<T, N, SP, OdeType, Derived>::AExtraType DOP853<T, N, SP, OdeType, Derived>::Amatrix_extra(){
     AExtraType result(N_STAGES_EXTRA, N_STAGES_EXT);
     auto A = DOP_COEFS<T>::make_A();
     T* dest = result.data();
@@ -584,7 +584,7 @@ constexpr typename DOP853<T, N, SP, OdeType, Derived>::AExtraType DOP853<T, N, S
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr typename DOP853<T, N, SP, OdeType, Derived>::CExtraType DOP853<T, N, SP, OdeType, Derived>::Cmatrix_extra(){
+constexpr DOP853<T, N, SP, OdeType, Derived>::CExtraType DOP853<T, N, SP, OdeType, Derived>::Cmatrix_extra(){
     CExtraType result(N_STAGES_EXTRA);
     auto C = DOP_COEFS<T>::make_C();
     std::copy(C.data() + N_STAGES+1, C.data() + N_STAGES+1 + N_STAGES_EXTRA, result.data());

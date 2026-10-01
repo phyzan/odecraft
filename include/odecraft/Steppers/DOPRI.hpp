@@ -112,7 +112,7 @@ void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T
 
 /// @brief Shared step-size control loop: repeatedly calls step_fn(res, state, h) -> err_norm,
 /// halving/growing habs until the local error is accepted (mirrors scipy/boost step control).
-template<typename T, typename StepFn>
+template<size_t N, typename T, typename StepFn>
 StepResult rk_adapt_step(T* res, const T* state, size_t n,
                           const T& min_step, const T& max_step, const T& min_step_abs,
                           const T& safety, const T& max_factor, const T& min_factor,

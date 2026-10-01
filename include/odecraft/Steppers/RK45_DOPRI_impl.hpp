@@ -179,7 +179,7 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 StepResult RK45<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     mat_is_set = false;
     std::copy(KF_.data(), KF_.data() + this->nsys(), K0_.data());
-    return detail::rk_adapt_step(
+    return detail::rk_adapt_step<N>(
         res, state, this->nsys(),
         this->min_step(),
         this->max_step(),

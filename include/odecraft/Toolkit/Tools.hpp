@@ -6,6 +6,7 @@
 #include <chrono>
 #include <functional>
 #include <cmath>
+#include <type_traits>
 #include <xdiff/xdiff.hpp>
 #include <polybox/polybox.hpp>
 #include <xdiff/tools.hpp>
@@ -72,29 +73,6 @@ template<class T>
 inline constexpr bool is_simd_scalar_v =
     is_vectorizable<std::remove_cv_t<T>>::value;
 
-} // namespace ode::detail
-
-
-/**
- * @brief Runs body(i) for every i in [0, n), asking for SIMD only where it can be applied.
- *     simd_for<T>(nsys, [&](size_t i){ out[i] += a * rhs[i]; });
- */
-template<typename T, typename F>
-XDIFF_FORCEINLINE void simd_for(size_t n, F&& body){
-    if constexpr (detail::is_simd_scalar_v<T>){
-        #pragma omp simd
-        for (size_t i = 0; i < n; i++){
-            body(i);
-        }
-    } else {
-        for (size_t i = 0; i < n; i++){
-            body(i);
-        }
-    }
-}
-
-namespace detail {
-
 template<typename F, typename T, size_t N, size_t Order>
 concept supportsDualRhsAt =
     requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, int(Order)> q) {
@@ -121,7 +99,53 @@ template<typename F, typename T, size_t N, size_t... Is>
 inline constexpr bool supportsDualJacAll<F, T, N, std::index_sequence<Is...>> =
     (supportsDualJacAt<F, T, N, Is + 1> && ...);
 
-} // namespace detail
+template<typename T>
+inline T copy_elem(const T& item){
+    return item;
+}
+
+template<typename T>
+inline const T& ref_elem(const T& item){
+    return item;
+}
+
+template<typename T>
+inline T& mut_ref_elem(T& item){
+    return item;
+}
+
+// Whether a buffer of T can live in automatic storage. That needs two things: a size known at
+// compile time, and a scalar cheap enough that creating the buffer is free. A type like
+// mpfr::mpreal is not trivially copyable - every element owns a heap allocation - so a fresh
+// stack array would construct and destroy nsys of them on every access. Those types use a
+// persistent heap-backed buffer instead, allocated once and handed out by reference.
+//
+// Used both by the solver scratch space (SolverScratchSpace) and by the step caches in
+// Cache.hpp, which is why it lives here rather than in either of them.
+template<typename T, size_t N>
+inline constexpr bool scratch_is_static = (N > 0) && std::is_trivially_copyable_v<T>;
+
+} // namespace ode::detail
+
+
+/**
+ * @brief Runs body(i) for every i in [0, n), asking for SIMD only where it can be applied.
+ *     simd_for<T>(nsys, [&](size_t i){ out[i] += a * rhs[i]; });
+ */
+template<typename T, typename F>
+XDIFF_FORCEINLINE void simd_for(size_t n, F&& body){
+    if constexpr (detail::is_simd_scalar_v<T>){
+        #pragma omp simd
+        for (size_t i = 0; i < n; i++){
+            body(i);
+        }
+    } else {
+        for (size_t i = 0; i < n; i++){
+            body(i);
+        }
+    }
+}
+
 
 template<typename F, typename T>
 concept isRhsFunc = 
