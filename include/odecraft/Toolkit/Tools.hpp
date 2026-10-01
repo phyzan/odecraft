@@ -7,6 +7,7 @@
 #include <functional>
 #include <cmath>
 #include <type_traits>
+#include <odecraft/math.hpp>
 #include <xdiff/xdiff.hpp>
 #include <polybox/polybox.hpp>
 #include <xdiff/tools.hpp>
@@ -17,7 +18,14 @@
 
 namespace ode {
 
-using std::pow, std::sin, std::cos, std::exp, std::real, std::imag, ndspan::min, ndspan::max, std::complex;
+// Standard math overloads, so that an unqualified abs()/sin()/pow()/... on a bare scalar
+// resolves to std's while ADL still carries xdiff Duals and lazex expressions to their own.
+// Without it, a scalar call reaches whatever <cstdlib> left in the global namespace, where
+// ::abs(int) silently truncates. Callers need the same line in their own namespace -
+// see odecraft/math.hpp.
+ODECRAFT_USING_MATH;
+
+using std::real, std::imag, ndspan::min, ndspan::max, std::complex;
 
 using ndspan::Array, ndspan::Array1D, ndspan::Array2D, ndspan::View, ndspan::MutView, ndspan::View1D, ndspan::View2D, ndspan::View3D, ndspan::Allocation, ndspan::Layout, ndspan::prod;
 
@@ -248,11 +256,6 @@ enum class RootPolicy : std::uint8_t { Left, Middle, Right};
 
 
 template<typename T>
-inline T abs(const T& x){
-    return x >= 0 ? x : T{-x};
-}
-
-template<typename T>
 inline int sgn(const T& x){
     return ( x > 0) ? 1 : ( (x < 0) ? -1 : 0);
 }
@@ -275,7 +278,7 @@ NDSPAN_INLINE void set_max(T& out, const A& a, const B& b){
 
 template<typename T, typename U>
 NDSPAN_INLINE void set_abs(T& out, const U& x){
-    (x > 0) ? (out = x) : (out = -x);
+    out = abs(x);
 }
 
 template<typename T>
@@ -387,9 +390,9 @@ void inv_mat_row_major(T* out, const T* mat, size_t N, T* work, size_t* pivot) {
 
     for (size_t i = 0; i < N; ++i) {
         size_t max_row = i;
-        T max_val = abs<T>(lu[i*N + i]);
+        T max_val = abs(lu[i*N + i]);
         for (size_t j = i + 1; j < N; ++j) {
-            T val = abs<T>(lu[j*N + i]);
+            T val = abs(lu[j*N + i]);
             if (val > max_val) { max_val = val; max_row = j; }
         }
         // assert(max_val != 0 && "Matrix is singular");
@@ -451,9 +454,9 @@ T detLU_row_major(T* mat, size_t N) {
     for (size_t i = 0; i < N; ++i) {
         // Partial pivoting
         size_t pivot = i;
-        T max_val = abs<T>(mat[i * N + i]);
+        T max_val = abs(mat[i * N + i]);
         for (size_t j = i + 1; j < N; ++j) {
-            T val = abs<T>(mat[j * N + i]);
+            T val = abs(mat[j * N + i]);
             if (val > max_val) {
                 pivot = j;
                 max_val = val;

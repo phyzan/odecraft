@@ -261,8 +261,8 @@ void VariationalOdeSys<T, N, OdeType>::delta_J(T* mat, const T& t, const T* q, c
         // for each (i, j) element of the bottom left block
         for (size_t k=0; k<n; k++){ // d/dq_k
 
-            const T abs_qj = abs<T>(q[j]);
-            const T abs_qk = abs<T>(q[k]);
+            const T abs_qj = abs(q[j]);
+            const T abs_qk = abs(q[k]);
             T h_j, h_k, h_sq;
             if (dt != nullptr){
                 h_j = dt[j];

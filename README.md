@@ -128,6 +128,28 @@ CMake options that toggle preprocessor macros across the library and its bundled
 
 See useful [options](https://github.com/phyzan/xdiff#CMake-Options) for the `xdiff` submodule.
 
+## Calling math functions: `ODECRAFT_USING_MATH`
+
+Put `ODECRAFT_USING_MATH;` in every namespace of yours that calls `abs()`, `sqrt()`, `pow()` or other math functions **unqualified**.
+
+One line per namespace, or once at global scope:
+
+```cpp
+#include <odecraft/odecraft.hpp>
+
+namespace myproject {
+
+ODECRAFT_USING_MATH;
+
+// now correct whether T is double, an xdiff Dual, or a lazex expression
+template<typename T>
+T foo(const T& err, const T& q){
+    return abs(err) / (1e-10 + 1e-10 * abs(q));
+}
+
+} // namespace myproject
+```
+
 
 ---
 

@@ -29,18 +29,35 @@ XDIFF_FORCEINLINE void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, co
 
 template<size_t N, typename T, typename StepFn>
 XDIFF_FORCEINLINE StepResult rk_adapt_step(T* res, const T* state, size_t n,
-                          const T& min_step, const T& max_step, const T& min_step_abs,
-                          const T& safety, const T& max_factor, const T& min_factor,
-                          const T& err_exp, const T& inc_exp, const T& min_err,
+                          const T& hmin, const T& hmax, const T& hmin_abs,
+                          const T& safety_, const T& max_factor_, const T& min_factor_,
+                          const T& err_exp_, const T& inc_exp_, const T& min_err_,
                           int direction, StepFn&& step_fn){
+
+    decltype(auto) min_step = const_cache(hmin);
+    decltype(auto) max_step = const_cache(hmax);
+    decltype(auto) min_step_abs = const_cache(hmin_abs);
+    decltype(auto) safety = const_cache(safety_);
+    decltype(auto) max_factor = const_cache(max_factor_);
+    decltype(auto) min_factor = const_cache(min_factor_);
+    decltype(auto) err_exp = const_cache(err_exp_);
+    decltype(auto) inc_exp = const_cache(inc_exp_);
+    decltype(auto) min_err = const_cache(min_err_);
     decltype(auto) time = const_cache(state[0]);
     decltype(auto) habs_old = const_cache(state[1]);
     decltype(auto) q = const_cached_array<T, N>(state+2, n);
 
+    // Each cache is followed immediately by its write-back guard; see Toolkit/Cache.hpp for why
+    // the two are separate objects.
     decltype(auto) t_new = mut_cache(res[0]);
     decltype(auto) habs = mut_cache(res[1]);
-    habs = habs_old;
     decltype(auto) q_out = mut_cached_array<T, N>(res+2, n);
+    [[maybe_unused]] decltype(auto) t_new_sync = cache_write_back(t_new, res[0]);
+    [[maybe_unused]] decltype(auto) habs_sync = cache_write_back(habs, res[1]);
+    [[maybe_unused]] decltype(auto) q_out_sync = cache_write_back<T, N>(q_out, res+2);
+
+    habs = habs_old;
+    // T* q_out = res + 2;
 
     T factor;
     bool step_accepted = false;
@@ -60,7 +77,7 @@ XDIFF_FORCEINLINE StepResult rk_adapt_step(T* res, const T* state, size_t n,
             set_max(factor, min_factor, safety * pow(err_norm, err_exp));
         }
 
-        if (!all_are_finite(q_out.data(), n)){
+        if (!all_are_finite<T>(q_out.data(), n)){
             return StepResult::NonFiniteError;
         } else if (habs < min_step_abs){
             return StepResult::TinyStepError;
