@@ -226,30 +226,34 @@ void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     size_t nsys = this->nsys();
-    decltype(auto) h_min = const_cache(this->min_step());
-    decltype(auto) max_step = const_cache(this->max_step());
-    decltype(auto) atol = const_cache(this->atol());
-    decltype(auto) rtol = const_cache(this->rtol());
-    decltype(auto) t = const_cache(state[0]);
-    decltype(auto) stepsize = const_cache(state[1]);
-
     
-    T& t_new = res[0];
-    T& habs  = res[1];
-    T* y_new = res + 2;
-
-    // Seed t_new with the current time: the early returns below (and the max_step clamp, which
-    // returns Success) can fire before the stepping loop ever assigns it.
-    t_new = t;
-
-    std::copy(state+2, state+2 + nsys, y_new);
-
     T safety, max_factor, factor, c;
     int delta_order;
     bool converged;
     bool currentjac = false;
     bool step_accepted = false;
     NewtConv conv_result;
+    
+    const auto& [h_min, max_step, atol, rtol, t, stepsize] = make_scratch_view(
+        this->min_step(), this->max_step(), this->atol(), this->rtol(), state[0], state[1]
+    );
+
+    // ----------- Scratch pad ---------------
+    auto  scratch = make_scratch(res[0], res[1]);
+    auto& [t_new, habs] = scratch;
+
+    auto y_new = cache_mut_array<N>(res+2, nsys);
+
+    [[maybe_unused]] auto t_new_write_back = make_write_back(t_new, res[0]);
+    [[maybe_unused]] auto habs_write_back  = make_write_back(habs, res[1]);
+    [[maybe_unused]] auto q_out_write_back  = make_array_write_back<N>(y_new, res+2);
+    // ---------------------------------------
+
+    // Seed t_new with the current time: the early returns below (and the max_step clamp, which
+    // returns Success) can fire before the stepping loop ever assigns it.
+    t_new = t;
+
+    std::copy(state+2, state+2 + nsys, y_new.data());
 
     if (stepsize > max_step){
         habs = max_step;
@@ -325,7 +329,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
             continue;
         }
 
-        safety = T(9)/10 * T(2UL * NEWTON_MAXITER + 1UL)/(2UL * NEWTON_MAXITER + conv_result.n_iter);
+        safety = T(18UL * NEWTON_MAXITER + 9UL)/(20UL * NEWTON_MAXITER + 10UL*conv_result.n_iter);
         simd_for<T>(nsys, [&](size_t i){
             _scale[i] = atol + rtol * abs(y_new[i]);
             _error[i] = BDF_COEFS.ERR_CONST[_order] * _d[i];
