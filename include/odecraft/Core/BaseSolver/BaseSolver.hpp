@@ -74,16 +74,8 @@ namespace ode{
 
 namespace detail{
 
-// Whether a solver's scratch buffers can live in automatic storage. That needs two things:
-// a system size known at compile time, and a scalar cheap enough that creating the buffer is
-// free. A type like mpfr::mpreal is neither trivially constructible nor trivially copyable -
-// every element owns a heap allocation - so a fresh stack array per access would construct and
-// destroy nsys of them on every step. Those types use the persistent heap-backed form instead,
-// which allocates once in the constructor and hands out references.
-template<typename T, size_t N>
-inline constexpr bool scratch_is_static = (N > 0) && std::is_trivially_copyable_v<T>
-                                          && std::is_trivially_default_constructible_v<T>;
-
+// scratch_is_static lives in Toolkit/Tools.hpp - the step caches in Toolkit/Cache.hpp need the
+// same trait, and Toolkit must not depend on Core.
 
 template<typename T, size_t N>
 using StepperState = Array1D<T, (N > 0 ? N+2 : 0)>;
@@ -142,7 +134,7 @@ class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, N, SP>::ty
 
 public:
 
-    using Base = typename traits::SolverVirtualTypeTraits<Derived, T, N, SP>::type;
+    using Base = traits::SolverVirtualTypeTraits<Derived, T, N, SP>::type;
     static constexpr JacPolicy JP = getJacPolicy<T, N, OdeType>();
     
 

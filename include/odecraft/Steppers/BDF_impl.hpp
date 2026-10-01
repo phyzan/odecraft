@@ -3,6 +3,8 @@
 
 
 #include "BDF.hpp"
+#include "odecraft/Toolkit/Cache.hpp"
+
 
 namespace ode{
 
@@ -114,9 +116,10 @@ template<typename T>
 BDFCONSTS<T>::BDFCONSTS(){
     KAPPA = {0, -T(185)/1000, -T(1)/9, -T(823)/10000, -T(415)/10000, 0};
     GAMMA[0] = 0;
-    T cumulative = 0;
+    T cumulative{0};
+    const T one{1};
     for (size_t i = 1; i < BDF_MAX_ORDER+1; ++i) {
-        cumulative += T(1) / i;
+        cumulative += one / i;
         GAMMA[i] = cumulative;
     }
 
@@ -222,20 +225,23 @@ void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
-    const T& h_min = this->min_step();
-    const T& max_step = this->max_step();
-    const T& atol = this->atol();
-    const T& rtol = this->rtol();
-
-    const T& t = state[0];
-    const T& stepsize = state[1];
     size_t nsys = this->nsys();
+    decltype(auto) h_min = const_cache(this->min_step());
+    decltype(auto) max_step = const_cache(this->max_step());
+    decltype(auto) atol = const_cache(this->atol());
+    decltype(auto) rtol = const_cache(this->rtol());
+    decltype(auto) t = const_cache(state[0]);
+    decltype(auto) stepsize = const_cache(state[1]);
+    decltype(auto) t_new = mut_cache(res[0]);
+    decltype(auto) habs = mut_cache(res[1]);
+    decltype(auto) y_new = mut_cached_array<T, N>(res+2, nsys);
 
-    T& t_new = res[0] = state[0];
-    T& habs = res[1];
-    T* y_new = res+2;
+    // Seed t_new with the current time: the early returns below (and the max_step clamp, which
+    // returns Success) can fire before the stepping loop ever assigns it, and the cache writes
+    // whatever it holds back into res[0].
+    t_new = t;
 
-    std::copy(state+2, state+2 + nsys, y_new);
+    std::copy(state+2, state+2 + nsys, y_new.data());
 
     T safety, max_factor, factor, c;
     int delta_order;
@@ -294,7 +300,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
                 _valid_LU = true;
             }
 
-            conv_result = this->solve_bdf_system(y_new, _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
+            conv_result = this->solve_bdf_system(y_new.data(), _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
             if (conv_result.flag != StepResult::Success){
                 return conv_result.flag;
             }

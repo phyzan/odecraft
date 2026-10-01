@@ -145,7 +145,7 @@ StepResult RK23<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     mat_is_set_ = false;
     // FSAL: the previous step's last stage becomes this step's first
     std::copy(KF_.data(), KF_.data() + this->nsys(), K0_.data());
-    return detail::rk_adapt_step(res, state, this->nsys(),
+    return detail::rk_adapt_step<N>(res, state, this->nsys(),
         this->min_step(),
         this->max_step(),
         this->MIN_STEP,
