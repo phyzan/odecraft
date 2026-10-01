@@ -328,7 +328,7 @@ T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q
             err5 += K[i*n + j] * E5[i];
             err3 += K[i*n + j] * E3[i];
         }
-        const T scale = atol + rtol * ndspan::max<T>(abs<T>(q[j]), abs<T>(q_new[j]));
+        const T scale = atol + rtol * ndspan::max<T>(abs(q[j]), abs(q_new[j]));
         err5 /= scale;
         err3 /= scale;
 
@@ -341,7 +341,7 @@ T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q
     }
 
     const auto denom = err5_norm_2 + err3_norm_2 / 100;
-    return abs<T>(h) * err5_norm_2 / sqrt(denom * n);
+    return abs(h) * err5_norm_2 / sqrt(denom * n);
 }
 
 

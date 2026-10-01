@@ -36,7 +36,7 @@ constexpr void jac_approx(Callable&& func, T* out, T* worker, const T& t, const 
 
     for (size_t i = 0; i < n; i++) {
         // Compute step size: use provided dt or compute
-        const T abs_qi = abs<T>(q[i]);
+        const T abs_qi = abs(q[i]);
         T h_i;
         if (dt != nullptr) {
             h_i = dt[i];

@@ -223,7 +223,7 @@ T BaseSolver<Derived, T, N, SP, OdeType>::auto_step(T t, const T* q) const{
     T* scale = y1+2*n;
     T* f0 = y1+3*n;
     for (size_t i=0; i<n; i++){
-        scale[i] = atol() + abs<T>(q[i])*rtol();
+        scale[i] = atol() + abs(q[i])*rtol();
     }
     this->rhs(f0, t, q);
     T d0 = rms_norm(q, scale, n);
@@ -561,7 +561,11 @@ BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, 
             throw std::invalid_argument("Cannot instantiate a Solver with events when it is declared with a non-rich SolverPolicy");
         } else {
             time_ = t0;
-            habs_ = (stepsize == 0 ? this->auto_step(t0, q0.data()) : abs<T>(stepsize));
+            if (stepsize == 0){
+                habs_ = this->auto_step(t0, q0.data());
+            } else {
+                habs_ = abs(stepsize);
+            }
             ics_state_[0] = t0;
             ics_state_[1] = habs_;
             std::copy(q0.data(), q0.data() + this->nsys(), ics_state_.data()+2);

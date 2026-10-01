@@ -35,7 +35,7 @@ bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t, State<T> 
 
     int t_dir = this->direction();
     int d = this->sign_change_dir();
-    if ( (((d == 0) && (val1*val2 < 0)) || (t_dir*d*val1 < 0 && 0 < t_dir*d*val2)) && (abs<T>(val1) > ftol)){
+    if ( (((d == 0) && (val1*val2 < 0)) || (t_dir*d*val1 < 0 && 0 < t_dir*d*val2)) && (abs(val1) > ftol)){
         T* vec = this->worker.data();
 
         auto obj_fun_scalar = [&](T t_dummy) NDSPAN_LAMBDA_INLINE{

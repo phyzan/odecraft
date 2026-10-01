@@ -43,8 +43,8 @@ XDIFF_FORCEINLINE T rk23_step_impl(T& t_new, T* __restrict__ q_new, const T& t, 
     T* __restrict__ scaled_err = r;
     for (size_t j = 0; j < n; j++) {
         const auto err   = h * (E[0]*K0[j] + E[1]*K1[j] + E[2]*K2[j] + E[3]*K3[j]);
-        const auto scale = atol + rtol * (abs<T>(q[j]) + abs<T>(K0[j] * h));
-        scaled_err[j] = abs<T>(err) / scale;
+        const auto scale = atol + rtol * (abs(q[j]) + abs(K0[j] * h));
+        scaled_err[j] = abs(err) / scale;
     }
     return *std::max_element(scaled_err, scaled_err + n);
 }

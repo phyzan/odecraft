@@ -47,10 +47,10 @@ void LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
     for (size_t k = 0; k < n - 1; ++k) {
         // Find pivot row
         size_t p = k;
-        T max_val = abs<T>(A(k, k));
+        T max_val = abs(A(k, k));
         for (size_t i = k + 1; i < n; ++i) {
-            if (abs<T>(A(i, k)) > max_val) {
-                max_val = abs<T>(A(i, k));
+            if (abs(A(i, k)) > max_val) {
+                max_val = abs(A(i, k));
                 p = i;
             }
         }
@@ -232,16 +232,17 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     decltype(auto) rtol = const_cache(this->rtol());
     decltype(auto) t = const_cache(state[0]);
     decltype(auto) stepsize = const_cache(state[1]);
-    decltype(auto) t_new = mut_cache(res[0]);
-    decltype(auto) habs = mut_cache(res[1]);
-    decltype(auto) y_new = mut_cached_array<T, N>(res+2, nsys);
+
+    
+    T& t_new = res[0];
+    T& habs  = res[1];
+    T* y_new = res + 2;
 
     // Seed t_new with the current time: the early returns below (and the max_step clamp, which
-    // returns Success) can fire before the stepping loop ever assigns it, and the cache writes
-    // whatever it holds back into res[0].
+    // returns Success) can fire before the stepping loop ever assigns it.
     t_new = t;
 
-    std::copy(state+2, state+2 + nsys, y_new.data());
+    std::copy(state+2, state+2 + nsys, y_new);
 
     T safety, max_factor, factor, c;
     int delta_order;
@@ -279,7 +280,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 
         this->set_prediction(_ypred.data());
         simd_for<T>(nsys, [&](size_t i){
-            _scale[i] = atol + rtol * abs<T>(_ypred[i]);
+            _scale[i] = atol + rtol * abs(_ypred[i]);
         });
         this->set_psi(_psi.data());
 
@@ -300,7 +301,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
                 _valid_LU = true;
             }
 
-            conv_result = this->solve_bdf_system(y_new.data(), _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
+            conv_result = this->solve_bdf_system(y_new, _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
             if (conv_result.flag != StepResult::Success){
                 return conv_result.flag;
             }
@@ -326,7 +327,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 
         safety = T(9)/10 * T(2UL * NEWTON_MAXITER + 1UL)/(2UL * NEWTON_MAXITER + conv_result.n_iter);
         simd_for<T>(nsys, [&](size_t i){
-            _scale[i] = atol + rtol * abs<T>(y_new[i]);
+            _scale[i] = atol + rtol * abs(y_new[i]);
             _error[i] = BDF_COEFS.ERR_CONST[_order] * _d[i];
         });
         _error_norms[1] = rms_norm(_error.data(), _scale.data(), nsys);
