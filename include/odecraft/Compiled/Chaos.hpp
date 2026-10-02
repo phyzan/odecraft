@@ -129,8 +129,17 @@ ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_EXTERN_CHAOS_FACTORY)
     ode::CLS<T, 0, ::ode::SolverPolicy::RichVirtual, ODECRAFT_VARIATIONAL_SYS(T),                           \
              ODECRAFT_VARIATIONAL_SOLVER(S, T)>
 
+#define ODECRAFT_VARIATIONAL_BASE(S, T)                                                                     \
+    ::ode::BaseSolver<ODECRAFT_VARIATIONAL_SOLVER(S, T), T, 0, ::ode::SolverPolicy::RichVirtual,            \
+                      ODECRAFT_VARIATIONAL_SYS(T)>
+
+#define ODECRAFT_VARIATIONAL_RICH(S, T)                                                                     \
+    ::ode::RichSolver<ODECRAFT_VARIATIONAL_SOLVER(S, T), T, 0, ::ode::SolverPolicy::RichVirtual,            \
+                      ODECRAFT_VARIATIONAL_SYS(T)>
 
 #define ODECRAFT_VARIATIONAL_SET(SPEC, S, CLS, T)                                                           \
+    SPEC class ODECRAFT_VARIATIONAL_BASE(S, T);                                                             \
+    SPEC class ODECRAFT_VARIATIONAL_RICH(S, T);                                                             \
     SPEC class ODECRAFT_VARIATIONAL_STEPPER(CLS, S, T);                                                     \
     SPEC class ODECRAFT_VARIATIONAL_SOLVER(S, T);                                                           
 
