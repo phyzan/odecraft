@@ -8,9 +8,54 @@
 
 namespace ode {
 
-enum class UtilPolicy : std::uint8_t{ Virtual, RichVirtual};
+enum class UtilPolicy : std::uint8_t{
+    Virtual,
+    RichVirtual,
+};
 
-enum class SolverPolicy : std::uint8_t{ Static, RichStatic, Virtual, RichVirtual};
+enum class SolverPolicy : std::uint8_t{
+    Static,
+    RichStatic,
+    Virtual,
+    RichVirtual,
+};
+
+enum class StepperStatus : std::uint8_t{
+    NewStep, // Stepper is running, located at a new adapted step
+    BetweenSteps, // Stepper is running, located between two adapted steps
+    Uninitialized, // Initial conditions not set
+    BadICS, // Invalid ics (nans or infs)
+    TinyStep, // Stepsize required was near machine precision
+    MinStep, // Stepsize reached minimum set by user
+    MaxStep, // Stepsize reached maximum set by user
+    TooSmallStep, // t + dt == t due to roundoff error
+    Diverges, // State reached nan/inf
+    Killed, // Killed by the user
+};
+
+inline constexpr const char* status_message(StepperStatus status){
+    switch (status){
+        case StepperStatus::Uninitialized:
+            return "Uninitialized";
+        case StepperStatus::BadICS:
+            return "Ics contain Nan/Inf";
+        case StepperStatus::TinyStep:
+            return "Stepsize required is near machine precision";
+        case StepperStatus::MinStep:
+            return "Stepsize reached its minimum";
+        case StepperStatus::MaxStep:
+            return "Stepsize reached its maximum";
+        case StepperStatus::TooSmallStep:
+            return "Stepsize too small relative to the integration variable";
+        case StepperStatus::Diverges:
+            return "Integrator diverges";
+        case StepperStatus::Killed:
+            return "Killed by user";
+        default:
+            return "Running";
+    }
+}
+
 
 template<typename T, size_t N>
 class OdeSolver;
@@ -25,7 +70,7 @@ enum class Stepper : uint8_t{
     RK23,
     RK45,
     DOP853,
-    BDF
+    BDF,
 };
 
 namespace detail{

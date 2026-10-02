@@ -96,7 +96,6 @@ static void run_ode_driver(){
     OdeResult<double> result;
     check(ode.integrate_until(&result, 10.0), "integrate_until reported success");
     check(result.success(), "result.success()");
-    check(!result.diverges(), "solution did not diverge");
     check_close(result.q(result.t().size() - 1, 0), std::cos(10.0), 1e-6, "x(10) with a null Jac");
 
     // Dense output: an OdeSolution answers at times that were never sampled.

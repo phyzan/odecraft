@@ -23,7 +23,7 @@ BDF<T, N, SP, OdeType, Derived>::BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol,
         if (this->validate_ics_impl(t0, q0.data())){
             this->reset_impl_alone();
         }else{
-            this->kill("Initial Jacobian contains nan or inf");
+            this->set_status(StepperStatus::BadICS);
         }
     }
 }

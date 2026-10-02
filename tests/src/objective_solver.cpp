@@ -40,7 +40,10 @@ void test_single_objective(){
     T t_expected = period / 4.0;
     int crossings_found = 0;
     std::array<T, 2> q;
-    while (solver.is_running() && solver.t() < 5.0 * period){
+    while (
+        solver.is_running()
+        && solver.t() < 5.0 * period
+    ){
         solver.advance();
         if (solver.is_at_objective()){
             crossings_found++;
@@ -101,7 +104,10 @@ void test_two_objectives(){
     int crossings0_found = 0;
     int crossings1_found = 0;
     std::array<T, 2> q;
-    while (solver.is_running() && solver.t() < 5.0 * period){
+    while (
+        solver.is_running()
+        && solver.t() < 5.0 * period
+    ){
         solver.advance();
         if (solver.is_at_objective()){
             solver.fill_current_vector(q.data());

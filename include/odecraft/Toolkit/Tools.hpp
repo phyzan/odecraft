@@ -496,14 +496,12 @@ template<typename T, size_t N>
 struct SolverState{
     
     ndspan::Array1D<T, N> vector;
-    std::string msg;
     size_t nt;
     T time;
     T stepsize;
-    bool diverging;
-    bool running;
+    std::string msg;
 
-    SolverState(const T* q, T t, T habs, size_t nsys, bool diverges, bool is_running, size_t updates, std::string message) : vector(q, nsys), msg(std::move(message)), nt(updates), time(t), stepsize(habs), diverging(diverges), running(is_running){}
+    SolverState(const T* q, T t, T habs, size_t nsys, size_t updates, std::string message) : vector(q, nsys), nt(updates), time(t), stepsize(habs), msg(std::move(message)){}
 
     void show(int precision = 15) const {
         std::cout << "\n" << std::setprecision(precision) << 
@@ -514,10 +512,8 @@ struct SolverState{
         array_repr(std::cout, vector);
         std::cout << "\n" <<
         "\tstepsize   : " << stepsize << "\n" <<
-        "\tDiverges   : " << (diverging ? "true" : "false") << "\n" << 
-        "\tRunning    : " << (running ? "true" : "false") << "\n" <<
         "\tUpdates    : " << nt << "\n" <<
-        "\tState      : " << msg << std::endl;
+        "\tStatus     : " << msg << std::endl;
     }
 
 };
@@ -528,7 +524,7 @@ struct SolverRichState : public SolverState<T, N>{
 
     std::string event_name;
 
-    SolverRichState(const T* q, T t, T habs, size_t Nsys, bool diverges, bool is_running, size_t Nt, std::string message, std::string event) : SolverState<T, N>(q, t, habs, Nsys, diverges, is_running, Nt, std::move(message)), event_name(std::move(event)) {}
+    SolverRichState(const T* q, T t, T habs, size_t Nsys, size_t Nt, std::string status, std::string event) : SolverState<T, N>(q, t, habs, Nsys, Nt, std::move(status)), event_name(std::move(event)) {}
     
     void show(int precision = 15) const {
         SolverState<T, N>::show(precision);

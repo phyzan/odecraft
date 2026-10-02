@@ -40,7 +40,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
     static_assert(isObserver<Callable, T> || std::is_same_v<std::decay_t<Callable>, std::nullptr_t>, "Callable must be an observer or nullptr");
     static_assert(isArray<ArrayLike, T> || std::is_same_v<std::decay_t<ArrayLike>, std::nullptr_t>, "ArrayLike must be an array or nullptr");
 
-    if (this->is_dead()){
+    if (! this->is_running()){
         this->warn_dead();
         return false;
     }
@@ -75,7 +75,10 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
     bool success;
     auto evolve = [&]() NDSPAN_LAMBDA_INLINE -> bool {
         bool res;
-        while ((res = (this->is_running() && Accessor::call_Adv_Impl(*THIS, time))) && (time != this->t())){
+        while (
+            (res = (this->is_running() && Accessor::call_Adv_Impl(*THIS, time)))
+            && (time != this->t())
+        ){
             bool obs_res;
             if constexpr (isObserver<Callable, T>){
                 decltype(auto) vector = this->scratch_.vector();
@@ -118,7 +121,11 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
             return idx;
         };
         size_t idx = 0;
-        while (idx < checkpoints.size() && (success = (this->is_running() && this->generic_advance_until(checkpoints[validate_idx(idx)], observer, nullptr))) && (time != this->t())){
+        while (
+            idx < checkpoints.size()
+            && (success = (this->is_running() && this->generic_advance_until(checkpoints[validate_idx(idx)], observer, nullptr)))
+            && (time != this->t())
+        ){
             idx++;
         }
 
