@@ -192,8 +192,6 @@ public:
     /// @brief Get the current time value.
     const T&            t() const;
 
-    View1D<T, N>        vector() const;
-
     /// @brief Get the time value of the newest computed step.
     const T&            t_new() const;
 
@@ -235,25 +233,16 @@ public:
 
     /// @brief Get the number of equations in the ODE system.
     constexpr size_t    nsys() const {if constexpr (N > 0) {return N;} else {return nsys_;}}
+
+    bool                is_running() const;
     
     /// @brief Get the number of successful integration steps taken.
     size_t              step_count() const;
 
-    /// @brief Check if the solver is currently running.
-    bool                is_running() const;
-
-    /// @brief Returns !is_running()
-    bool                is_dead() const;
-
-    /// @brief Check if the solution has diverged (contains inf/nan).
-    bool                diverges() const;
-
     /// @brief Fills the values of an array with those of the current true state vector
     void                fill_current_vector(T* out) const;
-
-    /// @brief Get the current status message.
-    const std::string&  status() const;
-
+    StepperStatus       status() const;
+    const char*         message() const;
     /**
      * @brief Print the current solver state to stdout.
      * @param prec Number of decimal places for floating-point output.
@@ -382,9 +371,8 @@ public:
 
     /**
      * @brief Permanently terminate the solver.
-     * @param text Optional message describing why the solver was killed.
      */
-    void                kill(std::string message = "");
+    void                kill();
 
     /// @brief Reset implementation hook. Derived should call base first.
     void                Reset();
@@ -407,7 +395,6 @@ public:
     const T&            get_new_time() const { return t_new(); }
     const T&            get_old_time() const { return t_old(); }
     void                get_current_vector(T* out) const { this->fill_current_vector(out); }
-    View1D<T, N>        get_vector() const { return this->vector(); }
     View1D<T, N>        get_new_vector() const { return vector_new(); }
     View1D<T, N>        get_old_vector() const { return vector_old(); }
     State<T>            get_ics() const { return ics(); }
@@ -421,10 +408,9 @@ public:
     const T&            get_max_step() const { return max_step(); }
     size_t              get_nsys() const { return nsys(); }
     size_t              get_step_count() const { return step_count(); }
-    bool                get_is_running() const { return is_running(); }
-    bool                get_is_dead() const { return is_dead(); }
-    bool                get_diverges() const { return diverges(); }
-    const std::string&  get_status() const { return status(); }
+    bool                get_is_running() const {return is_running();}
+    StepperStatus       get_status() const { return status(); }
+    const char*         get_message() const { return message(); }
     bool                get_validate_ics(T t0, const T* q0) const { return validate_ics(t0, q0); }
     bool                get_has_valid_ics() const { return has_valid_ics(); }
     Stepper             get_method() const { return method(); }
@@ -466,7 +452,7 @@ public:
         }
     }
     void                do_reset() { THIS->Reset(); }
-    void                do_kill(std::string message = "") { kill(std::move(message)); }
+    void                do_kill() { kill(); }
     bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) { return set_ics(t0, y0, stepsize, direction); }
 
     // =================== STATIC OVERRIDES (NECESSARY) ===============================
@@ -565,14 +551,10 @@ protected:
     /// @brief Get pointer to the most recently computed state.
     const T*    new_state_ptr() const;
 
+    void        set_status(StepperStatus new_status);
+
     /// @brief Borrow the scratch buffer for one state vector.
-    ///
-    /// Bind with `decltype(auto)`, never `auto`: DynamicSolverScratch hands out a
-    /// reference to a persistent member and StaticSolverScratch a by-value
-    /// temporary, and `auto` would copy the former and drop the size of the latter.
-    /// The buffer is shared, so fill it and consume it within one statement block,
-    /// and do not hold it across a call that may borrow it again. The only other
-    /// borrowers are the observer hand-offs in generic_advance_until().
+    /// Bind with `decltype(auto)`, never `auto`
     decltype(auto) scratch_vector() const { return scratch_.vector(); }
 
     /// @brief Get pointer to the previous accepted state.
@@ -580,9 +562,6 @@ protected:
 
     /// @brief Print a warning that the solver is dead.
     void        warn_dead() const;
-
-    /// @brief Set the solver status message.
-    void        set_message(const std::string& text);
 
     /// @brief Check if the current true state matches the new state.
     bool        is_at_new_state() const;
@@ -666,15 +645,8 @@ private:
     size_t          step_count_ = 0;
     mutable size_t  rhs_eval_count_ = 0;
     mutable size_t  jac_eval_count_ = 0;
-    std::string     msg_ = "Running";
     int             direction_ = 1;
-    bool            diverges_ = false;
-    bool            is_running_ = true;
-    bool            ics_is_valid_ = false;
-    bool            is_at_new_state_ = true;
-    mutable bool    vector_is_cached_ = false;
-    /// @brief Cold: only touched by vector(). Kept last so it never sits between hot fields.
-    mutable Array1D<T, N> cached_vector_;
+    StepperStatus   status_ = StepperStatus::NewStep;
 };
 
 

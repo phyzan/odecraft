@@ -122,35 +122,37 @@ const T& BaseSolver<Derived, T, N, SP, OdeType>::max_step() const{
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
+bool BaseSolver<Derived, T, N, SP, OdeType>::is_running() const{
+    switch (this->status_){
+        case StepperStatus::NewStep:
+        case StepperStatus::BetweenSteps:
+            return true;
+        default:
+            return false;
+    }
+}
+
+
+template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 size_t BaseSolver<Derived, T, N, SP, OdeType>::step_count() const{
     return step_count_;
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-bool BaseSolver<Derived, T, N, SP, OdeType>::is_running() const{
-    return is_running_;
+StepperStatus BaseSolver<Derived, T, N, SP, OdeType>::status() const{
+    return status_;
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-bool BaseSolver<Derived, T, N, SP, OdeType>::is_dead() const{
-    return !is_running_;
-}
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-bool BaseSolver<Derived, T, N, SP, OdeType>::diverges() const{
-    return diverges_;
-}
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-const std::string& BaseSolver<Derived, T, N, SP, OdeType>::status() const{
-    return msg_;
+const char* BaseSolver<Derived, T, N, SP, OdeType>::message() const{
+    return status_message(this->status_);
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::show_state(int prec) const{
     decltype(auto) vector = this->scratch_vector();
     this->fill_current_vector(vector.data());
-    SolverState<T, N>(vector.data(), this->t(), this->stepsize(), this->nsys(), this->diverges(), this->is_running(), this->step_count(), this->status()).show(prec);
+    SolverState<T, N>(vector.data(), this->t(), this->stepsize(), this->nsys(), this->step_count(), this->message()).show(prec);
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -267,11 +269,11 @@ std::unique_ptr<typename BaseSolver<Derived, T, N, SP, OdeType>::CloneType> Base
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool BaseSolver<Derived, T, N, SP, OdeType>::advance(){
-    if (this->is_dead()){
+    if (this->is_running()){
+        return Accessor::call_Adv_Impl(*THIS);
+    } else {
         this->warn_dead();
         return false;
-    } else {
-        return Accessor::call_Adv_Impl(*THIS);
     }
 }
 
@@ -324,7 +326,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::set_ics(T t0, const T* y0, T stepsi
         ics[0] = t0;
         ics[1] = stepsize;
         std::copy(y0, y0 + this->nsys(), ics+2);
-        this->ics_is_valid_ = true;
+        status_ = StepperStatus::NewStep;
         THIS->Reset();
         return true;
     }else {
@@ -336,10 +338,9 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::set_ics(T t0, const T* y0, T stepsi
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::kill(std::string message){
+void BaseSolver<Derived, T, N, SP, OdeType>::kill(){
     if (this->is_running()){
-        this->is_running_ = false;
-        this->msg_ = (message == "") ? "Killed by user" : std::move(message);
+        this->status_ = StepperStatus::Killed;
     }
 }
 
@@ -384,19 +385,15 @@ void BaseSolver<Derived, T, N, SP, OdeType>::fill_current_vector_impl(T* out) co
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::Reset(){
-    if (ics_is_valid_){
-        msg_ = "Running";
-        is_running_ = true;
+    if (this->has_valid_ics()){
+        status_ = StepperStatus::NewStep;
         step_count_ = 0;
         rhs_eval_count_ = 0;
         jac_eval_count_ = 0;
-        is_at_new_state_ = true;
-        diverges_ = false;
         old_state_ = ics_state_;
         new_state_ = ics_state_;
         time_ = ics_state_[0];
         habs_ = ics_state_[1];
-        vector_is_cached_ = false;
     }
 }
 
@@ -418,19 +415,13 @@ const T* BaseSolver<Derived, T, N, SP, OdeType>::new_state_ptr() const{
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-const T* BaseSolver<Derived, T, N, SP, OdeType>::old_state_ptr() const{
-    return this->old_state_.data();
+void BaseSolver<Derived, T, N, SP, OdeType>::set_status(StepperStatus new_status){
+    this->status_ = new_status;
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-View1D<T, N> BaseSolver<Derived, T, N, SP, OdeType>::vector() const{
-    if (this->vector_is_cached_){
-        return View1D<T, N>{cached_vector_.data(), this->nsys()};
-    } else {
-        this->fill_current_vector(cached_vector_.data());
-        this->vector_is_cached_ = true;
-        return View1D<T, N>{cached_vector_.data(), this->nsys()};
-    }
+const T* BaseSolver<Derived, T, N, SP, OdeType>::old_state_ptr() const{
+    return this->old_state_.data();
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -449,14 +440,9 @@ void BaseSolver<Derived, T, N, SP, OdeType>::fill_current_vector(T* out) const{
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-void BaseSolver<Derived, T, N, SP, OdeType>::set_message(const std::string& text){
-    this->msg_ = text;
-}
-
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void BaseSolver<Derived, T, N, SP, OdeType>::warn_dead() const{
 #ifndef ODECRAFT_NO_WARN
-    this->cerr("\nSolver has permanently stopped integrating. Termination cause:\n\t" + this->msg_);
+    this->cerr("\nIntegrator has permanently stopped");
 #endif
 }
 
@@ -467,8 +453,7 @@ void BaseSolver<Derived, T, N, SP, OdeType>::ReAdjust(const T* new_vector){
     T* vector = new_state_.data()+2;
     std::copy(new_vector, new_vector + this->nsys(), vector);
     old_state_ = new_state_;
-    is_at_new_state_ = true;
-    vector_is_cached_ = false;
+    status_ = StepperStatus::NewStep;
     // By having old_state_ set to new_state_, we close the interpolation interval
     // as if restarting from new initial conditions
     // This is to ban interpolation temporarily until a new step is achived,
@@ -483,7 +468,13 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::validate_ics(T t0, const T* q0) con
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool BaseSolver<Derived, T, N, SP, OdeType>::has_valid_ics() const {
-    return ics_is_valid_;
+    switch (status_){
+        case StepperStatus::BadICS:
+        case StepperStatus::Uninitialized:
+            return false;
+        default:
+            return true;
+    }
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -507,7 +498,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::validate_ics_impl(T t0, const T* q0
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 bool BaseSolver<Derived, T, N, SP, OdeType>::is_at_new_state() const{
-    return is_at_new_state_;
+    return status_ == StepperStatus::NewStep;
 }
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
@@ -546,17 +537,16 @@ BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, 
     min_step_(min_step),
     max_step_(max_step == 0 ? inf<T>() : max_step),
     nsys_(q0.size()),
-    direction_(direction),
-    cached_vector_(q0.size()){
+    direction_(direction){
         assert(this->nsys() > 0 && "Ode system size is 0");
         if (stepsize < 0){
             throw std::runtime_error("The stepsize argument cannot be negative");
         } else if (max_step_ < min_step_){
             throw std::runtime_error("Maximum allowed stepsize cannot be smaller than minimum allowed stepsize");
         } else if (q0.data() == nullptr){
-            this->kill("Initial conditions not set (nullptr provided)");
+            status_ = StepperStatus::Uninitialized;
         } else if (!this->validate_ics_impl(t0, q0.data())){
-            this->kill("Initial conditions contain nan or inf, or ode(ics) does");
+            status_ = StepperStatus::BadICS;
         } else if (events.size() > 0){
             throw std::invalid_argument("Cannot instantiate a Solver with events when it is declared with a non-rich SolverPolicy");
         } else {
@@ -571,7 +561,6 @@ BaseSolver<Derived, T, N, SP, OdeType>::BaseSolver(OdeType ode, T t0, View1D<T, 
             std::copy(q0.data(), q0.data() + this->nsys(), ics_state_.data()+2);
             old_state_ = ics_state_;
             new_state_ = ics_state_;
-            ics_is_valid_ = true;
         }
 }
 
@@ -585,26 +574,25 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::validate_it(StepResult result, cons
         case StepResult::Success:
             break;
         case StepResult::NonFiniteError:
-            this->kill("ODE solution diverges (inf or nan encountered)");
-            this->diverges_ = true;
+            status_ = StepperStatus::Diverges;
             success = false;
             break;
         case StepResult::TinyStepError:
-            this->kill("Required stepsize was smaller than machine precision");
+            status_ = StepperStatus::TinyStep;
             success = false;
             break;
         case StepResult::MinStepError:
-            this->kill("The next time step is smaller than the minimum allowed step");
+            status_ = StepperStatus::MinStep;
             success = false;
             break;
         case StepResult::MaxStepError:
-            this->kill("The next time step is larger than the maximum allowed step");
+            status_ = StepperStatus::MaxStep;
             success = false;
             break;
     }
 
     if (success && (state[0] == this->t_new())){
-        this->kill("The next time step is identical to the previous one, possibly due to machine rounding error");
+        status_ = StepperStatus::TooSmallStep;
         success = false;
     }
 
@@ -625,10 +613,10 @@ void BaseSolver<Derived, T, N, SP, OdeType>::move_state(const T& time){
 
     if (time != this->t_new()) {
         time_ = time;
-        is_at_new_state_ = false;
+        status_ = StepperStatus::BetweenSteps;
     } else if (!this->is_at_new_state()){
         // update the true state to the new state, because time is exactly at t_new
-        is_at_new_state_ = true;
+        status_ = StepperStatus::NewStep;
         time_ = new_state_[0];
         habs_ = new_state_[1];
     }
@@ -655,7 +643,6 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::le(const T& t_a, const T& t_b) cons
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 template<typename... Args>
 bool BaseSolver<Derived, T, N, SP, OdeType>::Adv_Impl(Args&&... args){
-    this->vector_is_cached_ = false;
     const int d = this->direction();
     if constexpr (sizeof...(Args) > 0){
         T time_floor = nearest_time(args...);

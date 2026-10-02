@@ -356,11 +356,8 @@ void                Jac(T* out, const T& t, const T* q) const; // Compute the Ja
 const T&            t() const; // Get the current time
 View1D<T, N>        vector_new() const; // Get the state vector of the newest step
 State<T>            ics() const; // Get the initial conditions
-bool                is_running() const; // Check if the solver can still advance (e.g. has no NaNs/Infs)
-bool                is_dead() const; // Returns !is_running()
-bool                diverges() const; // Check if the solver has diverged (NaN/Inf detected)
 void                interp(T* out, const T& t) const; // Interpolate the solution at a given time within the old and new step interval
-const std::string&  status() const; // Get the solver's status message
+StepperStatus       status() const; // Get the solver's status
 
 // Modifiers
 bool                advance(); // Advance the solver by one step (automatic step size control)

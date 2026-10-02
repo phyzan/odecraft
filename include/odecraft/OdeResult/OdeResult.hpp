@@ -81,7 +81,7 @@ class OdeResult{
 
 public:
 
-    OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, bool diverges, bool success, double runtime, std::string message);
+    OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message);
 
     OdeResult() = default;
 
@@ -96,8 +96,6 @@ public:
     const T& q(size_t i, size_t j) const;
 
     const EventData<T>& event_data() const;
-
-    bool diverges() const;
 
     bool success() const;
 
@@ -115,7 +113,6 @@ private:
 
     OrbitData<T> orbit_data_;
     EventData<T> event_data_;
-    bool diverges_ = false;
     bool success_ = false;
     double runtime_ = 0;
     std::string message_ = "No integration performed";
@@ -134,7 +131,7 @@ public:
 
     OdeSolution() = default;
 
-    OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, bool diverges, bool success, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator);
+    OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator);
 
     template<typename Interp>
     OdeSolution(OdeResult<T, N>&& other, Interp&& interpolator) : OdeResult<T, N>(std::move(other)), interpolator_(std::forward<Interp>(interpolator)) {}

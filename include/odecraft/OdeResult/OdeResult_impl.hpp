@@ -162,7 +162,7 @@ void EventData<T>::clear_points() {
 //===========================================================================================
 
 template<typename T, size_t N>
-OdeResult<T, N>::OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, bool diverges, bool success, double runtime, std::string message) : event_data_(std::move(event_data)), diverges_(diverges), success_(success), runtime_(runtime), message_(std::move(message)) {
+OdeResult<T, N>::OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message) : event_data_(std::move(event_data)), success_(success), runtime_(runtime), message_(std::move(message)) {
     assert(orb_idx_start <= orbit_data.t.size() && "Start index must be within the bounds of the provided data");
     // Copy only the relevant portion of the data based on the provided start indices
     orbit_data_.t = std::vector<T>(orbit_data.t.begin() + orb_idx_start, orbit_data.t.end());
@@ -197,11 +197,6 @@ const EventData<T>& OdeResult<T, N>::event_data() const{
 }
 
 template<typename T, size_t N>
-bool OdeResult<T, N>::diverges() const {
-    return diverges_;
-}
-
-template<typename T, size_t N>
 bool OdeResult<T, N>::success() const {
     return success_;
 }
@@ -220,7 +215,6 @@ template<typename T, size_t N>
 void OdeResult<T, N>::examine() const {
     std::cout << std::endl << "\n=============== OdeResult ===============\n"
               << "\tPoints           : " << orbit_data_.t.size() << "\n"
-              << "\tDiverges         : " << (diverges_ ? "true" : "false") << "\n"
               << "\tSuccess          : " << (success_ ? "true" : "false") << "\n"
               << "\tRuntime          : " << runtime_ << "\n"
               << "\tTermination cause: " << message_ << "\n"
@@ -247,7 +241,7 @@ std::string OdeResult<T, N>::event_log() const {
 
 
 template<typename T, size_t N>
-OdeSolution<T, N>::OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, bool diverges, bool success, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator) : OdeResult<T, N>(std::move(orbit_data), std::move(event_data), orb_idx_start, diverges, success, runtime, std::move(message)), interpolator_(interpolator.clone()) {}
+OdeSolution<T, N>::OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator) : OdeResult<T, N>(std::move(orbit_data), std::move(event_data), orb_idx_start, success, runtime, std::move(message)), interpolator_(interpolator.clone()) {}
 
 
 template<typename T, size_t N>

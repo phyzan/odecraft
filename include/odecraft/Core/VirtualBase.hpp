@@ -29,7 +29,6 @@ public:
     virtual const T&            get_new_time() const = 0;
     virtual const T&            get_old_time() const = 0;
     virtual void                get_current_vector(T* out) const = 0;
-    virtual View1D<T, N>        get_vector() const = 0;
     virtual View1D<T, N>        get_new_vector() const = 0;
     virtual View1D<T, N>        get_old_vector() const = 0;
     virtual State<T>            get_ics() const = 0;
@@ -44,9 +43,8 @@ public:
     virtual size_t              get_nsys() const = 0;
     virtual size_t              get_step_count() const = 0;
     virtual bool                get_is_running() const = 0;
-    virtual bool                get_is_dead() const = 0;
-    virtual bool                get_diverges() const = 0;
-    virtual const std::string&  get_status() const = 0;
+    virtual StepperStatus       get_status() const = 0;
+    virtual const char*         get_message() const = 0;
     virtual bool                get_validate_ics(T t0, const T* q0) const = 0;
     virtual bool                get_has_valid_ics() const = 0;
     virtual Stepper             get_method() const = 0;
@@ -68,7 +66,7 @@ public:
     virtual BoxedInterp<T, N>   do_interpolate_until(T time) = 0;
     virtual BoxedInterp<T, N>   do_interpolate_until(T time, observer_t<T> observer) = 0;
     virtual void                do_reset() = 0;
-    virtual void                do_kill(std::string message = "") = 0;
+    virtual void                do_kill() = 0;
     virtual bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) = 0;
 
     virtual ~OdeSolver() = default;

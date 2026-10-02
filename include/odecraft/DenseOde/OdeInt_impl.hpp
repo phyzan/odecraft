@@ -208,12 +208,12 @@ bool ODE<T, N>::rich_integrate(
 
 template<typename T, size_t N>
 bool ODE<T, N>::diverges() const{
-    return solver_->get_diverges();
+    return solver_->get_status() == StepperStatus::Diverges;
 }
 
 template<typename T, size_t N>
 bool ODE<T, N>::is_dead() const{
-    return solver_->get_is_dead();
+    return !solver_->get_is_running();
 }
 
 template<typename T, size_t N>
@@ -307,14 +307,21 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
     However if nullptr, **ALL** steps are stored
     */
 
-    if (solver_->get_is_dead()){
+    if (! solver_->get_is_running()){
         if (out){
-            *out = OdeResult<T, N>({}, {this->nsys()}, solver_->get_diverges(), 0, false, 0, solver_->get_status());
+            *out = OdeResult<T, N>{
+                {},
+                {this->nsys()},
+                0,
+                false,
+                0,
+                solver_->get_message(),
+            };
         }
         return false;
     } else if (t_max*solver_->get_direction() < solver_->get_time()*solver_->get_direction()){
         if (out){
-            *out = OdeResult<T, N>({}, {this->nsys()}, 0, false, false, 0, "Cannot integrate in opposite direction");
+            *out = OdeResult<T, N>({}, {this->nsys()}, 0, false, 0, "Cannot integrate in opposite direction");
         }
         return false; //cannot integrate in opposite direction
     }
@@ -414,7 +421,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
     if (success) {
         terminate_message = "t-goal";
     } else if (!terminate_message){
-        terminate_message = solver_->get_status().c_str();
+        terminate_message = solver_->get_message();
     }
 
     TimePoint       TIME_END = Clock::now();
@@ -422,8 +429,14 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
     runtime_ +=     duration;
     if (out){
         EventData<T>    event_res(this->event_data_, cached_idx_);
-        OdeResult<T, N> res(orbit_data_, event_res, t_start_idx, solver_->get_diverges(), success, duration, terminate_message);
-        
+        OdeResult<T, N> res{
+            orbit_data_,
+            event_res,
+            t_start_idx,
+            success,
+            duration,
+            terminate_message,
+        };
         if (interpolate){
             auto* rich_res = dynamic_cast<OdeSolution<T, N>*>(out);
             assert(rich_res && "Output must be of type OdeSolution when interpolation is enabled");
