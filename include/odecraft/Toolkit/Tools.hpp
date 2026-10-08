@@ -276,11 +276,6 @@ NDSPAN_INLINE void set_max(T& out, const A& a, const B& b){
     (a > b) ? (out = a) : (out = b);
 }
 
-template<typename T, typename U>
-NDSPAN_INLINE void set_abs(T& out, const U& x){
-    out = abs(x);
-}
-
 template<typename T>
 NDSPAN_INLINE const T& max_ref(const T& a, const T& b){
     return (a > b) ? a : b;
@@ -344,7 +339,8 @@ T bisect(Callable&& f, T a, T b, T fa, const T& fb, const T& ftol){
         } else {
             b = m;
         }
-        set_abs(err, fm);
+        
+        err = abs(fm);
     }
 
     if constexpr (RP == RootPolicy::Left) {
