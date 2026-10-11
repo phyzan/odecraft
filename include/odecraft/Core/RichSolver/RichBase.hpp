@@ -66,7 +66,8 @@ public:
                 .event = &evt_col.event(current_idx),
                 .idx = current_idx,
                 .is_masked = is_at_canon_event,
-                .active = true};
+                .active = true,
+            };
         } else {
             return EventState<T>{.active = false};
         }
@@ -156,7 +157,7 @@ protected:
     /// @brief Current state, serving a pending immediate mask from the event collection.
     ///
     /// An immediate mask must show its transformed state as soon as the event is reported,
-    /// but the ReAdjust that writes it into new_state_ is deferred so that the step stays
+    /// but the ReAdjust that writes it into the new state is deferred so that the step stays
     /// interpolable for dense output. Between those two points the masked vector is read
     /// from evt_col's MaskedState, which stores it outside the solver's state buffers.
     void fill_current_vector_impl(T* out) const;

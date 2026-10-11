@@ -31,9 +31,8 @@ public:
     virtual void                get_current_vector(T* out) const = 0;
     virtual View1D<T, N>        get_new_vector() const = 0;
     virtual View1D<T, N>        get_old_vector() const = 0;
-    virtual State<T>            get_ics() const = 0;
-    virtual State<T>            get_new_state() const = 0;
-    virtual State<T>            get_old_state() const = 0;
+    virtual const T&            get_ics_time() const = 0;
+    virtual View1D<T, N>        get_ics_vector() const = 0;
     virtual const T&            get_stepsize() const = 0;
     virtual int                 get_direction() const = 0;
     virtual const T&            get_rtol() const = 0;

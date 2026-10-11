@@ -1,12 +1,10 @@
 #ifndef ODECRAFT_CACHE_HPP
 #define ODECRAFT_CACHE_HPP
 
-#include "Tools.hpp"
-#include <algorithm>
+
 #include <array>
 #include <cassert>
 #include <cstddef>
-#include <tuple>
 #include <type_traits>
 
 
@@ -15,6 +13,13 @@ namespace ode{
 
 namespace detail{
 
+// Whether a buffer of T can live in automatic storage. That needs two things: a size known at
+// compile time, and a scalar cheap enough that creating the buffer is free. A type like
+// mpfr::mpreal is not trivially copyable (every element owns a heap allocation) so a fresh
+// stack array would construct and destroy `N` of them on every access. Those types use a
+// persistent heap-backed buffer instead, allocated once and handed out by reference.
+template<typename T, size_t N>
+inline constexpr bool scratch_is_static = (N > 0) && std::is_trivially_copyable_v<T>;
 
 template<typename T>
 class write_back_scalar_t {
@@ -60,7 +65,7 @@ struct no_write_back_t{};
 
 // for const array view, use array_view_t<const T, N>
 template<typename T, size_t N>
-class array_view_t {
+class array_view_t { 
     using storage_t
         = std::conditional_t<
             scratch_is_static<T, N>,
@@ -148,6 +153,26 @@ struct cache_group{
 
 
 } // namespace ode::detail
+
+
+
+/*
+Variables that can be common for all instances for a class should ideally
+be decalred as static constexpr. If that is not possible, they acn be declared as member variables.
+Trivial types like `double` can be static constexpr, but types that require heap allocation
+and have runtime properties should be initialized separately for each object.
+*/
+// template<typename T>
+// using static_cache_t = std::conditional_t<
+//     std::is_trivially_copyable_v<T>,
+//     static constexpr T,
+//     double
+// >;
+
+// template<typename T, size_t N>
+// class static_member_
+
+
 
 /// @brief Opens a scratch scope over `args...`: every trivially copyable argument is shadowed by a local copy, and the rest are bound by reference and worked on in place.
 /// Pair it with make_write_back on the next line, or nothing is ever handed back to `args...`.

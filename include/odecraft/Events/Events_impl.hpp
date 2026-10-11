@@ -113,8 +113,8 @@ void EventBase<Derived, EP, T, MaskFunc>::setup(T t_start, size_t n_sys, int dir
 
 
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
-bool EventBase<Derived, EP, T, MaskFunc>::locate(T& out, State<T> before, State<T> after, const interp_t<T>& interp){
-    return this->locate_state(out, before, after, interp);
+bool EventBase<Derived, EP, T, MaskFunc>::locate(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, const interp_t<T>& interp){
+    return this->locate_state(out, t_old, t_new, q_old, q_new, interp);
 }
 
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
@@ -178,7 +178,8 @@ const T& PeriodicEvent<T, MaskFunc, EP, Derived>::period() const{
 
 template<typename T, typename MaskFunc, EventPolicy EP, typename Derived>
 T PeriodicEvent<T, MaskFunc, EP, Derived>::get_t(size_t n) const{
-    return this->t_start() + (this->direction()*n*this->period());
+    // n*period() first: direction()*n would convert direction() = -1 to size_t and wrap around
+    return this->t_start() + n*this->period()*this->direction();
 }
 
 template<typename T, typename MaskFunc, EventPolicy EP, typename Derived>

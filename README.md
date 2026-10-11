@@ -26,26 +26,33 @@ It also provides a flexible event detection system for runtime or compile-time e
 
 # Getting Started
 
-## Requirements
-- C++20 compatible compiler
-
-For the optional arbitrary precision support, install the prebuilt **mpfr** and **gmp** libraries:
-```bash
-sudo apt install libmpfr-dev libgmp-dev
-```
-
 **OdeCraft** can be cloned using:
 ```bash
 git clone --recursive https://github.com/phyzan/odecraft.git
 ```
-which will also pull all of its submodule dependencies. If you have already cloned the repository without the `--recursive` flag, you can initialize the submodules with:
-```bash
-git submodule update --init --recursive
-```
-
-Submodules can be updated via
+which will also pull all of its submodule dependencies. These can be updated via
 ```bash
 git submodule update --recursive
+```
+
+## Requirements
+- C++20 compatible compiler: GCC or Clang. The build passes their compiler flags, so on Windows use MSYS2's MinGW toolchain rather than MSVC.
+- **qhull**, for Delaunay triangulation (scattered-data interpolation). Required, since the main `<odecraft/odecraft.hpp>` header includes it.
+- **mpfr** and **gmp**, for the optional arbitrary precision support.
+
+All three come as prebuilt packages:
+
+| Platform | Command |
+|---|---|
+| Debian / Ubuntu | `sudo apt install libqhull-dev libmpfr-dev libgmp-dev` |
+| Fedora | `sudo dnf install qhull-devel mpfr-devel gmp-devel` |
+| Arch | `sudo pacman -S qhull mpfr gmp` |
+| macOS (Homebrew) | `brew install qhull mpfr gmp` |
+| Windows (MSYS2, UCRT64 shell) | `pacman -S mingw-w64-ucrt-x86_64-qhull mingw-w64-ucrt-x86_64-mpfr mingw-w64-ucrt-x86_64-gmp` |
+
+If qhull is installed somewhere CMake does not search by default, point `CMAKE_PREFIX_PATH` at its prefix. On Apple Silicon Macs, Homebrew installs into `/opt/homebrew`, which the compiler does not search by default (and CMake may not either), so before configuring:
+```bash
+export CMAKE_PREFIX_PATH=$(brew --prefix) CPATH=$(brew --prefix)/include LIBRARY_PATH=$(brew --prefix)/lib
 ```
 
 ## Building **OdeCraft**
@@ -80,7 +87,7 @@ cd tests     && cmake -S . -B build && cmake --build build -j
 cd tutorials && cmake -S . -B build && cmake --build build -j
 ```
 
-Each pulls **OdeCraft** in as a subproject, so there is nothing to install or configure first. Add
+Each pulls **OdeCraft** in as a subproject, so beyond the [requirements](#requirements) there is nothing to install or configure first. Add
 `-DDEBUG=ON` to either, for an `-O0` build with asserts (and AddressSanitizer for the tests).
 
 ### Linking the compiled interface
@@ -355,7 +362,8 @@ void                Rhs(T* out, const T& t, const T* q) const; // Compute the ri
 void                Jac(T* out, const T& t, const T* q) const; // Compute the Jacobian of the ODE system (optional)
 const T&            t() const; // Get the current time
 View1D<T, N>        vector_new() const; // Get the state vector of the newest step
-State<T>            ics() const; // Get the initial conditions
+const T&            t_ics() const; // Get the initial time
+View1D<T, N>        vector_ics() const; // Get the initial state vector
 void                interp(T* out, const T& t) const; // Interpolate the solution at a given time within the old and new step interval
 StepperStatus       status() const; // Get the solver's status
 
@@ -603,8 +611,7 @@ odecraft/
 ├── external/                        # Git submodules (bundled header-only dependencies)
 │   ├── xdiff/                       # Automatic differentiation library (bundles its own `lazex` + `mpreal` submodules)
 │   ├── ndspan/                      # Multi-dimensional array views and utilities
-│   ├── polybox/                     # Wrapper for dynamically allocated types
-│   └── qhull/                       # Convex hull library (for Delaunay triangulation)
+│   └── polybox/                     # Wrapper for dynamically allocated types
 │
 ├── tests/                           # C++ test suite, compiled into one odecraft_tests executable
 │   ├── CMakeLists.txt               # Standalone project, pulls odecraft in as a subproject

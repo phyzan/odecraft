@@ -94,11 +94,10 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
             }
 
             if ((detected[I] = crossed)){
-                const T* s_new = this->new_state_ptr();
-                const T& t_new = s_new[0];
+                const T& t_new = this->t_new();
                 const T& t_old = this->t_old();
-                const T* q_old = this->old_state_ptr()+2;
-                const T* q_new = s_new + 2;
+                const T* q_old = this->vector_old().data();
+                const T* q_new = this->vector_new().data();
                 values[I] = bisect<T, RootPolicy::Right>(
                     [&](const T& t){
                         this->interp_impl(worker.data(), t);

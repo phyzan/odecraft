@@ -663,7 +663,6 @@ void coef_mat_interp(T* result, const T& t, const T& t1, const T& t2, const T* y
 
     for (size_t i=0; i<size; i++){
         T sum = 0;
-        // #pragma omp simd reduction(+:sum)
         for (size_t j=0; j<order; j++){
             sum += coef_mat[i*order + j] * pow(x, j+1); // C_ij * x^(j+1)
         }

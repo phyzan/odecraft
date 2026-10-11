@@ -54,9 +54,8 @@ set(ODECRAFT_TUTORIAL_COMPILE_OPTIONS
     -Wshadow
     -Wno-sign-conversion
     -Wno-unused-parameter
-    -fopenmp
+    -fopenmp-simd
 )
-set(ODECRAFT_TUTORIAL_LINK_OPTIONS -fopenmp)
 
 # DEBUG is the option odecraft itself defines; honour it here too so one flag covers both.
 if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -79,7 +78,6 @@ foreach(tutorial_src IN LISTS ODECRAFT_TUTORIAL_SOURCES)
         target_link_libraries(${tutorial_name} PRIVATE odecraft::crafted)
     endif()
     target_compile_options(${tutorial_name} PRIVATE ${ODECRAFT_TUTORIAL_COMPILE_OPTIONS})
-    target_link_options(${tutorial_name} PRIVATE ${ODECRAFT_TUTORIAL_LINK_OPTIONS})
 endforeach()
 
 # ArbitraryPrecision additionally needs the MPFR-enabled lazex target.

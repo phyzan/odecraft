@@ -368,8 +368,7 @@ void DOP853<T, N, SP, OdeType, Derived>::Reset(){
     Base::Reset();
     K_.fill(0);
     mat_is_set_ = false;
-    const T* state = this->new_state_ptr();
-    this->rhs(K_.data() + N_STAGES*this->nsys(), state[0], state+2);
+    this->rhs(K_.data() + N_STAGES*this->nsys(), this->t_new(), this->vector_new().data());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -386,11 +385,11 @@ void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
     }
     mat_is_set_ = true;
 
-    // The step size that was actually used, not stepsize(): that returns new_state_[1], which
-    // rk_adapt_step has already grown/shrunk into the *next* step's proposed size, and it also
-    // differs from the accepted h whenever an attempt was rejected.
+    // The step size that was actually used, not stepsize(): that returns the newest step's habs,
+    // which rk_adapt_step has already grown/shrunk into the *next* step's proposed size, and it
+    // also differs from the accepted h whenever an attempt was rejected.
     const T h = h_last_;
-    const T* y_old = this->old_state_ptr() + 2;
+    const T* y_old = this->vector_old().data();
     const T& t_old = this->t_old();
     const size_t n = this->nsys();
     T* K = K_.data();
@@ -409,7 +408,7 @@ void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
 
     const T* f_old = K;                    // K[0]
     const T* f_new = K + N_STAGES*n;       // K[12]
-    const T* y_new = this->new_state_ptr() + 2;
+    const T* y_new = this->vector_new().data();
 
     for (size_t i = 0; i < n; i++){
         coef_mat_(i, 0) = y_new[i] - y_old[i];                                      // F[0] = delta_y
@@ -506,25 +505,25 @@ T DOP853<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new,
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
+StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
     mat_is_set_ = false;
     T* dest = K_.data();
     const T* src = K_.data() + N_STAGES*this->nsys();
     std::copy(src, src + this->nsys(), dest);
     return detail::rk_adapt_step<N>(
-        res, state, this->nsys(),
+        t_new, habs_new, q_new, t, habs, q, this->nsys(),
         this->min_step(),
         this->max_step(),
-        this->MIN_STEP,
-        this->SAFETY,
-        this->MAX_FACTOR,
-        this->MIN_FACTOR,
+        this->tiny_factor(),
+        this->safety_factor(),
+        this->max_factor(),
+        this->min_factor(),
         ERR_EXP,
         INC_EXP,
         MIN_ERR,
         this->direction(),
-        [this](T& t_new, T* q_new, const T& t, const T& h, const T* q){
-            return this->step_impl(t_new, q_new, t, h, q);
+        [this](T& t_out, T* q_out, const T& t_in, const T& h, const T* q_in){
+            return this->step_impl(t_out, q_out, t_in, h, q_in);
         }
     );
 }
@@ -532,18 +531,15 @@ StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void DOP853<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
     this->set_coef_matrix();
-    const T* d = this->new_state_ptr();
-    coef_mat_interp_dop853(result, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, coef_mat_.data(), INTERP_ORDER, this->nsys());
+    coef_mat_interp_dop853(result, t, this->t_old(), this->t_new(), this->vector_old().data(), this->vector_new().data(), coef_mat_.data(), INTERP_ORDER, this->nsys());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto DOP853<T, N, SP, OdeType, Derived>::local_interp() const{
     this->set_coef_matrix();
-    const T* s1 = this->old_state_ptr();
-    const T* s2 = this->new_state_ptr();
     const size_t n = this->nsys();
 
-    return [cm=this->coef_mat_, t1=s1[0], t2=s2[0], y1=Array1D<T, N>(s1+2, n), y2=Array1D<T, N>(s2+2, n), n](T* out, const T& t){
+    return [cm=this->coef_mat_, t1=this->t_old(), t2=this->t_new(), y1=Array1D<T, N>(this->vector_old().data(), n), y2=Array1D<T, N>(this->vector_new().data(), n), n](T* out, const T& t){
         coef_mat_interp_dop853(out, t, t1, t2, y1.data(), y2.data(), cm.data(), INTERP_ORDER, n);
     };
 }

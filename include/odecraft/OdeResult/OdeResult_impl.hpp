@@ -246,6 +246,10 @@ OdeSolution<T, N>::OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data,
 
 template<typename T, size_t N>
 Array1D<T, N> OdeSolution<T, N>::operator()(const T& t) const{
+    if (this->t().size() == 0){
+        // Only a solution whose integration never started has no points, and no interpolator.
+        throw std::runtime_error("OdeSolution has no dense output: " + this->message());
+    }
     return interpolator_->make_call(t);
 }
 

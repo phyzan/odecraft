@@ -81,7 +81,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
         ){
             bool obs_res;
             if constexpr (isObserver<Callable, T>){
-                decltype(auto) vector = this->scratch_.vector();
+                auto vector = request_scratch<T, N>(this->nsys());
                 this->fill_current_vector(vector.data());
                 obs_res = observer(this->t(), vector.data(), nullptr);
             } else{
@@ -96,7 +96,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
         if (res){
             const T* t_ptr = (!explicit_steps || (has_checkpoints && t_dual == time)) ? &t_dual : nullptr;
             if constexpr (isObserver<Callable, T>){
-                decltype(auto) vector = this->scratch_.vector();
+                auto vector = request_scratch<T, N>(this->nsys());
                 this->fill_current_vector(vector.data());
                 observer(this->t(), vector.data(), t_ptr);
             }            
@@ -151,59 +151,53 @@ BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_un
     // leaving the chain permanently past its own end.
     pbox::Box<LinkedInterpolator<T, N>> interp;
     {
-        decltype(auto) vector = this->scratch_.vector();
+        auto vector = request_scratch<T, N>(this->nsys());
         this->fill_current_vector(vector.data());
         interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t(), vector.data(), this->nsys());
     }
 
     const T t_start = this->t();
-    if (this->advance_until(
+    const bool reached = this->advance_until(
         time,
         [&](const T& t, const T* q, const T* t_ptr){
-            bool obs_res;
-            if constexpr (isObserver<Callable, T>){
-                obs_res = observer(t, q, t_ptr);
-            } else {
-                obs_res = true;
-            }
-            if (obs_res){
-                // (covered, t) always lies within the step now held: `covered` is either the
-                // previous t_new, which has become t_old, or a stop inside this same step.
-                // Narrow the step's interpolator to exactly that span. adjust_* only move
-                // the reported interval, bounded by the polynomial's own t1/t2, so the
-                // evaluation is untouched.
-                const T covered = interp->t_end();
-                if (lt(covered, t)){
-                    BoxedInterp<T, N> segment = this->state_interpolator(0, -1);
-                    if (covered != segment->t_start()){
-                        segment->adjust_start(covered);
-                    }
-                    if (t != segment->t_end()){
-                        segment->adjust_end(t);
-                    }
-                    interp->expand_by_owning(std::move(segment));
-                    // q is the current vector at t, filled by generic_advance_until. It
-                    // aliases scratch_.vector(), so re-borrowing that here would overwrite
-                    // this very argument.
-                    interp->expand_by_owning(std::make_unique<LocalInterpolator<T, N>>(t, q, this->nsys()));
+            // The solver is already at t, so the chain is extended before the observer is
+            // asked: if it stops the integration here, the dense output still reaches t.
+            // (covered, t) always lies within the step now held: `covered` is either the
+            // previous t_new, which has become t_old, or a stop inside this same step.
+            // Narrow the step's interpolator to exactly that span. adjust_* only move
+            // the reported interval, bounded by the polynomial's own t1/t2, so the
+            // evaluation is untouched.
+            const T covered = interp->t_end();
+            if (lt(covered, t)){
+                BoxedInterp<T, N> segment = this->state_interpolator(0, -1);
+                if (covered != segment->t_start()){
+                    segment->adjust_start(covered);
                 }
-                return true;
-            } else {
-                return false;
+                if (t != segment->t_end()){
+                    segment->adjust_end(t);
+                }
+                interp->expand_by_owning(std::move(segment));
+                // q is the current vector at t, filled by generic_advance_until.
+                interp->expand_by_owning(std::make_unique<LocalInterpolator<T, N>>(t, q, this->nsys()));
             }
-        })
-    ){
-        if (t_start != interp->t_start()){
-            interp->adjust_start(t_start);
+            if constexpr (isObserver<Callable, T>){
+                return observer(t, q, t_ptr);
+            } else {
+                return true;
+            }
         }
-        if (time != interp->t_end()){
-            interp->adjust_end(time);
-        }
-        interp->close_end();
-        return interp;
-    } else {
-        return BoxedInterp<T, N>();
+    );
+
+    // After an early stop (observer, terminating event or a dead solver) the chain ends where
+    // the solver stopped, so the result covers exactly the span that was integrated.
+    if (t_start != interp->t_start()){
+        interp->adjust_start(t_start);
     }
+    if (reached && time != interp->t_end()){
+        interp->adjust_end(time);
+    }
+    interp->close_end();
+    return interp;
 }
 
 } // namespace ode

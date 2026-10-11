@@ -8,10 +8,10 @@ namespace ode{
 
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
 template<isStateInterp<T> Callable>
-bool EventBase<Derived, EP, T, MaskFunc>::locate_state(T& out, State<T> before, State<T> after, Callable&& f){
+bool EventBase<Derived, EP, T, MaskFunc>::locate_state(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f){
     assert(this->is_setup_ && "Call setup() method before trying to locate an event");
-    assert((sgn(before.t(), after.t()) == this->direction_) && "Invalid direction");
-    if (THIS->locate_impl(out, before, after, std::forward<Callable>(f))){
+    assert((sgn(t_old, t_new) == this->direction_) && "Invalid direction");
+    if (THIS->locate_impl(out, t_old, t_new, q_old, q_new, std::forward<Callable>(f))){
         is_located_ = true;
         return true;
     }else {
@@ -22,16 +22,16 @@ bool EventBase<Derived, EP, T, MaskFunc>::locate_state(T& out, State<T> before, 
 
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
 template<isStateInterp<T> Callable>
-bool EventBase<Derived, EP, T, MaskFunc>::locate_impl(T& /*t*/, State<T> /*before*/, State<T> /*after*/, Callable&& /*f*/) const{
+bool EventBase<Derived, EP, T, MaskFunc>::locate_impl(T& /*t*/, const T& /*t_old*/, const T& /*t_new*/, const T* /*q_old*/, const T* /*q_new*/, Callable&& /*f*/) const{
     static_assert(false, "static override");
     return false;
 }
 
 template<typename T, isObjFun<T> Target, typename MaskFunc, EventPolicy EP, typename Derived>
 template<isStateInterp<T> Callable>
-bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t, State<T> before, State<T> after, Callable&& f) const{
-    T val1 = this->obj_fun(before.t(), before.vector());
-    T val2 = this->obj_fun(after.t(), after.vector());
+bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const{
+    T val1 = this->obj_fun(t_old, q_old);
+    T val2 = this->obj_fun(t_new, q_new);
 
     int t_dir = this->direction();
     int d = this->sign_change_dir();
@@ -43,7 +43,7 @@ bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t, State<T> 
             return this->obj_fun(t_dummy, vec);
         };
 
-        t = bisect<T, RootPolicy::Right>(obj_fun_scalar, before.t(), after.t(), this->ftol);
+        t = bisect<T, RootPolicy::Right>(obj_fun_scalar, t_old, t_new, this->ftol);
         return true;
     }
     return false;
@@ -52,13 +52,13 @@ bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t, State<T> 
 
 template<typename T, typename MaskFunc, EventPolicy EP, typename Derived>
 template<isStateInterp<T> Callable>
-bool PeriodicEvent<T, MaskFunc, EP, Derived>::locate_impl(T& t, State<T> before, State<T> after, Callable&& /*f*/) const{
+bool PeriodicEvent<T, MaskFunc, EP, Derived>::locate_impl(T& t, const T& t_old, const T& t_new, const T* /*q_old*/, const T* /*q_new*/, Callable&& /*f*/) const{
     n_aux_ = n_;
     int d = this->direction();
 
-    while (get_t(++n_aux_)*d <= before.t()*d){}
+    while (get_t(++n_aux_)*d <= t_old*d){}
 
-    if (get_t(n_aux_)*d <= after.t()*d){
+    if (get_t(n_aux_)*d <= t_new*d){
         t = get_t(n_aux_);
         return true;
     } else {
@@ -70,7 +70,7 @@ bool PeriodicEvent<T, MaskFunc, EP, Derived>::locate_impl(T& t, State<T> before,
 
 template<typename T>
 template<isStateInterp<T> Callable>
-bool EventCollection<T>::detect_all_between(State<T> before, State<T> after, Callable&& f) {
+bool EventCollection<T>::detect_all_between(const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) {
     if (this->size() == 0){
         return false;
     }
@@ -81,7 +81,7 @@ bool EventCollection<T>::detect_all_between(State<T> before, State<T> after, Cal
 
     // Locate all events and record which ones were found
     for (size_t i=0; i<this->size(); i++){
-        if (events[i]->locate(event_times[i], before, after, std::forward<Callable>(f))){
+        if (events[i]->locate(event_times[i], t_old, t_new, q_old, q_new, std::forward<Callable>(f))){
             located[i] = true;
             detection_order[detections++] = i;
         }

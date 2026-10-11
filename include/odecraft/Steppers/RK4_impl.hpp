@@ -100,7 +100,7 @@ auto RK4<T, N, SP, OdeType, Derived>::local_interp() const{
             5*this->nsys()},
         nsys = this->nsys(),
         t_old = this->t_old(),
-        old = Array1D<T, N>(this->old_state_ptr()+2, this->nsys()),
+        old = Array1D<T, N>(this->vector_old().data(), this->nsys()),
         ode=this->ode()]
         (T* out, const T& t) {
             rk4_step(
@@ -112,35 +112,32 @@ auto RK4<T, N, SP, OdeType, Derived>::local_interp() const{
         };
 #else
     set_interp_data();
-    const T* d = this->new_state_ptr();
     size_t nsys = this->nsys();
-    return [nsys, t1=this->t_old(), t2 = d[0], y1=Array1D<T, N>(this->old_state_ptr()+2, nsys), y2=Array1D<T, N>(d+2, nsys), y1dot=Array1D<T, N>(K.data(), nsys), y2dot=Array1D<T, N>(K.data()+nsys, nsys)](T* out, const T& t){
+    return [nsys, t1=this->t_old(), t2 = this->t_new(), y1=Array1D<T, N>(this->vector_old().data(), nsys), y2=Array1D<T, N>(this->vector_new().data(), nsys), y1dot=Array1D<T, N>(K.data(), nsys), y2dot=Array1D<T, N>(K.data()+nsys, nsys)](T* out, const T& t){
         rk4_interp(out, t, t1, t2, y1.data(), y2.data(), y1dot.data(), y2dot.data(), nsys);
     };
 #endif
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult RK4<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
+StepResult RK4<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
     // standard Runge-Kutta-4 with fixed step size
 
-    const T& t = state[0];
+    // rk4_step overwrites K[1], which set_interp_data fills with the derivative at t_new
+    interp_data_set = false;
 
-    const T& habs = state[1];
     const T& h = habs * this->direction();
-    const T* y = state + 2;
     size_t n = this->nsys();
 
-    res[0] = t + h; // t_new
-    res[1] = habs;
-    T* y_new = res + 2;
+    t_new = t + h;
+    habs_new = habs;
 
-    auto rhs_caller = [this, t, y](T* out, const T& t_dummy, const T* y_dummy) NDSPAN_LAMBDA_INLINE{
+    auto rhs_caller = [this](T* out, const T& t_dummy, const T* y_dummy) NDSPAN_LAMBDA_INLINE{
         this->rhs(out, t_dummy, y_dummy);
     };
 
-    rk4_step(rhs_caller, y_new, t, h, y, K.data(), n, K.data() + 4*n);
-    if (!all_are_finite(y_new, n)){
+    rk4_step(rhs_caller, q_new, t, h, q, K.data(), n, K.data() + 4*n);
+    if (!all_are_finite(q_new, n)){
         return StepResult::NonFiniteError;
     }else{
         return StepResult::Success;
@@ -154,11 +151,10 @@ void RK4<T, N, SP, OdeType, Derived>::interp_impl(T* out, const T& t) const{
 #ifdef ODECRAFT_RK4_DENSE    
     rk4_step([this](T* out_, const T& t_, const T* y_) NDSPAN_LAMBDA_INLINE{
         this->rhs(out_, t_, y_);
-    }, out, this->t_old(), t - this->t_old(), this->old_state_ptr()+2, K.data()+5*nsys, nsys, K.data() + 4*nsys);
+    }, out, this->t_old(), t - this->t_old(), this->vector_old().data(), K.data()+5*nsys, nsys, K.data() + 4*nsys);
 #else
     set_interp_data();
-    const T* d = this->new_state_ptr();
-    rk4_interp(out, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, K.data(), K.data()+nsys, nsys);
+    rk4_interp(out, t, this->t_old(), this->t_new(), this->vector_old().data(), this->vector_new().data(), K.data(), K.data()+nsys, nsys);
 #endif
 }
 
@@ -180,8 +176,7 @@ void RK4<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector){
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void RK4<T, N, SP, OdeType, Derived>::set_interp_data() const{
     if (!interp_data_set){
-        const T* d = this->new_state_ptr();
-        this->rhs(K.data()+this->nsys(), d[0], d+2);
+        this->rhs(K.data()+this->nsys(), this->t_new(), this->vector_new().data());
         interp_data_set = true;
     }
 }
