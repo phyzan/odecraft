@@ -16,8 +16,8 @@ namespace ode {
 namespace detail{
 
 /// @brief One Bogacki-Shampine 3(2) stage sweep. Same contract as rk45_step_impl: `K` holds
-/// stages K1..K2 (Nstages-1 rows of n), `KF` the final FSAL stage, `K0` the derivative at the
-/// start of the step. Returns the scaled error norm.
+/// stages K1..K2 (Nstages-1 rows, rk_stage_stride(n) apart), `KF` the final FSAL stage, `K0`
+/// the derivative at the start of the step. Returns the scaled error norm.
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
 T rk23_step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
@@ -69,9 +69,14 @@ private:
     static constexpr Etype Ematrix();
     static constexpr Ptype Pmatrix();
 
+    // Elements between the stage rows K1..K2 (0 when N is a runtime size, see stage_stride)
+    static constexpr size_t STAGE_STRIDE = detail::rk_stage_stride<T>(N);
+
     T           step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q);
 
     void        set_coef_matrix() const;
+
+    size_t      stage_stride() const { return detail::rk_stage_stride<T>(this->nsys()); }
 
     detail::CoefTable<T, &Amatrix> A;
     detail::CoefTable<T, &Bmatrix> B;
@@ -84,7 +89,8 @@ private:
     mutable Array1D<T, N>                               KF_;  // final (FSAL) stage
     mutable Array2D<T, N, 0>                            coef_mat_;
     
-    [[no_unique_address]] mutable detail::ScratchPageFor<T, Nstages*N>     rk_scratch_;
+    // the stage rows K1..K2, then the FSAL stage of a replayed sweep
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, (Nstages-1)*STAGE_STRIDE + N>   rk_scratch_;
     [[no_unique_address]] mutable detail::ScratchPageFor<T, 2*N>           rk_input_scratch_;
     [[no_unique_address]] mutable detail::ScratchPageFor<T, 1>             rk_scalar_scratch_;
     mutable bool                                        mat_is_set_ = false;

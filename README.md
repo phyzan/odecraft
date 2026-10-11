@@ -466,6 +466,18 @@ For instance, this [example](tutorials/CompileTimeEvents.cpp) demonstrates the p
 Note that as the number of requested bits of precision increases, the performance difference diminishes,
 and the overhead of algebraic evaluations dominates.
 
+**Changing the precision later.** OdeCraft and lazex keep a few reusable temporaries per thread, and
+each `mpreal` keeps the precision it was created with. If you change the default precision after a
+solver on that type has already run, refresh them right after:
+```cpp
+mpfr::mpreal::set_default_prec(256);       // or lazex::set_default_mpreal_prec(256)
+ode::update_static_pool<mpfr::mpreal>();   // use the same T as your solvers
+```
+You don't need it if you set the precision once, before any solver runs. It only affects the calling
+thread, like MPFR's default precision, and it is meant for types like `mpreal` (it does not compile for
+`float` or `double`). Solvers created before the change keep their old precision. The compiled
+interface's `ode::crafted::set_mpreal_prec` already calls it for you.
+
 
 # Architecture
 

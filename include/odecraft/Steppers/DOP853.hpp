@@ -44,9 +44,10 @@ template<typename T>
 void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* coef_mat, size_t order, size_t size);
 
 /// @brief DOP853's combined 3rd/5th order embedded error norm (Hairer, Norsett & Wanner).
+/// `K` holds the Nstages+1 stage rows, `ld` elements apart.
 template<typename T>
 T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q_new,
-                     const T& h, const T& rtol, const T& atol, size_t Nstages, size_t n);
+                     const T& h, const T& rtol, const T& atol, size_t Nstages, size_t n, size_t ld);
 
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
@@ -93,9 +94,14 @@ private:
     static constexpr AExtraType Amatrix_extra();
     static constexpr CExtraType Cmatrix_extra();
 
+    // Elements between the rows of K_ (0 when N is a runtime size, see stage_stride)
+    static constexpr size_t STAGE_STRIDE = detail::rk_stage_stride<T>(N);
+
     T           step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q);
 
     void        set_coef_matrix() const;
+
+    size_t      stage_stride() const { return detail::rk_stage_stride<T>(this->nsys()); }
 
     // Unlike RK23/RK45, these tables are built with fill()+indexed writes rather than a
     // plain aggregate initializer, which ndspan cannot constant-evaluate - so, regardless
@@ -110,10 +116,10 @@ private:
     typename DOP_COEFS<T>::DOP_E E5 = DOP_COEFS<T>::make_E5();
 
     T                                                     h_last_ = 0; // step size actually used by the last sweep
-    mutable Array2D<T, N_STAGES_EXT, N, Allocation::Auto> K_;
-    mutable Array1D<T, N, Allocation::Auto>                df_tmp_;
-    mutable Array2D<T, N, 0>                               coef_mat_;
-    mutable bool                                           mat_is_set_ = false;
+    mutable Array2D<T, N_STAGES_EXT, STAGE_STRIDE, Allocation::Auto> K_; // one stage per row, n used of each
+    mutable Array1D<T, N, Allocation::Auto>                           df_tmp_;
+    mutable Array2D<T, N, 0>                                          coef_mat_;
+    mutable bool                                                      mat_is_set_ = false;
 
     T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1);
     T INC_EXP = T(-1)/T(Norder);
