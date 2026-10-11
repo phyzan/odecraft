@@ -315,7 +315,7 @@ void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, con
 
 template<typename T>
 T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q_new,
-                     const T& h, const T& rtol, const T& atol, size_t Nstages, size_t n){
+                     const T& h, const T& rtol, const T& atol, size_t Nstages, size_t n, size_t ld){
     // Combination of 3rd and 5th order embedded error estimates (Hairer, Norsett & Wanner):
     // error_norm = |h| * ||err5||_2 / sqrt(||err5||_2^2 + 0.01 * ||err3||_2^2) / sqrt(n)
     T err5_norm_2 = 0;
@@ -325,8 +325,8 @@ T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q
         T err5 = 0;
         T err3 = 0;
         for (size_t i = 0; i <= Nstages; i++){
-            err5 += K[i*n + j] * E5[i];
-            err3 += K[i*n + j] * E3[i];
+            err5 += K[i*ld + j] * E5[i];
+            err3 += K[i*ld + j] * E3[i];
         }
         const T scale = atol + rtol * ndspan::max<T>(abs(q[j]), abs(q_new[j]));
         err5 /= scale;
@@ -352,9 +352,9 @@ T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events)
     : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, direction, std::move(events)),
-      K_(N_STAGES_EXT, q0.size()), df_tmp_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
+      K_(N_STAGES_EXT, detail::rk_stage_stride<T>(q0.size())), df_tmp_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
     if (q0.data() != nullptr){
-        this->rhs(K_.data() + N_STAGES*q0.size(), t0, q0.data());
+        this->rhs(K_.data() + N_STAGES*this->stage_stride(), t0, q0.data());
     }
 }
 
@@ -368,14 +368,14 @@ void DOP853<T, N, SP, OdeType, Derived>::Reset(){
     Base::Reset();
     K_.fill(0);
     mat_is_set_ = false;
-    this->rhs(K_.data() + N_STAGES*this->nsys(), this->t_new(), this->vector_new().data());
+    this->rhs(K_.data() + N_STAGES*this->stage_stride(), this->t_new(), this->vector_new().data());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void DOP853<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector){
     Base::ReAdjust(new_vector);
     this->set_coef_matrix();
-    this->rhs(K_.data() + N_STAGES*this->nsys(), this->t(), new_vector);
+    this->rhs(K_.data() + N_STAGES*this->stage_stride(), this->t(), new_vector);
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -392,6 +392,7 @@ void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
     const T* y_old = this->vector_old().data();
     const T& t_old = this->t_old();
     const size_t n = this->nsys();
+    const size_t ld = this->stage_stride();
     T* K = K_.data();
 
     // Three extra stages, evaluated only for dense-output interpolation.
@@ -400,14 +401,14 @@ void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
         for (size_t j = 0; j < n; j++){
             df_tmp_(j) = y_old[j];
             for (size_t i = 0; i < stage_idx; i++){
-                df_tmp_(j) += K[i*n + j] * A_extra(s, i) * h;
+                df_tmp_(j) += K[i*ld + j] * A_extra(s, i) * h;
             }
         }
-        this->rhs(K + stage_idx*n, t_old + C_extra(s)*h, df_tmp_.data());
+        this->rhs(K + stage_idx*ld, t_old + C_extra(s)*h, df_tmp_.data());
     }
 
     const T* f_old = K;                    // K[0]
-    const T* f_new = K + N_STAGES*n;       // K[12]
+    const T* f_new = K + N_STAGES*ld;      // K[12]
     const T* y_new = this->vector_new().data();
 
     for (size_t i = 0; i < n; i++){
@@ -421,7 +422,7 @@ void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
         for (size_t i = 0; i < n; i++){
             T sum = 0;
             for (size_t k = 0; k < N_STAGES_EXT; k++){
-                sum += D(j, k) * K[k*n + i];
+                sum += D(j, k) * K[k*ld + i];
             }
             coef_mat_(i, 3+j) = h*sum;
         }
@@ -429,24 +430,28 @@ void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T DOP853<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q){
+T DOP853<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h_, const T* __restrict__ q){
+    // The stage loops read h for every element. Through a reference the compiler must assume
+    // that each store to r or q_new may change it, and reloads it per element.
+    const auto& [h] = make_scratch_view(h_);
     h_last_ = h; // remembered for the dense-output coefficients
     T* __restrict__ K = K_.data();
     T* __restrict__ r = df_tmp_.data();
     const size_t n = this->nsys();
+    const size_t ld = this->stage_stride();
 
     const T* __restrict__ K0 = K;
-    T* __restrict__ K1 = K + n;
-    T* __restrict__ K2 = K + 2*n;
-    T* __restrict__ K3 = K + 3*n;
-    T* __restrict__ K4 = K + 4*n;
-    T* __restrict__ K5 = K + 5*n;
-    T* __restrict__ K6 = K + 6*n;
-    T* __restrict__ K7 = K + 7*n;
-    T* __restrict__ K8 = K + 8*n;
-    T* __restrict__ K9 = K + 9*n;
-    T* __restrict__ K10 = K + 10*n;
-    T* __restrict__ K11 = K + 11*n;
+    T* __restrict__ K1 = K + ld;
+    T* __restrict__ K2 = K + 2*ld;
+    T* __restrict__ K3 = K + 3*ld;
+    T* __restrict__ K4 = K + 4*ld;
+    T* __restrict__ K5 = K + 5*ld;
+    T* __restrict__ K6 = K + 6*ld;
+    T* __restrict__ K7 = K + 7*ld;
+    T* __restrict__ K8 = K + 8*ld;
+    T* __restrict__ K9 = K + 9*ld;
+    T* __restrict__ K10 = K + 10*ld;
+    T* __restrict__ K11 = K + 11*ld;
 
     // Stage 2 (K1)
     for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(1,0)*K0[j]); }
@@ -498,17 +503,17 @@ T DOP853<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new,
     }
 
     // FSAL: K12 = f(t+h, q_new), also used for error estimation and the next step
-    this->rhs(K + N_STAGES*n, t + h, q_new);
+    this->rhs(K + N_STAGES*ld, t + h, q_new);
     t_new = t + h;
 
-    return dop853_error_norm(K, E3.data(), E5.data(), q, q_new, h, this->rtol(), this->atol(), N_STAGES, n);
+    return dop853_error_norm(K, E3.data(), E5.data(), q, q_new, h, this->rtol(), this->atol(), N_STAGES, n, ld);
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
     mat_is_set_ = false;
     T* dest = K_.data();
-    const T* src = K_.data() + N_STAGES*this->nsys();
+    const T* src = K_.data() + N_STAGES*this->stage_stride();
     std::copy(src, src + this->nsys(), dest);
     return detail::rk_adapt_step<N>(
         t_new, habs_new, q_new, t, habs, q, this->nsys(),

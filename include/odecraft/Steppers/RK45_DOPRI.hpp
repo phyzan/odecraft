@@ -15,6 +15,9 @@ namespace ode {
 
 namespace detail{
 
+/// @brief One Dormand-Prince 5(4) stage sweep. `K` holds stages K1..K5 (Nstages-1 rows,
+/// rk_stage_stride(n) apart), `KF` the final FSAL stage, `K0` the derivative at the start of
+/// the step. Returns the scaled error norm.
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
 T rk45_step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
@@ -65,9 +68,14 @@ private:
     static constexpr Etype Ematrix();
     static constexpr Ptype Pmatrix();
 
+    // Elements between the stage rows K1..K5 (0 when N is a runtime size, see stage_stride)
+    static constexpr size_t STAGE_STRIDE = detail::rk_stage_stride<T>(N);
+
     T           step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q);
 
     void        set_coef_matrix() const;
+
+    size_t      stage_stride() const { return detail::rk_stage_stride<T>(this->nsys()); }
 
     detail::CoefTable<T, &Amatrix> A;
     detail::CoefTable<T, &Bmatrix> B;
@@ -79,8 +87,9 @@ private:
     mutable Array1D<T, N>                   K0_;
     mutable Array1D<T, N>                   KF_;
     mutable Array2D<T, N, 0>                coef_mat;
-    
-    [[no_unique_address]] mutable detail::ScratchPageFor<T, Nstages*N>     rk_scratch_;
+
+    // the stage rows K1..K5, then the FSAL stage of a replayed sweep
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, (Nstages-1)*STAGE_STRIDE + N>   rk_scratch_;
     [[no_unique_address]] mutable detail::ScratchPageFor<T, 2*N>           rk_input_scratch_;
     [[no_unique_address]] mutable detail::ScratchPageFor<T, 1>             rk_scalar_scratch_;
     mutable bool                            mat_is_set = false;

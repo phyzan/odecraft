@@ -9,14 +9,14 @@
 namespace ode::detail{
 
 template<typename T>
-XDIFF_FORCEINLINE void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n){
+XDIFF_FORCEINLINE void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n, size_t ld){
     // The Nstages+1 stage rows are no longer one contiguous block: row 0 is K0, rows
-    // 1..Nstages-1 live in K, and the final (FSAL) row is KF.
+    // 1..Nstages-1 live in K (ld elements apart), and the final (FSAL) row is KF.
     for (size_t i = 0; i < n; i++){
         for (size_t j = 0; j < order; j++){
             T sum = K0[i] * P[j] + KF[i] * P[Nstages*order + j];
             for (size_t k = 1; k < Nstages; k++){
-                sum += K[(k-1)*n + i] * P[k*order + j];
+                sum += K[(k-1)*ld + i] * P[k*order + j];
             }
             coef_mat[i*order + j] = sum;
         }

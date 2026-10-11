@@ -54,9 +54,25 @@ using CoefTable = std::conditional_t<std::is_arithmetic_v<T>, StaticCoefTable<T,
 // (step-size control, dense-output coefficient assembly) is shared here.
 // ============================================================================
 
-/// derivatives K (Nstages+1 rows) and interpolation weights P (Nstages+1 x order).
+/// @brief Distance, in elements, between consecutive stage rows of n elements (K1, K2, ...).
+/// This padding is more cache-friendly and can increase performance
 template<typename T>
-void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n);
+constexpr size_t rk_stage_stride(size_t n){
+    constexpr size_t line = 64;
+    if constexpr (sizeof(T) > line || line % sizeof(T) != 0){
+        return n;
+    } else {
+        constexpr size_t per_line = line / sizeof(T);
+        const size_t lines = (n + per_line - 1) / per_line;
+        return n == 0 ? 0 : (lines | 1) * per_line;
+    }
+}
+
+/// @brief Dense-output coefficients from the stage derivatives - K0, the Nstages-1 rows of K
+/// (`ld` elements apart) and the final stage KF - and the interpolation weights P
+/// (Nstages+1 x order).
+template<typename T>
+void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n, size_t ld);
 
 /// @brief Shared step-size control loop: repeatedly calls step_fn(t_new, q_new, t, h, q) -> err_norm,
 /// halving/growing habs until the local error is accepted (mirrors scipy/boost step control).

@@ -9,13 +9,15 @@ namespace ode{
 namespace detail{
 
 template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-XDIFF_FORCEINLINE T rk23_step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q, size_t nsys,
+XDIFF_FORCEINLINE T rk23_step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h_, const T* __restrict__ q, size_t nsys,
                  const T* K0, T* K, T* KF, T* r,
-                 const T& rtol, const T& atol,
+                 const T& rtol_, const T& atol_,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs){
     const size_t n = NSYS ? NSYS : nsys;
+    // Read for every element: see rk45_step_impl
+    const auto& [h, rtol, atol] = make_scratch_view(h_, rtol_, atol_);
     T* __restrict__ K1 = K;
-    T* __restrict__ K2 = K + n;
+    T* __restrict__ K2 = K + rk_stage_stride<T>(n);
     T* __restrict__ K3 = KF;
 
     // Stage 2
@@ -57,7 +59,7 @@ template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename 
 RK23<T, N, SP, OdeType, Derived>::RK23(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events)
     : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, direction, std::move(events)),
       K0_(q0.size()), KF_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER),
-      rk_scratch_(request_scratch_page<T, Nstages*N>(Nstages*q0.size())),
+      rk_scratch_(request_scratch_page<T, (Nstages-1)*STAGE_STRIDE + N>((Nstages-1)*detail::rk_stage_stride<T>(q0.size()) + q0.size())),
       rk_input_scratch_(request_scratch_page<T, 2*N>(2*q0.size())),
       rk_scalar_scratch_(request_scratch_page<T, 1>()) {
     if (q0.data() != nullptr){
@@ -95,7 +97,7 @@ void RK23<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
         // buffers, leaving KF_ - the next step's starting derivative - untouched.
         const size_t n = this->nsys();
         auto r_buf     = rk_input_scratch_.template request<N>(n);
-        auto K_buf     = rk_scratch_.template request<N*(Nstages-1)>(n*(Nstages-1));
+        auto K_buf     = rk_scratch_.template request<(Nstages-1)*STAGE_STRIDE>((Nstages-1)*this->stage_stride());
         auto kf_buf    = rk_scratch_.template request<N>(n);
         // the replayed step's end point is discarded, only its stages are kept
         auto t_buf = rk_scalar_scratch_.template request<1>(1);
@@ -128,7 +130,8 @@ void RK23<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
             P.data(),
             Nstages,
             INTERP_ORDER,
-            n
+            n,
+            this->stage_stride()
         );
         mat_is_set_ = true;
     }
@@ -137,7 +140,7 @@ void RK23<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 T RK23<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q){
     auto rhs_scratch   = rk_input_scratch_.template request<N>(this->nsys());
-    auto stage_scratch = rk_scratch_.template request<N*(Nstages-1)>(this->nsys()*(Nstages-1));
+    auto stage_scratch = rk_scratch_.template request<(Nstages-1)*STAGE_STRIDE>((Nstages-1)*this->stage_stride());
     h_last_ = h; // remembered so set_coef_matrix can replay this sweep exactly
     return detail::rk23_step_impl<N>(t_new, q_new, t, h, q, this->nsys(),
                                      K0_.data(), stage_scratch.data(), KF_.data(), rhs_scratch.data(),
