@@ -117,12 +117,15 @@ public:
 
     /**
      * @brief Attempt to locate when this event triggers between two states.
-     * @param before State at the start of the interval.
-     * @param after  State at the end of the interval.
+     * @param out    Output time of event trigger.
+     * @param t_old  Time at the start of the interval.
+     * @param t_new  Time at the end of the interval.
+     * @param q_old  State vector at t_old.
+     * @param q_new  State vector at t_new.
      * @param interp Interpolation object for intermediate states.
      * @return True if event was detected in the interval.
      */
-    virtual bool locate(T& out, State<T> before, State<T> after, const interp_t<T>& interp) = 0;
+    virtual bool locate(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, const interp_t<T>& interp) = 0;
 
     /// @brief Register the event after it has been located. If the last locate() returned True, this finalizes
     /// the event detection and returns true. Otherwise returns false and nothing happens.
@@ -201,10 +204,10 @@ public:
 
     /// @brief Attempt to locate event in an interval. f(T* out, T t) -> void fills the state vector at time t.
     template<isStateInterp<T> Callable>
-    bool                    locate_state(T& out, State<T> before, State<T> after, Callable&& f);
+    bool                    locate_state(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f);
 
     /// @brief Attempt to locate event in an interval.
-    bool                    locate(T& out, State<T> before, State<T> after, const interp_t<T>& interp);
+    bool                    locate(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, const interp_t<T>& interp);
 
     /// @brief Register the event after location.
     bool                    lock();
@@ -237,13 +240,15 @@ protected:
     /**
      * @brief Locate when event triggers in an interval (must be overridden).
      * @param[out] t      Output time of event trigger.
-     * @param[in]  before State at interval start.
-     * @param[in]  after  State at interval end.
+     * @param[in]  t_old  Time at interval start.
+     * @param[in]  t_new  Time at interval end.
+     * @param[in]  q_old  State vector at t_old.
+     * @param[in]  q_new  State vector at t_new.
      * @param[in]  f Interpolation function (T* out, const T& t) -> void to compute state at intermediate times (for masked events).
      * @return True if event was found in interval.
      */
     template<isStateInterp<T> Callable>
-    bool locate_impl(T& t, State<T> before, State<T> after, Callable&& f) const;
+    bool locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const;
 
     // ============= STATIC OVERRIDE (OPTIONAL) ================
 
@@ -335,7 +340,7 @@ protected:
 
     /// @brief Locate zero crossing using bisection.
     template<isStateInterp<T> Callable>
-    bool locate_impl(T& t, State<T> before, State<T> after, Callable&& f) const;
+    bool locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const;
 
     Target  target = nullptr;      ///< Objective function to monitor.
     int     crossing_dir = 1;        ///< Required crossing direction.
@@ -396,7 +401,7 @@ protected:
 
     /// @brief Locate next periodic trigger in interval.
     template<isStateInterp<T> Callable>
-    bool        locate_impl(T& t, State<T> before, State<T> after, Callable&& f) const;
+    bool        locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const;
 
     /// @brief Update period counter on registration.
     void        register_impl();
@@ -467,12 +472,14 @@ public:
      *
      * Locates events, sorts by time, resolves conflicts, and prepares
      * results for iteration.
-        * @param before State at interval start.
-        * @param after  State at interval end.
+        * @param t_old Time at interval start.
+        * @param t_new Time at interval end.
+        * @param q_old State vector at t_old.
+        * @param q_new State vector at t_new.
         * @param f Interpolation function (T* out, const T& t) -> void to compute state at intermediate times (for masked events).
      */
     template<isStateInterp<T> Callable>
-    bool                    detect_all_between(State<T> before, State<T> after, Callable&& f);
+    bool                    detect_all_between(const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f);
 
     const MaskedState<T>*   masked_state() const;
 

@@ -1,6 +1,7 @@
 #ifndef ODECRAFT_RK23_DOPRI_IMPL_HPP
 #define ODECRAFT_RK23_DOPRI_IMPL_HPP
 
+#include "odecraft/Toolkit/Scratch.hpp"
 #include <odecraft/Steppers/RK23_DOPRI.hpp>
 
 namespace ode{
@@ -55,7 +56,7 @@ XDIFF_FORCEINLINE T rk23_step_impl(T& t_new, T* __restrict__ q_new, const T& t, 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 RK23<T, N, SP, OdeType, Derived>::RK23(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events)
     : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, direction, std::move(events)),
-      scratch_space(q0.size()), K0_(q0.size()), KF_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
+      K0_(q0.size()), KF_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
     if (q0.data() != nullptr){
         this->rhs(KF_.data(), t0, q0.data());
     }
@@ -72,8 +73,7 @@ void RK23<T, N, SP, OdeType, Derived>::Reset(){
     K0_.fill(0);
     KF_.fill(0);
     mat_is_set_ = false;
-    const T* state = this->new_state_ptr();
-    this->rhs(KF_.data(), state[0], state+2);
+    this->rhs(KF_.data(), this->t_new(), this->vector_new().data());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
@@ -91,17 +91,19 @@ void RK23<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
         // replayed over the same interval (K0_ and h_last_ still describe it) into private
         // buffers, leaving KF_ - the next step's starting derivative - untouched.
         const size_t n = this->nsys();
-        decltype(auto) r_buf     = scratch_space.rhs_scratch();
-        decltype(auto) K_buf     = scratch_space.stage_scratch();
-        decltype(auto) kf_buf    = scratch_space.fsal_scratch();
-        decltype(auto) state_buf = scratch_space.state_scratch();
+        auto r_buf     = request_scratch<T, N>(this->nsys());
+        auto K_buf     = request_scratch<T, N*(Nstages-1)>(this->nsys()*(Nstages-1));
+        auto kf_buf    = request_scratch<T, N>(this->nsys());
+        // the replayed step's end point is discarded, only its stages are kept
+        auto t_buf = request_scratch<T, 1>();
+        auto q_buf = request_scratch<T, N>(n);
 
         detail::rk23_step_impl<N>(
-            state_buf.data()[0],
-            state_buf.data()+2,
+            t_buf[0],
+            q_buf.data(),
             this->t_old(),
             h_last_,
-            this->old_state_ptr()+2,
+            this->vector_old().data(),
             n,
             K0_.data(),
             K_buf.data(),
@@ -131,8 +133,8 @@ void RK23<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 T RK23<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q){
-    decltype(auto) rhs_scratch   = scratch_space.rhs_scratch();
-    decltype(auto) stage_scratch = scratch_space.stage_scratch();
+        auto rhs_scratch     = request_scratch<T, N>(this->nsys());
+        auto stage_scratch     = request_scratch<T, N*(Nstages-1)>(this->nsys()*(Nstages-1));
     h_last_ = h; // remembered so set_coef_matrix can replay this sweep exactly
     return detail::rk23_step_impl<N>(t_new, q_new, t, h, q, this->nsys(),
                                      K0_.data(), stage_scratch.data(), KF_.data(), rhs_scratch.data(),
@@ -141,23 +143,23 @@ T RK23<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, c
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult RK23<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
+StepResult RK23<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
     mat_is_set_ = false;
     // FSAL: the previous step's last stage becomes this step's first
     std::copy(KF_.data(), KF_.data() + this->nsys(), K0_.data());
-    return detail::rk_adapt_step<N>(res, state, this->nsys(),
+    return detail::rk_adapt_step<N>(t_new, habs_new, q_new, t, habs, q, this->nsys(),
         this->min_step(),
         this->max_step(),
-        this->MIN_STEP,
-        this->SAFETY,
-        this->MAX_FACTOR,
-        this->MIN_FACTOR,
+        this->tiny_factor(),
+        this->safety_factor(),
+        this->max_factor(),
+        this->min_factor(),
         ERR_EXP,
         INC_EXP,
         MIN_ERR,
         this->direction(),
-        [this](T& t_new, T* q_new, const T& t, const T& h, const T* q){
-            return this->step_impl(t_new, q_new, t, h, q);
+        [this](T& t_out, T* q_out, const T& t_in, const T& h, const T* q_in){
+            return this->step_impl(t_out, q_out, t_in, h, q_in);
         }
     );
 }
@@ -165,15 +167,13 @@ StepResult RK23<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void RK23<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
     this->set_coef_matrix();
-    const T* d = this->new_state_ptr();
-    coef_mat_interp(result, t, this->t_old(), d[0], this->old_state_ptr()+2, d+2, coef_mat_.data(), INTERP_ORDER, this->nsys());
+    coef_mat_interp(result, t, this->t_old(), this->t_new(), this->vector_old().data(), this->vector_new().data(), coef_mat_.data(), INTERP_ORDER, this->nsys());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 auto RK23<T, N, SP, OdeType, Derived>::local_interp() const{
     this->set_coef_matrix();
-    const T* d = this->new_state_ptr();
-    return [cm=this->coef_mat_, t1=this->t_old(), t2=d[0], y1=Array1D<T, N>(this->old_state_ptr()+2, this->nsys()), y2=Array1D<T, N>(d+2, this->nsys()), n=this->nsys()](T* out, const T& t){
+    return [cm=this->coef_mat_, t1=this->t_old(), t2=this->t_new(), y1=Array1D<T, N>(this->vector_old().data(), this->nsys()), y2=Array1D<T, N>(this->vector_new().data(), this->nsys()), n=this->nsys()](T* out, const T& t){
         coef_mat_interp(out, t, t1, t2, y1.data(), y2.data(), cm.data(), INTERP_ORDER, n);
     };
 }

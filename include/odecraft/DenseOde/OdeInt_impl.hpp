@@ -2,6 +2,7 @@
 #define ODECRAFT_ODE_INT_IMPL_HPP
 
 #include <algorithm>
+#include <sstream>
 
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/Events/Events.hpp>
@@ -307,21 +308,31 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
     However if nullptr, **ALL** steps are stored
     */
 
+    auto emit = [&](OdeResult<T, N>&& res, BoxedInterp<T, N>&& dense){
+        if (interpolate){
+            auto* rich_res = dynamic_cast<OdeSolution<T, N>*>(out);
+            assert(rich_res && "Output must be of type OdeSolution when interpolation is enabled");
+            *rich_res = OdeSolution<T, N>(std::move(res), std::move(dense));
+        } else {
+            *out = std::move(res);
+        }
+    };
+
     if (! solver_->get_is_running()){
         if (out){
-            *out = OdeResult<T, N>{
+            emit(OdeResult<T, N>{
                 {},
                 {this->nsys()},
                 0,
                 false,
                 0,
                 solver_->get_message(),
-            };
+            }, BoxedInterp<T, N>());
         }
         return false;
     } else if (t_max*solver_->get_direction() < solver_->get_time()*solver_->get_direction()){
         if (out){
-            *out = OdeResult<T, N>({}, {this->nsys()}, 0, false, 0, "Cannot integrate in opposite direction");
+            emit(OdeResult<T, N>({}, {this->nsys()}, 0, false, 0, "Cannot integrate in opposite direction"), BoxedInterp<T, N>());
         }
         return false; //cannot integrate in opposite direction
     }
@@ -391,12 +402,11 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
         if (max_progress_reports > 0){
             T percentage = (solver_->get_time() - t0)/(t_max-t0);
             if (percentage*max_progress_reports >= prints){
-                #pragma omp critical
-                {
-                    std::cout << std::setprecision(std::log10(max_progress_reports)+1) << "\033[2K\rProgress: " << 100*percentage << "%" <<   "    Events: " << event_counter.total() << std::flush;
-                    prints++;
-                }
-
+                // Assembled first and written in one go, so concurrent integrations never interleave.
+                std::ostringstream line;
+                line << std::setprecision(std::log10(max_progress_reports)+1) << "\033[2K\rProgress: " << 100*percentage << "%" <<   "    Events: " << event_counter.total();
+                std::cout << line.str() << std::flush;
+                prints++;
             }
 
         }
@@ -413,7 +423,8 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
     if constexpr (store_explicit_steps){
         success = solver_->do_advance_until(t_max, main_observer, t_eval);
     } else if (interpolate){
-        success = static_cast<bool>(interpolator = solver_->do_interpolate_until(t_max, main_observer));
+        interpolator = solver_->do_interpolate_until(t_max, main_observer);
+        success = (t0 != t_max) && (solver_->get_time() == t_max);
     } else {
         success = solver_->do_advance_until(t_max, main_observer);
     }
@@ -437,13 +448,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
             duration,
             terminate_message,
         };
-        if (interpolate){
-            auto* rich_res = dynamic_cast<OdeSolution<T, N>*>(out);
-            assert(rich_res && "Output must be of type OdeSolution when interpolation is enabled");
-            *rich_res = OdeSolution<T, N>(std::move(res), std::move(interpolator));
-        } else {
-            *out = std::move(res);
-        }
+        emit(std::move(res), std::move(interpolator));
     } else {
         assert (interpolate == false && "Output must be provided to return interpolation result");
     }

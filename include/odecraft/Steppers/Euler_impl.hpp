@@ -19,25 +19,21 @@ Stepper Euler<T, N, SP, OdeType, Derived>::method() const{
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void Euler<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
-    return lin_interp(result, t, this->t_old(), this->t_new(), this->old_state_ptr()+2, this->new_state_ptr()+2, this->nsys());
+    return lin_interp(result, t, this->t_old(), this->t_new(), this->vector_old().data(), this->vector_new().data(), this->nsys());
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult Euler<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
-    T& t_new = res[0];
-    T& habs = res[1];
-    T* vec = res+2;
+StepResult Euler<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
+    const T h = habs * this->direction();
+    t_new = t + h;
+    habs_new = habs;
 
-    const T& stepsize = state[1];
-    t_new = state[0] + stepsize;
-    habs = stepsize;
-
-    this->rhs(vec, t_new, state+2);
+    this->rhs(q_new, t, q);
     for (size_t i=0; i<this->nsys(); i++){
         // y2 = y1 + f*dt, f = dy/dt
-        vec[i] = state[i+2] + vec[i]*stepsize;
+        q_new[i] = q[i] + q_new[i]*h;
     }
-    if (!all_are_finite(vec, this->nsys())){
+    if (!all_are_finite(q_new, this->nsys())){
         return StepResult::NonFiniteError;
     }else{
         return StepResult::Success;
@@ -49,8 +45,8 @@ auto Euler<T, N, SP, OdeType, Derived>::local_interp() const{
     return
         [t1=this->t_old(),
             t2=this->t_new(),
-            y1=Array1D<T, N>(this->old_state_ptr()+2, this->nsys()),
-            y2=Array1D<T, N>(this->new_state_ptr()+2, this->nsys()),
+            y1=Array1D<T, N>(this->vector_old().data(), this->nsys()),
+            y2=Array1D<T, N>(this->vector_new().data(), this->nsys()),
             n=this->nsys()]
             (T* out, const T& t){
                 lin_interp(out, t, t1, t2, y1.data(), y2.data(), n);

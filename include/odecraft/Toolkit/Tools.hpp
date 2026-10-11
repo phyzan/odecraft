@@ -12,6 +12,9 @@
 #include <polybox/polybox.hpp>
 #include <xdiff/tools.hpp>
 #include <ndspan/ndspan.hpp>
+#include "Cache.hpp" // IWYU pragma: keep
+#include "Scratch.hpp"
+
 
 
 #define ODECRAFT_LAMBDA(out, t, q) [=](auto* out, const auto& t, auto q) -> void 
@@ -121,17 +124,6 @@ template<typename T>
 inline T& mut_ref_elem(T& item){
     return item;
 }
-
-// Whether a buffer of T can live in automatic storage. That needs two things: a size known at
-// compile time, and a scalar cheap enough that creating the buffer is free. A type like
-// mpfr::mpreal is not trivially copyable - every element owns a heap allocation - so a fresh
-// stack array would construct and destroy nsys of them on every access. Those types use a
-// persistent heap-backed buffer instead, allocated once and handed out by reference.
-//
-// Used both by the solver scratch space (SolverScratchSpace) and by the step caches in
-// Cache.hpp, which is why it lives here rather than in either of them.
-template<typename T, size_t N>
-inline constexpr bool scratch_is_static = (N > 0) && std::is_trivially_copyable_v<T>;
 
 } // namespace ode::detail
 
@@ -530,31 +522,6 @@ struct SolverRichState : public SolverState<T, N>{
 };
 
 
-template<typename T>
-class State{
-
-    //provides a view of data, does not own it. The lifetime of a State object must be shorter
-    //than that of the underlying data, otherwise the program will crash or behave incorrectly
-
-public:
-
-    State(const T* data, size_t Nsys) : data_(data), nsys_(Nsys) {}
-
-    const T& t() const {return data_[0];}
-
-    const T& habs() const {return data_[1];}
-
-    const T* vector() const {return data_ + 2;}
-
-    size_t nsys() const {return nsys_;}
-
-protected:
-
-    const T* data_;
-    size_t nsys_;
-};
-
-
 template<typename RHS, typename JAC = std::nullptr_t>
 struct OdeData {
 
@@ -699,7 +666,6 @@ template<typename T>
 T norm_squared(const T* x, size_t size){
     //optimize
     T res = 0;
-    // #pragma omp simd reduction(+:res)
     for (size_t i=0; i<size; i++){
         res += x[i]*x[i];
     }
@@ -751,7 +717,6 @@ T rms_norm(const T* x, size_t size){
 template<typename T>
 T rms_norm(const T* x, const T* scale, size_t size){
     T norm_sq = 0;
-    // #pragma omp simd reduction(+:norm_sq)
     for (size_t i=0; i<size; i++){
         norm_sq += x[i]*x[i]/(scale[i]*scale[i]);
     }
@@ -792,6 +757,14 @@ template<typename... Arg>
 NDSPAN_INLINE void print(Arg&&... x){
     ((std::cout << x << ' '), ...);
     std::cout << "\n";
+}
+
+
+template<typename T, typename... Args>
+void update_static_pool(Args&&... args){
+    static_assert(!std::is_trivially_copyable_v<T>, "Updating static variables can reduce performance for trivial types.");
+    lazex::update_workers<T>();
+    detail::update_scratch<T>(std::forward<Args>(args)...);
 }
 
 

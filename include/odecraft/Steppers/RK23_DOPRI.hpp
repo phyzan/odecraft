@@ -51,7 +51,7 @@ public:
 protected:
 
     void        ReAdjust(const T* new_vector);
-    StepResult  adapt_impl(T* res, const T* state);
+    StepResult  adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
     void        interp_impl(T* result, const T& t) const;
     auto        local_interp() const;
 
@@ -79,7 +79,6 @@ private:
     detail::CoefTable<T, &Ematrix> E;
     detail::CoefTable<T, &Pmatrix> P;
 
-    detail::RKScratchSpace<T, N, Nstages-1>             scratch_space;
     T                                                   h_last_ = 0; // replayed by set_coef_matrix
     mutable Array1D<T, N>                               K0_;  // derivative at the start of the step
     mutable Array1D<T, N>                               KF_;  // final (FSAL) stage

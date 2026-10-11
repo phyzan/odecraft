@@ -74,7 +74,7 @@ protected:
     using Dlike = Array2D<T, 0, N>;
     struct private_tag{};
 
-    StepResult      adapt_impl(T* res, const T* state);
+    StepResult      adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
     void            interp_impl(T* result, const T& t) const;
     auto            local_interp() const;
     void            ReAdjust(const T* new_vector);

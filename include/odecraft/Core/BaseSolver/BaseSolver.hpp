@@ -52,6 +52,42 @@
 
 
 namespace ode{
+
+namespace detail{
+
+template<typename T>
+struct StaticSolverFactors{
+
+    /// @brief Safety factor for step size control (typically 0.8-0.95).
+    inline static constexpr T SAFETY = T(9)/10;
+
+    /// @brief Maximum step size increase factor per step.
+    inline static constexpr T MAX_FACTOR = 10;
+
+    /// @brief Minimum step size decrease factor per step.
+    inline static constexpr T MIN_FACTOR = T(2)/10;
+    
+    /// @brief Absolute minimum step size before solver terminates.
+    inline static constexpr T MIN_STEP = 100*std::numeric_limits<T>::epsilon();
+};
+
+template<typename T>
+struct DynamicSolverFactors{
+    T SAFETY = T(9)/10;
+    T MAX_FACTOR = 10;
+    T MIN_FACTOR = T(2)/10;
+    T MIN_STEP = 100*std::numeric_limits<T>::epsilon();
+};
+
+template<typename T>
+using StepperFactors = std::conditional_t<
+    std::is_trivially_copyable_v<T>,
+    StaticSolverFactors<T>,
+    DynamicSolverFactors<T>
+    >;
+
+} // namespace ode::detail
+
 /**
  * @brief Base class for adaptive-step ODE solvers using CRTP.
  *
@@ -67,65 +103,11 @@ namespace ode{
  * @tparam T       Scalar type for computations (e.g., double, float).
  * @tparam N       System size at compile time. Use 0 for runtime-sized systems.
  * @tparam SP      Solver policy controlling behavior (see SolverPolicy enum).
+ * @tparam OdeType class containing the Rhs and Jac members
  *
  * @note This class uses static polymorphism (CRTP). The derived class passes itself as the
  *       first template parameter.
  */
-
-namespace detail{
-
-// scratch_is_static lives in Toolkit/Tools.hpp - the step caches in Toolkit/Cache.hpp need the
-// same trait, and Toolkit must not depend on Core.
-
-template<typename T, size_t N>
-using StepperState = Array1D<T, (N > 0 ? N+2 : 0)>;
-
-template<typename T, size_t N>
-class StaticSolverScratch{
-
-public:
-
-    StaticSolverScratch(size_t nsys) {
-        assert(nsys == N && "SolverScratchSpace: nsys must match template parameter N for fixed-size systems.");
-    }
-
-    Array1D<T, N> vector() const {return Array1D<T, N>{};}
-    StepperState<T, N> state() const {return StepperState<T, N>{};}
-    Array1D<T, 4*N> four_state_cache() const {return Array1D<T, 4*N>{};}
-    Array1D<T, N> ics_cache() const {return Array1D<T, N>{};}
-    Array1D<DualType<T, N, 1>, N> duals() const {return Array1D<DualType<T, N, 1>, N>{};}
-};
-
-
-// Heap-backed scratch. Used for runtime-sized systems, and for any scalar that is not trivial
-// to construct/copy. N is still carried so that DualType keeps the solver's derivative width.
-template<typename T, size_t N>
-class DynamicSolverScratch{
-
-public:
-
-    DynamicSolverScratch(size_t nsys) : vector_(nsys), state_(nsys+2), four_state_cache_(4*nsys), ics_cache_(nsys), duals_(nsys) {}
-
-    Array1D<T, N>& vector() const {return vector_;}
-    StepperState<T, N>& state() const {return state_;}
-    Array1D<T, 4*N>& four_state_cache() const {return four_state_cache_;}
-    Array1D<T, N>& ics_cache() const {return ics_cache_;}
-    Array1D<DualType<T, N, 1>, N>& duals() const {return duals_;}
-private:
-    mutable Array1D<T, N> vector_; // vector allocated for any other use
-    mutable StepperState<T, N> state_; // for trying the next step
-    mutable Array1D<T, 4*N> four_state_cache_; // for approx jac and auto step
-    mutable Array1D<T, N> ics_cache_; // for trying the next step with modified ICs
-    mutable Array1D<DualType<T, N, 1>, N> duals_; // for autodiff when JP==JacPolicy::Autodiff
-};
-
-template<typename T, size_t N>
-using SolverScratchSpace = std::conditional_t<scratch_is_static<T, N>,
-                                              StaticSolverScratch<T, N>,
-                                              DynamicSolverScratch<T, N>>;
-
-} // ode::detail
-
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, N, SP>::type {
@@ -204,14 +186,11 @@ public:
     /// @brief Get a view of the state vector from the previous accepted step.
     View1D<T, N>        vector_old() const;
 
-    /// @brief Get a State object representing the initial conditions.
-    State<T>            ics() const;
+    /// @brief Get the initial integration time.
+    const T&            t_ics() const;
 
-    /// @brief Get a State object representing the most recent computed step.
-    State<T>            new_state() const;
-
-    /// @brief Get a State object representing the previous accepted step.
-    State<T>            old_state() const;
+    /// @brief Get a view of the initial state vector.
+    View1D<T, N>        vector_ics() const;
 
     /// @brief Get the current step size (absolute value).
     const T&            stepsize() const;
@@ -346,8 +325,13 @@ public:
         ArrayType&& checkpoints
     );
 
+    /**
+     * @brief Integrate until `time`, returning the dense output of the span integrated
+     * @note If the integration stops early, this will be reflected in the interpolator
+     */
     BoxedInterp<T, N>   interpolate_until(const T& time);
 
+    /// @brief Same as interpolate_until(time), calling `observer` like advance_until does.
     template<isObserver<T> Callable>
     BoxedInterp<T, N>   interpolate_until(const T& time, Callable&& observer);
 
@@ -397,9 +381,8 @@ public:
     void                get_current_vector(T* out) const { this->fill_current_vector(out); }
     View1D<T, N>        get_new_vector() const { return vector_new(); }
     View1D<T, N>        get_old_vector() const { return vector_old(); }
-    State<T>            get_ics() const { return ics(); }
-    State<T>            get_new_state() const { return new_state(); }
-    State<T>            get_old_state() const { return old_state(); }
+    const T&            get_ics_time() const { return t_ics(); }
+    View1D<T, N>        get_ics_vector() const {return vector_ics();}
     const T&            get_stepsize() const { return stepsize(); }
     int                 get_direction() const { return direction(); }
     const T&            get_rtol() const { return rtol(); }
@@ -474,10 +457,8 @@ protected:
 
     /**
      * @brief Perform one adaptive integration step.
-     * @param[out] state Output array for the new state [t, h, q...] (size Nsys+2).
-     * @note Must be implemented by derived class.
      */
-    StepResult          adapt_impl(T* state, const T* old_state);
+    StepResult          adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
 
     /**
      * @brief Interpolate solution at time t using method-specific interpolation.
@@ -505,10 +486,10 @@ protected:
     }
 
     /**
-    @brief Re-adjustment hook right before new_state modification. Derived should call base first.
+    @brief Re-adjustment hook right before the new state is modified. Derived should call base first.
     @param new_vector New state vector values (size Nsys).
     @note Nothing has changed yet when this is called; it's a chance to update any internal data before the state is modified. The new state will be set to (t(), stepsize(), new_vector),
-    where t() is the true current time, which might lie between old_state and new_state (e.g. if an event occurred).
+    where t() is the true current time, which might lie between t_old() and t_new() (e.g. if an event occurred).
     */
     void    ReAdjust(const T* new_vector);
 
@@ -545,20 +526,7 @@ protected:
     /// @brief Same as this->Jac, but increments the Jacobian evaluation counter.
     void        jac(T* out, const T& t, const T* q) const;
 
-    /// @brief Get pointer to the initial conditions state data.
-    const T*    ics_ptr() const;
-
-    /// @brief Get pointer to the most recently computed state.
-    const T*    new_state_ptr() const;
-
     void        set_status(StepperStatus new_status);
-
-    /// @brief Borrow the scratch buffer for one state vector.
-    /// Bind with `decltype(auto)`, never `auto`
-    decltype(auto) scratch_vector() const { return scratch_.vector(); }
-
-    /// @brief Get pointer to the previous accepted state.
-    const T*    old_state_ptr() const;
 
     /// @brief Print a warning that the solver is dead.
     void        warn_dead() const;
@@ -593,21 +561,25 @@ protected:
 
     // ==================================================
 
-    /// @brief Maximum step size increase factor per step.
-    T                                   MAX_FACTOR = 10;
+    inline constexpr const T& safety_factor() const {
+        return factors_.SAFETY;
+    }
 
-    /// @brief Safety factor for step size control (typically 0.8-0.95).
-    T                                   SAFETY = T(9)/10;
+    inline constexpr const T& max_factor() const {
+        return factors_.MAX_FACTOR;
+    }
 
-    /// @brief Minimum step size decrease factor per step.
-    T                                   MIN_FACTOR = T(2)/10;
-    
-    /// @brief Absolute minimum step size before solver terminates.
-    T                                   MIN_STEP = 100*std::numeric_limits<T>::epsilon();
+    inline constexpr const T& min_factor() const {
+        return factors_.MIN_FACTOR;
+    }
+
+    inline constexpr const T& tiny_factor() const {
+        return factors_.MIN_STEP;
+    }
 
 private:
 
-    bool    validate_it(StepResult result, const T* state);
+    bool    validate_it(StepResult result, const T& new_time);
 
     bool lt(const T& t_a, const T& t_b) const;
     bool le(const T& t_a, const T& t_b) const;
@@ -638,9 +610,12 @@ private:
     void                    move_state(const T& time);
     
     OdeType         ode_;
-    detail::StepperState<T, N> ics_state_, old_state_, new_state_;
-    detail::SolverScratchSpace<T, N> scratch_;
-    T time_, habs_, rtol_, atol_, min_step_, max_step_;
+    T               t_ics_, habs_ics_;
+    Array1D<T, N>   q_ics_;
+    T               t_old_, t_new_, t_true_, habs_new_;
+    T               rtol_, atol_, min_step_, max_step_;
+    detail::StepperFactors<T> factors_;
+    Array1D<T, N>   q_old_, q_new_;
     size_t          nsys_ = N;
     size_t          step_count_ = 0;
     mutable size_t  rhs_eval_count_ = 0;

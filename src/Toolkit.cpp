@@ -9,6 +9,9 @@ void set_mpreal_prec(mpfr_prec_t prec){
 #else
     mpfr::mpreal::set_default_prec(prec);
 #endif
+    // The solvers' thread_local scratch pool outlives any one solver, so its free elements
+    // are brought to the new precision too.
+    ::ode::update_static_pool<mpreal_t>();
 }
 
 

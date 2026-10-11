@@ -177,37 +177,6 @@ public:
 
 private:
 
-    struct ScratchDynamic{
-
-        ScratchDynamic(size_t nsys_main);
-
-        Array1D<T, 3*N>& findiffs() const;
-        Array1D<T, N*N>& jacmat() const;
-        Array1D<DualType<T, N, 1>, N>& duals() const;
-        Array1D<DualType<T, N, 2>, N>& dduals() const;
-
-    private:
-        size_t nsys = N;
-        mutable Array1D<T, 3*N> findiffs_;
-        mutable Array1D<T, N*N> jacmat_;
-        mutable Array1D<DualType<T, N, 1>, N> duals_;
-        mutable Array1D<DualType<T, N, 2>, N> dduals_;
-    };
-
-    struct ScratchStatic{
-
-        ScratchStatic(size_t nsys_main);
-
-        // Returned by value: a fresh automatic buffer per call. See scratch_is_static.
-        Array1D<T, 3*N> findiffs() const;
-        Array1D<T, N*N> jacmat() const;
-        Array1D<DualType<T, N, 1>, N> duals() const;
-        Array1D<DualType<T, N, 2>, N> dduals() const;
-
-    };
-
-    using ScratchType = std::conditional_t<::ode::detail::scratch_is_static<T, N>, ScratchStatic, ScratchDynamic>;
-
     void    jacmat_findiffs(T* mat, const T& t, const T* q) const;
 
     // Computes the bottom left matrix of the full jacobian matrix,
@@ -216,7 +185,6 @@ private:
     void    delta_J(T* mat, const T& t, const T* q, const T* dt) const;
 
     OdeType ode_;
-    ScratchType scratch;
     size_t nsys_ = N; // Size of the original system, without the variational equations (not the augmented system)
     T atol_;
 };

@@ -203,9 +203,11 @@ void BDF<T, N, SP, OdeType, Derived>::Reset(){
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
 void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
-    T t0 = this->ics().t();
-    T h0 = this->ics().habs() * this->direction();
-    const T* q0 = this->ics().vector();
+    // Only runs right after the base has been reset to the initial conditions,
+    // so stepsize() is still the initial step size.
+    const T& t0 = this->t_ics();
+    T h0 = this->stepsize() * this->direction();
+    const T* q0 = this->vector_ics().data();
     Array1D<T, N> f(this->nsys());
     this->rhs(f.data(), t0, q0);
 
@@ -224,7 +226,7 @@ void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
 }
 
 template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
+StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T* q_out, const T& t_in, const T& habs_in, const T* q_in){
     size_t nsys = this->nsys();
     
     T safety, max_factor, factor, c;
@@ -235,35 +237,31 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     NewtConv conv_result;
     
     const auto& [h_min, max_step, atol, rtol, t, stepsize] = make_scratch_view(
-        this->min_step(), this->max_step(), this->atol(), this->rtol(), state[0], state[1]
+        this->min_step(), this->max_step(), this->atol(), this->rtol(), t_in, habs_in
     );
 
     // ----------- Scratch pad ---------------
-    auto  scratch = make_scratch(res[0], res[1]);
+    auto  scratch = make_scratch(t_out, habs_out);
     auto& [t_new, habs] = scratch;
 
-    auto y_new = cache_mut_array<N>(res+2, nsys);
+    auto y_new = cache_mut_array<N>(q_out, nsys);
 
-    [[maybe_unused]] auto t_new_write_back = make_write_back(t_new, res[0]);
-    [[maybe_unused]] auto habs_write_back  = make_write_back(habs, res[1]);
-    [[maybe_unused]] auto q_out_write_back  = make_array_write_back<N>(y_new, res+2);
+    [[maybe_unused]] auto t_new_write_back = make_write_back(t_new, t_out);
+    [[maybe_unused]] auto habs_write_back  = make_write_back(habs, habs_out);
+    [[maybe_unused]] auto q_out_write_back  = make_array_write_back<N>(y_new, q_out);
     // ---------------------------------------
 
-    // Seed t_new with the current time: the early returns below (and the max_step clamp, which
-    // returns Success) can fire before the stepping loop ever assigns it.
     t_new = t;
 
-    std::copy(state+2, state+2 + nsys, y_new.data());
+    std::copy(q_in, q_in + nsys, y_new.data());
 
     if (stepsize > max_step){
         habs = max_step;
         this->change_D(max_step/stepsize);
-    }
-    else if (stepsize < h_min){
+    } else if (stepsize < h_min){
         habs = h_min;
         this->change_D(h_min/stepsize);
-    }
-    else{
+    } else {
         habs = stepsize;
     }
 
@@ -272,11 +270,11 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         // Checks go at the top so that continue statements inside the loop will still trigger them.
         if (habs < h_min){
             return StepResult::MinStepError; // TODO: The algorithm does not work properly when we go below min_step.
-        }else if (habs > max_step){
+        } else if (habs > max_step){
             this->change_D(max_step/habs);
             habs = max_step;
             return StepResult::Success; // The step is accepted, but the stepsize is limited by max_step.
-        }else if (habs < this->MIN_STEP){
+        } else if (habs < this->tiny_factor()){
             return StepResult::TinyStepError;
         }
         
@@ -296,7 +294,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
                     for (size_t j=0; j<nsys; j++){
                         if (i == j){
                             _B(i, j) = 1 - c*_J(i, j);
-                        }else{
+                        } else {
                             _B(i, j) = -c*_J(i, j);
                         }
                     }
@@ -336,11 +334,10 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
         });
         _error_norms[1] = rms_norm(_error.data(), _scale.data(), nsys);
         if (_error_norms[1] > 1){
-            factor = max<T>(this->MIN_FACTOR, safety * pow(_error_norms[1], T(-1)/(_order+1)));
+            factor = max<T>(this->min_factor(), safety * pow(_error_norms[1], T(-1)/(_order+1)));
             habs *= factor;
             this->change_D(factor);
-        }
-        else{
+        } else {
             step_accepted = true;
         }
     }
@@ -348,11 +345,11 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     _n_eq_steps++;
 
     T* D = _D[_idx_D].data();
-    for (size_t i=0; i<nsys; i++){
+
+    simd_for<T>(nsys, [&](size_t i){
         D[(_order+2)*nsys + i] = _d[i] - D[(_order+1)*nsys + i];
         D[(_order+1)*nsys + i] = _d[i];
-    }
-
+    });
     for (size_t i = _order + 1; i -- > 0;) {
         simd_for<T>(nsys, [&](size_t j){
             D[i*nsys + j] += D[(i+1)*nsys + j];
@@ -364,20 +361,20 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
     }
 
     if (_order > 1){
-        for (size_t i=0; i<nsys; i++){
+        simd_for<T>(nsys, [&](size_t i){
             _error_m[i] = BDF_COEFS.ERR_CONST[_order-1] * D[_order*nsys + i];
-        }
+        });
         _error_norms[0] = rms_norm(_error_m.data(), _scale.data(), nsys);
-    }
-    else{
+    } else {
         _error_norms[0] = inf<T>();
     }
 
 
     if (_order < BDF_MAX_ORDER){
-        for (size_t i=0; i<nsys; i++){
+
+        simd_for<T>(nsys, [&](size_t i){
             _error_p[i] = BDF_COEFS.ERR_CONST[_order+1] * D[(_order+2)*nsys + i];
-        }
+        });
         _error_norms[2] = rms_norm(_error_p.data(), _scale.data(), nsys);
     }
     else{
@@ -396,7 +393,7 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T* res, const T* state){
 
     _order += delta_order;
     auto candidate_factor = safety * max_factor;
-    factor = std::min<T>(this->MAX_FACTOR, candidate_factor);
+    factor = std::min<T>(this->max_factor(), candidate_factor);
     habs *= factor;
     this->change_D(factor);
     _valid_LU = false;
@@ -452,8 +449,7 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred
 
         if (dy_norm_old == 0){
             rate = 0;
-        }
-        else{
+        } else {
             rate = dy_norm/dy_norm_old;
         }
 
@@ -469,7 +465,7 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred
         if (!all_are_finite(y, n)){
             flag = StepResult::NonFiniteError;
             break;
-        }else if (dy_norm == 0 || ((rate != 0) && (rate * dy_norm < _newton_tol * (1-rate)))){
+        } else if (dy_norm == 0 || ((rate != 0) && (rate * dy_norm < _newton_tol * (1-rate)))){
             converged = true;
             break;
         }

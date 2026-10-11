@@ -25,7 +25,7 @@ public:
 
 protected:
 
-    StepResult  adapt_impl(T* res, const T* state);
+    StepResult  adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
     void        interp_impl(T* result, const T& t) const;
     auto        local_interp() const;
 

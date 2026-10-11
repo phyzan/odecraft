@@ -80,8 +80,7 @@ using ode_t = ::ode::OdeData<rhs_t<T>, rhs_t<T>>;
 // Plain vocabulary types, re-exported unchanged.
 // ---------------------------------------------------------------------------
 
-using ::ode::State,
-      ::ode::OdeData,
+using ::ode::OdeData,
       ::ode::StepResult,
       ::ode::JacPolicy,
       ::ode::RootPolicy,

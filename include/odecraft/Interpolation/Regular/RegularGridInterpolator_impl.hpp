@@ -307,7 +307,7 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
         Array1D<double*, NDIM, InterpBase::ALLOC> x(this->ndim());
         if constexpr (NDIM > 0){
             x = {worker_line.ptr(I, max_pts)...};
-            ((reached[I].clear()), ...);
+            (reached[I].clear(), ...);
         }else{
             for (int axis=0; axis<this->ndim(); axis++){
                 x[axis] = worker_line.ptr(axis, max_pts);

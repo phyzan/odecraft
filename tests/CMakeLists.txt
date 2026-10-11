@@ -60,9 +60,9 @@ set(ODECRAFT_TEST_COMPILE_OPTIONS
     -Wpedantic
     -Wshadow
     -Wno-sign-conversion
-    -fopenmp
+    -fopenmp-simd
 )
-set(ODECRAFT_TEST_LINK_OPTIONS -fopenmp)
+set(ODECRAFT_TEST_LINK_OPTIONS)
 
 # -finline-limit is a GCC-only spelling; clang and MSVC reject/ignore it.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

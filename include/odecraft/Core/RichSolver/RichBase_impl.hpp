@@ -43,7 +43,7 @@ std::vector<size_t> RichSolver<Derived, T, N, SP, OdeType>::toEventIdx(const std
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void RichSolver<Derived, T, N, SP, OdeType>::show_state(int prec) const{
-    decltype(auto) vector = this->scratch_vector();
+    auto vector = request_scratch<T, N>(this->nsys());
     this->fill_current_vector(vector.data());
     SolverRichState<T, N>(vector.data(), this->t(), this->stepsize(), this->nsys(), this->step_count(), this->message(), this->current_event().event ? this->current_event().event->name() : "").show(prec);
 }
@@ -131,7 +131,7 @@ template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> 
 void RichSolver<Derived, T, N, SP, OdeType>::fill_current_vector_impl(T* out) const{
     if (is_at_canon_event && !evt_col.event(current_idx).mask_delayed()){
         // Immediate mask, ReAdjust still pending: the masked state is the current one, but
-        // it has not been written into new_state_ yet. A delayed mask deliberately falls
+        // it has not been written into the new state yet. A delayed mask deliberately falls
         // through, since it shows the unmasked state until it has been processed.
         const MaskedState<T>* ms = evt_col.masked_state();
         assert(ms != nullptr && "Solver is at a canon event but has no masked state");
@@ -156,8 +156,10 @@ bool RichSolver<Derived, T, N, SP, OdeType>::RequestTimeFloor(T& out) {
     detection_idx = -1; // reset detection index at the start of a new detection round
     // do not also set is_at_event to false, as the Adv_Impl might fail and the step should remain in the same state.
     if ((is_event_waiting = evt_col.detect_all_between(
-        this->old_state(),
-        this->new_state(),
+        this->t_old(),
+        this->t_new(),
+        this->vector_old().data(),
+        this->vector_new().data(),
         [this](T* q_out, const T& t){
             this->interp(q_out, t);
         }
@@ -180,7 +182,7 @@ bool RichSolver<Derived, T, N, SP, OdeType>::push_event_queue(){
         current_idx = evt_col.get_event_idx(size_t(++detection_idx));
         // determine if this one is a canon event. The ReAdjust that applies the mask is
         // deferred to the next Adv_Impl for delayed and immediate masks alike: it collapses
-        // old_state_/new_state_, and until it runs this step stays interpolable, which is
+        // the old and new states, and until it runs this step stays interpolable, which is
         // what lets dense output cover the part of it already traversed. An immediate mask
         // still *reports* the masked state right away -- fill_current_vector serves it from
         // evt_col's MaskedState, which holds it outside the solver's own buffers.

@@ -28,7 +28,7 @@ XDIFF_FORCEINLINE void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, co
 
 
 template<size_t N, typename T, typename StepFn>
-XDIFF_FORCEINLINE StepResult rk_adapt_step(T* res, const T* state, size_t n,
+XDIFF_FORCEINLINE StepResult rk_adapt_step(T& t_new_, T& habs_new_, T* q_new_, const T& t_, const T& habs_, const T* q_, size_t n,
                           const T& hmin, const T& hmax, const T& hmin_abs,
                           const T& safety_, const T& max_factor_, const T& min_factor_,
                           const T& err_exp_, const T& inc_exp_, const T& min_err_,
@@ -49,21 +49,21 @@ XDIFF_FORCEINLINE StepResult rk_adapt_step(T* res, const T* state, size_t n,
         habs_old
     ] = make_scratch_view(
         hmin, hmax, hmin_abs, safety_, max_factor_,
-        min_factor_, err_exp_, inc_exp_, min_err_, state[0], state[1]
+        min_factor_, err_exp_, inc_exp_, min_err_, t_, habs_
     );
 
-    auto q = cache_array<N>(state+2, n);
+    auto q = cache_array<N>(q_, n);
     // ------------------------
 
     // ----------- Scratch pad ---------------
-    auto  scratch = make_scratch(res[0], res[1]);
+    auto  scratch = make_scratch(t_new_, habs_new_);
     auto& [t_new, habs] = scratch;
 
-    auto q_out = cache_mut_array<N>(res+2, n);
+    auto q_out = cache_mut_array<N>(q_new_, n);
 
-    [[maybe_unused]] auto t_new_write_back = make_write_back(t_new, res[0]);
-    [[maybe_unused]] auto habs_write_back  = make_write_back(habs, res[1]);
-    [[maybe_unused]] auto q_out_write_back  = make_array_write_back<N>(q_out, res+2);
+    [[maybe_unused]] auto t_new_write_back = make_write_back(t_new, t_new_);
+    [[maybe_unused]] auto habs_write_back  = make_write_back(habs, habs_new_);
+    [[maybe_unused]] auto q_out_write_back  = make_array_write_back<N>(q_out, q_new_);
     // ---------------------------------------
 
     habs = habs_old;

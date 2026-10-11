@@ -82,32 +82,27 @@ target_include_directories(odecraft_polybox INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/external/polybox/include
 )
 
-#===========================================================================================
-#                           qhull (static library)
-#===========================================================================================
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
-set(BUILD_APPLICATIONS OFF CACHE BOOL "" FORCE)
+# odecraft_crafted (below) is a static library that consumers link into shared objects, such as
+# Python extension modules, so everything defined from here on is position-independent.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Keep qhull out of compile_commands.json. It is vendored C code we never edit, and it
-# outnumbers odecraft's own entries roughly 8:1 -- which matters because clangd infers the
-# flags for a *header* by interpolating from the nearest database entry. Pick a qhull entry
-# for something under include/ and you get -Iexternal/qhull/src with no -Iinclude and no
-# C++20, so every odecraft header lights up with bogus "file not found" errors.
-set(ODECRAFT_EXPORT_CC_SAVED ${CMAKE_EXPORT_COMPILE_COMMANDS})
-set(CMAKE_EXPORT_COMPILE_COMMANDS OFF)
-
-add_subdirectory(external/qhull EXCLUDE_FROM_ALL)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ${ODECRAFT_EXPORT_CC_SAVED})
+#===========================================================================================
+#                           qhull (system library, like MPFR)
+#===========================================================================================
+# Delaunay triangulation (scattered-data interpolation) is built on qhull's reentrant C API,
+# and <odecraft/odecraft.hpp> includes it, so qhull has to be installed.
+find_path(ODECRAFT_QHULL_INCLUDE_DIR libqhull_r/qhull_ra.h)
+find_library(ODECRAFT_QHULL_LIBRARY NAMES qhull_r)
+if(NOT ODECRAFT_QHULL_INCLUDE_DIR OR NOT ODECRAFT_QHULL_LIBRARY)
+    message(FATAL_ERROR
+        "qhull (the reentrant C library, libqhull_r) was not found. Install it, e.g. "
+        "`sudo apt install libqhull-dev`, or point CMAKE_PREFIX_PATH at its installation prefix.")
+endif()
 
 add_library(odecraft_qhull INTERFACE)
 add_library(odecraft::qhull ALIAS odecraft_qhull)
-target_include_directories(odecraft_qhull INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/qhull/src
-)
-target_link_libraries(odecraft_qhull INTERFACE qhullstatic_r)
+target_include_directories(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_INCLUDE_DIR})
+target_link_libraries(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_LIBRARY})
 
 # ----------- Link everything into the umbrella target ---------------
 
@@ -171,13 +166,12 @@ if(ODECRAFT_BUILD_CRAFTED)
     # interface, so <odecraft/Compiled/odecraft.hpp> is all a consumer needs to include.
     target_link_libraries(odecraft_crafted PUBLIC odecraft::odecraft lazex::mpfr)
 
-    # Tools.hpp includes <omp.h> and the steppers use `#pragma omp simd`, so OpenMP is not
-    # optional here; it is PUBLIC so consumers link the runtime too.
+    # Tools.hpp uses `#pragma omp simd`, which works with -fopenmp-simd, without the OpenMP runtime.
+    # PUBLIC so that consumers compiling the headers don't warn about an unknown pragma.
     target_compile_options(odecraft_crafted PRIVATE
         -Wall -Wextra -Wpedantic -Wshadow -Wno-sign-conversion -Wno-unused-parameter
     )
-    target_compile_options(odecraft_crafted PUBLIC -fopenmp)
-    target_link_options(odecraft_crafted PUBLIC -fopenmp)
+    target_compile_options(odecraft_crafted PUBLIC -fopenmp-simd)
 
     if(ODECRAFT_DEBUG_BUILD)
         target_compile_options(odecraft_crafted PRIVATE -O0 -g3 -UNDEBUG)
