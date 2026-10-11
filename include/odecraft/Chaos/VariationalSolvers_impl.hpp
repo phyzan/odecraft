@@ -10,7 +10,8 @@
 namespace ode::chaos{
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
-VariationalOdeSys<T, N, OdeType>::VariationalOdeSys(OdeType ode, size_t ode_nsys, T atol) : ode_(std::move(ode)), nsys_(ode_nsys), atol_(std::move(atol)) {
+VariationalOdeSys<T, N, OdeType>::VariationalOdeSys(OdeType ode, size_t ode_nsys, T atol) : ode_(std::move(ode)), nsys_(ode_nsys), atol_(std::move(atol)),
+    scratch_(request_scratch_page<T, N*N + 3*N>(ode_nsys*ode_nsys + 3*ode_nsys)), dual_scratch_(ode_nsys), ddual_scratch_(ode_nsys) {
     assert((N == 0 || N == ode_nsys) && "Incorrect number of equations in VariationalOdeSys");
 
     const char* err_msg = "Variational ODE systems that do not provide a Jacobian function for the main ODE system require a non-zero `atol` to compute the stepsize for finite differences";
@@ -57,7 +58,7 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
     if constexpr (MainRhsSupportsDuals<1>){
         DualType<T, N, 1>::with_default_nvars(n,
             [&](){
-                auto out_duals = request_scratch<DualType<T, N, 1>, N>(n);
+                auto out_duals = dual_scratch_.template request<N>(n);
                 ode_.Rhs(out_duals.data(), t, SeedVec<T, N, 1>{q, int(n), 1});
                 std::fill(out+n, out+2*n, 0);
                 for (size_t j=0; j<n; j++){
@@ -73,7 +74,7 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
         ode_.Rhs(out, t, q); // Main system filled
 
         // First let's fill a temporary jacobian matrix
-        auto jm_worker = request_scratch<T, N*N>(n*n);
+        auto jm_worker = scratch_.template request<N*N>(n*n);
         T* mat = jm_worker.data();
 
         if constexpr (JP_MAIN == JacPolicy::Exact || JP_MAIN == JacPolicy::Nullable){
@@ -112,7 +113,7 @@ void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const
         using DDual = DualType<T, N, 2>;
         DDual::with_default_nvars(n,
             [&](){
-                auto out_dduals = request_scratch<DualType<T, N, 2>, N>(n);
+                auto out_dduals = ddual_scratch_.template request<N>(n);
 
                 ode_.Rhs(out_dduals.data(), t, SeedVec<T, N, 2>{q, int(n), 2});
 
@@ -132,7 +133,7 @@ void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const
         );
     } else {
 
-        auto jm_worker = request_scratch<T, N*N>(n*n);
+        auto jm_worker = scratch_.template request<N*N>(n*n);
         T* mat = jm_worker.data();
         if constexpr (JP_MAIN == JacPolicy::Exact || JP_MAIN == JacPolicy::Nullable){
             if constexpr (JP_MAIN == JacPolicy::Exact){
@@ -173,7 +174,7 @@ void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const
 
 template<typename T, size_t N, hasRhsFunc<T> OdeType>
 void VariationalOdeSys<T, N, OdeType>::jacmat_findiffs(T* mat, const T& t, const T* q) const{
-    auto worker = request_scratch<T, 3*N>(3*nsys_main());
+    auto worker = scratch_.template request<3*N>(3*nsys_main());
     jac_approx<T>(
         [this](T* out_, const T& t_, const T* q_){
             this->ode_.Rhs(out_, t_, q_);
@@ -199,7 +200,7 @@ void VariationalOdeSys<T, N, OdeType>::delta_J(T* mat, const T& t, const T* q, c
     const T EPS_4TH = sqrt(sqrt(EPS));
 
     const size_t n = this->nsys_main();
-    auto worker = request_scratch<T, 3*N>(3*n);
+    auto worker = scratch_.template request<3*N>(3*n);
 
     T* x = worker.data();
     T* y1 = worker.data() + n;

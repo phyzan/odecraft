@@ -187,6 +187,12 @@ private:
     OdeType ode_;
     size_t nsys_ = N; // Size of the original system, without the variational equations (not the augmented system)
     T atol_;
+
+    // The main Jacobian block (N*N), with the finite-difference worker (3*N) nested inside it.
+    // The dual pages exist only when the main Rhs accepts duals of that order.
+    [[no_unique_address]] mutable ::ode::detail::ScratchPageFor<T, N*N + 3*N> scratch_;
+    [[no_unique_address]] mutable ::ode::detail::ScratchPageIf<MainRhsSupportsDuals<1>, DualType<T, N, 1>, N> dual_scratch_;
+    [[no_unique_address]] mutable ::ode::detail::ScratchPageIf<MainRhsSupportsDuals<2>, DualType<T, N, 2>, N> ddual_scratch_;
 };
 
 

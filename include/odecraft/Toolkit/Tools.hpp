@@ -71,6 +71,16 @@ using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 namespace detail{
 
+// Whether user callbacks (Rhs, Jac, event functions, masks) may throw: define ODECRAFT_RHS_THROWS
+// to allow it. Otherwise the solvers' Rhs wrappers and their steps are noexcept, so a callback
+// that throws terminates the program, and the compiler can drop the unwinding paths around every
+// call into it.
+#ifdef ODECRAFT_RHS_THROWS
+inline constexpr bool rhs_may_throw = true;
+#else
+inline constexpr bool rhs_may_throw = false;
+#endif
+
 /**
  * @brief True for scalar types whose arithmetic maps onto SIMD registers.
  */
@@ -606,6 +616,7 @@ enum class StepResult : std::uint8_t {
     TinyStepError, // Step size became too small (below machine epsilon)
     MinStepError, // Step size reached minimum set by user
     MaxStepError, // Step size reached maximum set by user
+    SingularMatrixError, // The linear system of an implicit step is singular
 };
 
 

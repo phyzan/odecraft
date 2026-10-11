@@ -43,7 +43,7 @@ std::vector<size_t> RichSolver<Derived, T, N, SP, OdeType>::toEventIdx(const std
 
 template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
 void RichSolver<Derived, T, N, SP, OdeType>::show_state(int prec) const{
-    auto vector = request_scratch<T, N>(this->nsys());
+    auto vector = this->scratch_.template request<N>(this->nsys());
     this->fill_current_vector(vector.data());
     SolverRichState<T, N>(vector.data(), this->t(), this->stepsize(), this->nsys(), this->step_count(), this->message(), this->current_event().event ? this->current_event().event->name() : "").show(prec);
 }

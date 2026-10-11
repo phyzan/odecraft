@@ -79,6 +79,10 @@ private:
     mutable Array1D<T, N>                   K0_;
     mutable Array1D<T, N>                   KF_;
     mutable Array2D<T, N, 0>                coef_mat;
+    
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, Nstages*N>     rk_scratch_;
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, 2*N>           rk_input_scratch_;
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, 1>             rk_scalar_scratch_;
     mutable bool                            mat_is_set = false;
 
     T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1); // Boost uses -1/(error_order+1) for both increase and decrease
