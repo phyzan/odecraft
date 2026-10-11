@@ -118,7 +118,7 @@ pbox::Box<ODE<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::get_streaml
             OdeData{
                 .Rhs=[this](double* out, double t, const double* q){
                     THIS->OdeFuncNorm(out, t, q); 
-                }},
+                },},
                 0.0, View1D<double, NDIM>{x0, this->ndim()}, rtol, atol, min_step, max_step, stepsize, direction, EventList<double>{}, method
             );
     } else {

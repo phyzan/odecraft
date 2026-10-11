@@ -1,8 +1,7 @@
 #ifndef ODECRAFT_ODE_RESULT_HPP
 #define ODECRAFT_ODE_RESULT_HPP
 
-#include <algorithm>
-
+#include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/Toolkit/Tools.hpp>
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
 
@@ -81,7 +80,7 @@ class OdeResult{
 
 public:
 
-    OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message);
+    OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message);
 
     OdeResult() = default;
 
@@ -99,6 +98,8 @@ public:
 
     bool success() const;
 
+    StepperStatus status() const;
+
     double runtime() const;
 
     const std::string& message() const;
@@ -113,7 +114,7 @@ private:
 
     OrbitData<T> orbit_data_;
     EventData<T> event_data_;
-    bool success_ = false;
+    StepperStatus status_ = StepperStatus::BadICS;
     double runtime_ = 0;
     std::string message_ = "No integration performed";
 };
@@ -131,7 +132,7 @@ public:
 
     OdeSolution() = default;
 
-    OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator);
+    OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator);
 
     template<typename Interp>
     OdeSolution(OdeResult<T, N>&& other, Interp&& interpolator) : OdeResult<T, N>(std::move(other)), interpolator_(std::forward<Interp>(interpolator)) {}

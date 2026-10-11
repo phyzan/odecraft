@@ -324,7 +324,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
                 {},
                 {this->nsys()},
                 0,
-                false,
+                solver_->get_status(),
                 0,
                 solver_->get_message(),
             }, BoxedInterp<T, N>());
@@ -332,7 +332,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
         return false;
     } else if (t_max*solver_->get_direction() < solver_->get_time()*solver_->get_direction()){
         if (out){
-            emit(OdeResult<T, N>({}, {this->nsys()}, 0, false, 0, "Cannot integrate in opposite direction"), BoxedInterp<T, N>());
+            emit(OdeResult<T, N>({}, {this->nsys()}, 0, StepperStatus::BadICS, 0, "Cannot integrate in opposite direction"), BoxedInterp<T, N>());
         }
         return false; //cannot integrate in opposite direction
     }
@@ -444,7 +444,7 @@ bool ODE<T, N>::priv_integrate_until(OdeResult<T, N>* out, const T& t_max, Array
             orbit_data_,
             event_res,
             t_start_idx,
-            success,
+            solver_->get_status(),
             duration,
             terminate_message,
         };
