@@ -1,6 +1,7 @@
 #ifndef ODECRAFT_ODE_RESULT_IMPL_HPP
 #define ODECRAFT_ODE_RESULT_IMPL_HPP
 
+#include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/OdeResult/OdeResult.hpp>
 #include <sstream>
 
@@ -162,7 +163,7 @@ void EventData<T>::clear_points() {
 //===========================================================================================
 
 template<typename T, size_t N>
-OdeResult<T, N>::OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message) : event_data_(std::move(event_data)), success_(success), runtime_(runtime), message_(std::move(message)) {
+OdeResult<T, N>::OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message) : event_data_(std::move(event_data)), status_(status), runtime_(runtime), message_(std::move(message)) {
     assert(orb_idx_start <= orbit_data.t.size() && "Start index must be within the bounds of the provided data");
     // Copy only the relevant portion of the data based on the provided start indices
     orbit_data_.t = std::vector<T>(orbit_data.t.begin() + orb_idx_start, orbit_data.t.end());
@@ -198,7 +199,12 @@ const EventData<T>& OdeResult<T, N>::event_data() const{
 
 template<typename T, size_t N>
 bool OdeResult<T, N>::success() const {
-    return success_;
+    return status_ == StepperStatus::NewStep || status_ == StepperStatus::BetweenSteps;
+}
+
+template<typename T, size_t N>
+StepperStatus OdeResult<T, N>::status() const {
+    return status_;
 }
 
 template<typename T, size_t N>
@@ -215,7 +221,7 @@ template<typename T, size_t N>
 void OdeResult<T, N>::examine() const {
     std::cout << std::endl << "\n=============== OdeResult ===============\n"
               << "\tPoints           : " << orbit_data_.t.size() << "\n"
-              << "\tSuccess          : " << (success_ ? "true" : "false") << "\n"
+              << "\tSuccess          : " << (success() ? "true" : "false") << "\n"
               << "\tRuntime          : " << runtime_ << "\n"
               << "\tTermination cause: " << message_ << "\n"
               << event_log();
@@ -241,7 +247,7 @@ std::string OdeResult<T, N>::event_log() const {
 
 
 template<typename T, size_t N>
-OdeSolution<T, N>::OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, bool success, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator) : OdeResult<T, N>(std::move(orbit_data), std::move(event_data), orb_idx_start, success, runtime, std::move(message)), interpolator_(interpolator.clone()) {}
+OdeSolution<T, N>::OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator) : OdeResult<T, N>(std::move(orbit_data), std::move(event_data), orb_idx_start, status, runtime, std::move(message)), interpolator_(interpolator.clone()) {}
 
 
 template<typename T, size_t N>
