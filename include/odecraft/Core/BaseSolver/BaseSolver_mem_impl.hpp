@@ -81,7 +81,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
         ){
             bool obs_res;
             if constexpr (isObserver<Callable, T>){
-                auto vector = request_scratch<T, N>(this->nsys());
+                auto vector = scratch_.template request<N>(this->nsys());
                 this->fill_current_vector(vector.data());
                 obs_res = observer(this->t(), vector.data(), nullptr);
             } else{
@@ -96,7 +96,7 @@ bool BaseSolver<Derived, T, N, SP, OdeType>::generic_advance_until(
         if (res){
             const T* t_ptr = (!explicit_steps || (has_checkpoints && t_dual == time)) ? &t_dual : nullptr;
             if constexpr (isObserver<Callable, T>){
-                auto vector = request_scratch<T, N>(this->nsys());
+                auto vector = scratch_.template request<N>(this->nsys());
                 this->fill_current_vector(vector.data());
                 observer(this->t(), vector.data(), t_ptr);
             }            
@@ -151,7 +151,7 @@ BoxedInterp<T, N> BaseSolver<Derived, T, N, SP, OdeType>::generic_interpolate_un
     // leaving the chain permanently past its own end.
     pbox::Box<LinkedInterpolator<T, N>> interp;
     {
-        auto vector = request_scratch<T, N>(this->nsys());
+        auto vector = scratch_.template request<N>(this->nsys());
         this->fill_current_vector(vector.data());
         interp = pbox::make_box<LinkedInterpolator<T, N>>(this->t(), vector.data(), this->nsys());
     }

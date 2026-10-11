@@ -31,6 +31,8 @@ enum class StepperStatus : std::uint8_t{
     TooSmallStep, // t + dt == t due to roundoff error
     Diverges, // State reached nan/inf
     Killed, // Killed by the user
+    SingularMatrix, // The linear system of an implicit step is singular
+    Interrupted, // A user function threw during a step
 };
 
 inline constexpr const char* status_message(StepperStatus status){
@@ -51,6 +53,10 @@ inline constexpr const char* status_message(StepperStatus status){
             return "Integrator diverges";
         case StepperStatus::Killed:
             return "Killed by user";
+        case StepperStatus::Interrupted:
+            return "Step interrupted by an exception from a user function";
+        case StepperStatus::SingularMatrix:
+            return "Linear system of the implicit step is singular";
         default:
             return "Running";
     }

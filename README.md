@@ -76,6 +76,7 @@ cmake -S . -B build \
   -DODECRAFT_NO_NAN_CHECK=ON \
   -DODECRAFT_USE_FLAT_AUTODIFF=OFF \
   -DODECRAFT_USE_LAZY_MPREAL=ON \
+  -DODECRAFT_RHS_THROWS=OFF \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
@@ -131,6 +132,7 @@ CMake options that toggle preprocessor macros across the library and its bundled
 | `ODECRAFT_USE_FLAT_AUTODIFF` | Store automatic-differentiation duals in `xdiff`'s flat layout (a single contiguous array) for systems whose size `N` is known at compile time. Dynamically sized systems (`N == 0`) stay on the nested layout either way, since the flat one needs its variable count at compile time. Off by default, so every system uses the nested layout. |
 | `DEBUG` | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
 | `ODECRAFT_BUILD_CRAFTED` | Build the API for the `ode::crafted` namespace. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
+| `ODECRAFT_RHS_THROWS` | Allow `Rhs` and `Jac` to throw: the exception then propagates out of the stepping call. **Off by default**. See the [`OdeType`](#odetype-template-parameter) section. |
 | `ODECRAFT_USE_LAZY_MPREAL` | Compile `ode::crafted`'s `mpreal_t` as `lazex::LazyType<mpfr::mpreal>` instead of plain `mpfr::mpreal`. The lazy wrapper elides temporaries in compound expressions, a large win for MPFR where every temporary is a heap allocation. **On by default**; turn it off for plain `mpfr::mpreal`. Either way the type is spelled `mpreal_t`, so nothing else in your code changes. |
 
 See useful [options](https://github.com/phyzan/xdiff#CMake-Options) for the `xdiff` submodule.
@@ -322,6 +324,12 @@ void Jac(T* jac_mat, const T& t, const T* q);
 which satisfies the `hasJacFunc<T>` concept, and is filled in column-major order as
 ```cpp
 jac_mat[i + j*system_size] = df_i/dx_j
+```
+
+`Rhs` and `Jac` are assumed not to throw errors by default. To allow error propagation of `throw` statements in these functions, configure cmake with `-DODECRAFT_RHS_THROWS=ON` or include it in a compile command:
+
+```sh
+g++ ... -DODECRAFT_RHS_THROWS ...`
 ```
 
 ## Automatic differentiation

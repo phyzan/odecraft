@@ -18,7 +18,8 @@ struct LUResult {
     JacMat<T, N> LU;
     Array1D<size_t, N> piv;
 
-    void lu_factor(const JacMat<T, N>& A_input);
+    /// @brief Factorizes A_input with partial pivoting. Returns false if it is (nearly) singular.
+    bool lu_factor(const JacMat<T, N>& A_input);
 
     void lu_solve(T* x, const T* b) const;
 };

@@ -26,6 +26,7 @@ option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
 option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
 option(ODECRAFT_USE_FLAT_AUTODIFF "Use the flat dual layout for compile-time sized systems (dynamic ones stay nested)" OFF)
 option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazex::LazyType<mpfr::mpreal> instead of plain mpfr::mpreal" ON)
+option(ODECRAFT_RHS_THROWS "Allow Rhs and the other user callbacks to throw (otherwise the solvers call them noexcept)" OFF)
 
 # ON when odecraft is configured directly, OFF when another project pulls it in via add_subdirectory/FetchContent
 if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
@@ -44,6 +45,7 @@ target_compile_definitions(odecraft INTERFACE
     $<$<BOOL:${ODECRAFT_NO_NAN_CHECK}>:ODECRAFT_NO_NAN_CHECK>
     $<$<BOOL:${ODECRAFT_USE_FLAT_AUTODIFF}>:ODECRAFT_USE_FLAT_AUTODIFF>
     $<$<BOOL:${ODECRAFT_USE_LAZY_MPREAL}>:ODECRAFT_USE_LAZY_MPREAL>
+    $<$<BOOL:${ODECRAFT_RHS_THROWS}>:ODECRAFT_RHS_THROWS>
 )
 
 

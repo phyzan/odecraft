@@ -135,8 +135,9 @@ public:
      * @param[out] out Output array for the derivative dq/dt (size Nsys).
      * @param[in]  t     Current time.
      * @param[in]  q     Current state vector (size Nsys).
+     * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
     */
-    void                 Rhs(T* out, const T& t, const T* q) const;
+    void                 Rhs(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Compute the Jacobian matrix of the ODE system.
@@ -147,8 +148,9 @@ public:
      * @param[out] out Output array for Jacobian in column-major order (size Nsys x Nsys).
      * @param[in]  t  Current time.
      * @param[in]  q  Current state vector (size Nsys).
+     * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
     */
-    void                 Jac(T* out, const T& t, const T* q) const;
+    void                 Jac(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Approximate the Jacobian using central finite differences.
@@ -156,8 +158,9 @@ public:
      * @param[in]  t  Current time.
      * @param[in]  q  Current state vector (size Nsys).
      * @param[in]  dt Step sizes for each component (size Nsys). If nullptr, computed automatically.
+     * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
     */
-    void                 Jac(T* out, const T& t, const T* q, const T* dt) const;
+    void                 Jac(T* out, const T& t, const T* q, const T* dt) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Get a matrix view of a Jacobian array.
@@ -457,8 +460,10 @@ protected:
 
     /**
      * @brief Perform one adaptive integration step.
+     * @note Writes the new vector to q_new, which may be q_old_ itself (see take_step), so it
+     *       must not read vector_old() or interpolate. noexcept unless ODECRAFT_RHS_THROWS is defined.
      */
-    StepResult          adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
+    StepResult          adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q) noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Interpolate solution at time t using method-specific interpolation.
@@ -521,10 +526,10 @@ protected:
     inline const OdeType& ode() const {return ode_;}
 
     /// @brief Same as this->Rhs, but increments the RHS evaluation counter.
-    void        rhs(T* out, const T& t, const T* q) const;
+    void        rhs(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
 
     /// @brief Same as this->Jac, but increments the Jacobian evaluation counter.
-    void        jac(T* out, const T& t, const T* q) const;
+    void        jac(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
 
     void        set_status(StepperStatus new_status);
 
@@ -577,9 +582,23 @@ protected:
         return factors_.MIN_STEP;
     }
 
+    // Scratch for the temporaries of the member functions. The array page holds the deepest
+    // nesting they reach, with one level of re-entry from an observer: advance_until holds a
+    // vector while the observer calls auto_step(), which holds another while auto_step(t, q)
+    // takes 4 more. RichSolver::show_state and BDF borrow from it too.
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, 6*N>    scratch_;
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, 2>      scalar_scratch_;
+    [[no_unique_address]] mutable detail::ScratchPageIf<JP == JacPolicy::Autodiff, DualType<T, N, 1>, N> dual_scratch_;
+
 private:
 
     bool    validate_it(StepResult result, const T& new_time);
+
+    StepResult adapt_it(T* q_out, T& t_out, T& habs_out);
+
+    /// @brief Takes a step from the newest state and, if it is accepted, makes it the newest
+    /// state. Afterwards t_out and habs_out hold the previous t_old and step size.
+    bool    take_step(T& t_out, T& habs_out);
 
     bool lt(const T& t_a, const T& t_b) const;
     bool le(const T& t_a, const T& t_b) const;

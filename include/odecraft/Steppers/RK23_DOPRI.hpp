@@ -83,6 +83,10 @@ private:
     mutable Array1D<T, N>                               K0_;  // derivative at the start of the step
     mutable Array1D<T, N>                               KF_;  // final (FSAL) stage
     mutable Array2D<T, N, 0>                            coef_mat_;
+    
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, Nstages*N>     rk_scratch_;
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, 2*N>           rk_input_scratch_;
+    [[no_unique_address]] mutable detail::ScratchPageFor<T, 1>             rk_scalar_scratch_;
     mutable bool                                        mat_is_set_ = false;
 
     T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1); // Boost uses -1/(error_order+1) for both increase and decrease

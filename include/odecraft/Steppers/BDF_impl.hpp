@@ -32,7 +32,7 @@ template<typename T, size_t N>
 LUResult<T, N>::LUResult(size_t Nsys) : LU(Nsys, Nsys), piv(Nsys) {}
 
 template<typename T, size_t N>
-void LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
+bool LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
     size_t n = A_input.Nrows();
     JacMat<T, N>& A = LU;
 
@@ -57,7 +57,7 @@ void LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
 
         // Check singular
         if (max_val < 1e-15) {
-            throw std::runtime_error("Matrix is singular or nearly singular");
+            return false;
         }
 
         // Record and apply pivot
@@ -76,6 +76,9 @@ void LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
             }
         }
     }
+    // The loop above checks every pivot but the last one. Written as the negation of the check
+    // above so that NaN passes here too, and surfaces as a non-finite step instead.
+    return !(abs(A(n-1, n-1)) < 1e-15);
 }
 
 template<typename T, size_t N>
@@ -208,7 +211,8 @@ void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
     const T& t0 = this->t_ics();
     T h0 = this->stepsize() * this->direction();
     const T* q0 = this->vector_ics().data();
-    Array1D<T, N> f(this->nsys());
+    // borrowed from the base page, which has room for it next to the Jacobian below
+    auto f = this->scratch_.template request<N>(this->nsys());
     this->rhs(f.data(), t0, q0);
 
     for (size_t k = 0; k<_D.size(); k++){
@@ -281,8 +285,10 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T*
         t_new = t + habs * this->direction();
 
         this->set_prediction(_ypred.data());
-        simd_for<T>(nsys, [&](size_t i){
-            _scale[i] = atol + rtol * abs(_ypred[i]);
+        // atol and rtol are structured bindings, which clang cannot capture in OpenMP mode,
+        // so they come in through reference init-captures instead
+        simd_for<T>(nsys, [&, &abs_tol = atol, &rel_tol = rtol](size_t i){
+            _scale[i] = abs_tol + rel_tol * abs(_ypred[i]);
         });
         this->set_psi(_psi.data());
 
@@ -299,7 +305,9 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T*
                         }
                     }
                 }
-                _LU.lu_factor(_B);
+                if (!_LU.lu_factor(_B)){
+                    return StepResult::SingularMatrixError;
+                }
                 _valid_LU = true;
             }
 
@@ -328,8 +336,8 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T*
         }
 
         safety = T(18UL * NEWTON_MAXITER + 9UL)/(20UL * NEWTON_MAXITER + 10UL*conv_result.n_iter);
-        simd_for<T>(nsys, [&](size_t i){
-            _scale[i] = atol + rtol * abs(y_new[i]);
+        simd_for<T>(nsys, [&, &abs_tol = atol, &rel_tol = rtol](size_t i){
+            _scale[i] = abs_tol + rel_tol * abs(y_new[i]);
             _error[i] = BDF_COEFS.ERR_CONST[_order] * _d[i];
         });
         _error_norms[1] = rms_norm(_error.data(), _scale.data(), nsys);
