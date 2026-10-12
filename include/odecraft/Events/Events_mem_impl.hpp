@@ -23,7 +23,8 @@ bool EventBase<Derived, EP, T, MaskFunc>::locate_state(T& out, const T& t_old, c
 template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
 template<isStateInterp<T> Callable>
 bool EventBase<Derived, EP, T, MaskFunc>::locate_impl(T& /*t*/, const T& /*t_old*/, const T& /*t_new*/, const T* /*q_old*/, const T* /*q_new*/, Callable&& /*f*/) const{
-    static_assert(false, "static override");
+    // Always false but only fires if the function is instantiated
+    static_assert(sizeof(Callable) == 0, "static override");
     return false;
 }
 

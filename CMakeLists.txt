@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.15...3.26)
 
 project(odecraft LANGUAGES CXX)
 
+# odecraft_crafted is compiled with -flto, and a static library of LTO objects is only indexed when
+# archived through the compiler's wrapper (gcc-ar), which loads the matching LTO plugin. Plain ar
+# finds one on some systems only: elsewhere the objects go unindexed and linking against the
+# library leaves undefined symbols.
+if(CMAKE_CXX_COMPILER_AR AND CMAKE_CXX_COMPILER_RANLIB)
+    set(CMAKE_AR ${CMAKE_CXX_COMPILER_AR})
+    set(CMAKE_RANLIB ${CMAKE_CXX_COMPILER_RANLIB})
+endif()
+
 # Only when odecraft is the project being configured.
 if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
    (NOT DEFINED PROJECT_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR))
