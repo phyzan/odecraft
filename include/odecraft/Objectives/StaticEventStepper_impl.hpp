@@ -78,7 +78,8 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
     T my_floor = this->t_new();
     NDSPAN_FOR_LOOP(I, NOBJ,
         const int old_sgn = cached_sign[I];
-        const int new_sign = sgn(std::get<I>(obj).func(this->t_new(), this->vector_new().data()));
+        const T f_new = std::get<I>(obj).func(this->t_new(), this->vector_new().data());
+        const int new_sign = sgn(f_new);
         cached_sign[I] = new_sign;
         detected[I] = false;
         if (old_sgn != 0){
@@ -93,23 +94,26 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
                 crossed = old_sgn > 0 && new_sign <= 0;
             }
 
-            if ((detected[I] = crossed)){
-                const T& t_new = this->t_new();
+            if (crossed){
                 const T& t_old = this->t_old();
                 const T* q_old = this->vector_old().data();
-                const T* q_new = this->vector_new().data();
-                values[I] = bisect<T, RootPolicy::Right>(
+                T f_old = std::get<I>(obj).func(t_old, q_old);
+                RootStatus rs = bisect_root(
+                    values[I],
+                    (T*)nullptr,
                     [&](const T& t){
                         this->interp_impl(worker.data(), t);
                         return std::get<I>(obj).func(t, worker.data());
                     },
                     t_old,
-                    t_new,
-                    std::get<I>(obj).func(t_old, q_old),
-                    std::get<I>(obj).func(t_new, q_new),
+                    this->t_new(),
+                    std::move(f_old),
+                    std::move(f_new),
                     std::get<I>(obj).ftol
                 );
-                my_floor = this->nearest_time(my_floor, values[I]);
+                if ((detected[I] = (rs == RootStatus::Success))){
+                    my_floor = this->nearest_time(my_floor, values[I]);
+                }
             }
         }
     );

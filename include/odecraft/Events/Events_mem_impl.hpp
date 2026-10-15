@@ -30,24 +30,37 @@ bool EventBase<Derived, EP, T, MaskFunc>::locate_impl(T& /*t*/, const T& /*t_old
 
 template<typename T, isObjFun<T> Target, typename MaskFunc, EventPolicy EP, typename Derived>
 template<isStateInterp<T> Callable>
-bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const{
-    T val1 = this->obj_fun(t_old, q_old);
-    T val2 = this->obj_fun(t_new, q_new);
+bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t_out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const{
+    T f_old = this->obj_fun(t_old, q_old);
 
-    int t_dir = this->direction();
-    int d = this->sign_change_dir();
-    if ( (((d == 0) && (val1*val2 < 0)) || (t_dir*d*val1 < 0 && 0 < t_dir*d*val2)) && (abs(val1) > ftol)){
-        T* vec = this->worker.data();
+    int dir = this->direction() * this->sign_change_dir();
 
-        auto obj_fun_scalar = [&](T t_dummy) NDSPAN_LAMBDA_INLINE{
-            f(vec, t_dummy); // interpolate the state vector at time t_dummy, and pass the value on vec
-            return this->obj_fun(t_dummy, vec);
-        };
+    // Making sure that the previous step was not a detected event
+    if (abs(f_old) > ftol){
+        if (dir * f_old > 0){
+            return false;
+        } else {
+            T f_new = this->obj_fun(t_new, q_new);
+            T* vec = this->worker.data();
 
-        t = bisect<T, RootPolicy::Right>(obj_fun_scalar, t_old, t_new, this->ftol);
-        return true;
+            RootStatus rs = bisect_root(
+                t_out,
+                (T*)nullptr,
+                [&](const T& t){
+                    // interpolate the state vector at time t, and pass the value on vec
+                    f(vec, t);
+                    return this->obj_fun(t, vec);
+                },
+                t_old, t_new,
+                std::move(f_old), std::move(f_new),
+                this->ftol
+            );
+
+            return rs == RootStatus::Success;
+        }
+    } else {
+        return false;
     }
-    return false;
 }
 
 
