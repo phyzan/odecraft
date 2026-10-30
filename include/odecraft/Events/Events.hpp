@@ -113,7 +113,7 @@ public:
      * @param n_sys    Size of the ODE system.
      * @param direction Integration direction (+1 or -1).
      */
-    virtual void setup(T t_start, size_t n_sys, int direction) = 0;
+    virtual void setup(T t_start, const State& state, int direction) = 0;
 
     /**
      * @brief Attempt to locate when this event triggers between two states.
