@@ -1,77 +1,81 @@
 #ifndef ODECRAFT_DOPRI_IMPL_HPP
 #define ODECRAFT_DOPRI_IMPL_HPP
 
-#include "odecraft/Toolkit/Cache.hpp"
+#include "odecraft/Toolkit/Scratch.hpp"
 #include "odecraft/Toolkit/Tools.hpp"
 #include <odecraft/Steppers/DOPRI.hpp>
 
 
 namespace ode::detail{
 
-template<typename T>
-XDIFF_FORCEINLINE void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n, size_t ld){
-    // The Nstages+1 stage rows are no longer one contiguous block: row 0 is K0, rows
-    // 1..Nstages-1 live in K (ld elements apart), and the final (FSAL) row is KF.
-    for (size_t i = 0; i < n; i++){
-        for (size_t j = 0; j < order; j++){
-            T sum = K0[i] * P[j] + KF[i] * P[Nstages*order + j];
-            for (size_t k = 1; k < Nstages; k++){
-                sum += K[(k-1)*ld + i] * P[k*order + j];
-            }
-            coef_mat[i*order + j] = sum;
-        }
-    }
+
+// h is read once, before the loop: through a reference the compiler could not keep it in a
+// register, since a store to r or out might change it.
+
+template<typename SD, typename State, size_t NK, typename T, typename Tab, size_t... j>
+XDIFF_FORCEINLINE void rk_stage(State& r, const State& q, const T& h_, const std::array<State, NK>& K, const Tab& A, size_t i, std::index_sequence<j...>){
+    const cache_t<T> h = h_;
+    SD::for_each([&](auto& r_k, const auto& q_k, const auto&... K_jk){
+        r_k = q_k + h * (... + (A(i, j) * K_jk));
+    }, r, q, K[j]...);
+}
+
+template<typename SD, typename State, size_t NK, typename T, typename Tab, size_t... j>
+XDIFF_FORCEINLINE void rk_stage(State& r, const State& q, const T& h_, const std::array<State, NK>& K, const Tab& b, std::index_sequence<j...>){
+    const cache_t<T> h = h_;
+    SD::for_each([&](auto& r_k, const auto& q_k, const auto&... K_jk){
+        r_k = q_k + h * (... + (b(j) * K_jk));
+    }, r, q, K[j]...);
+}
+
+template<typename SD, typename State, size_t NK, typename T, typename Tab, size_t... j>
+XDIFF_FORCEINLINE void rk_dot(State& out, const T& h_, const std::array<State, NK>& K, const Tab& D, size_t i, std::index_sequence<j...>){
+    const cache_t<T> h = h_;
+    SD::for_each([&](auto& out_k, const auto&... K_jk){
+        out_k = h * (... + (D(i, j) * K_jk));
+    }, out, K[j]...);
 }
 
 
+template<typename T, typename SD, size_t NS, size_t ORD, size_t... k>
+void rk_interp_matrix(
+    std::array<state_t<T, SD>, ORD>& coef_mat,
+    const std::array<state_t<T, SD>, NS+1>& K,
+    const CArray2D<T, NS+1, ORD>& P,
+    std::index_sequence<k...>){
+
+    // One pass per coefficient, which sums in a register rather than through coef_mat[j]
+    for (size_t j=0; j < ORD; ++j){
+        SD::for_each([&P, &j](auto& coef_ji, const auto&... K_ki){
+            coef_ji = (... + (P(k, j) * K_ki));
+        }, coef_mat[j], K[k]...);
+    }
+
+}
 
 
-
-template<size_t N, typename T, typename StepFn>
-XDIFF_FORCEINLINE StepResult rk_adapt_step(T& t_new_, T& habs_new_, T* q_new_, const T& t_, const T& habs_, const T* q_, size_t n,
-                          const T& hmin, const T& hmax, const T& hmin_abs,
-                          const T& safety_, const T& max_factor_, const T& min_factor_,
-                          const T& err_exp_, const T& inc_exp_, const T& min_err_,
-                          int direction, StepFn&& step_fn){
+template<typename T, typename SD, typename StepFn>
+StepResult rk_adapt_step(
+    T& t_new_, T& habs_new_, state_t<T, SD>& q_new_,
+    cache_t<T> t, cache_t<T> habs, cache_t<state_t<T, SD>> q,
+    cache_t<T> min_step, cache_t<T> max_step, cache_t<T> min_step_abs,
+    cache_t<T> safety, cache_t<T> max_factor, cache_t<T> min_factor,
+    cache_t<T> err_exp, cache_t<T> inc_exp, cache_t<T> min_err,
+    const int direction, StepFn&& step_fn){
     T factor;
-    // ----- Const cache ------
-    const auto& [
-        min_step,
-        max_step,
-        min_step_abs,
-        safety,
-        max_factor,
-        min_factor,
-        err_exp,
-        inc_exp,
-        min_err,
-        time,
-        habs_old
-    ] = make_scratch_view(
-        hmin, hmax, hmin_abs, safety_, max_factor_,
-        min_factor_, err_exp_, inc_exp_, min_err_, t_, habs_
-    );
-
-    auto q = cache_array<N>(q_, n);
-    // ------------------------
 
     // ----------- Scratch pad ---------------
-    auto  scratch = make_scratch(t_new_, habs_new_);
-    auto& [t_new, habs] = scratch;
-
-    auto q_out = cache_mut_array<N>(q_new_, n);
-
-    [[maybe_unused]] auto t_new_write_back = make_write_back(t_new, t_new_);
-    [[maybe_unused]] auto habs_write_back  = make_write_back(habs, habs_new_);
-    [[maybe_unused]] auto q_out_write_back  = make_array_write_back<N>(q_out, q_new_);
+    auto  scratch    = make_scratch(t_new_, habs_new_, q_new_);
+    auto& [t_new, habs_new, q_new] = scratch;
+    auto  write_back = make_write_back(scratch, t_new_, habs_new_, q_new_);
     // ---------------------------------------
 
-    habs = habs_old;
+    habs_new = habs;
 
     bool step_accepted = false;
     while (!step_accepted){
-        const T h = habs * direction;
-        const T err_norm = step_fn(t_new, q_out, time, h, q);
+        const T h = habs_new * direction;
+        const T err_norm = step_fn(t_new, q_new, t, h, q);
 
         if (err_norm <= 1){
             step_accepted = true;
@@ -85,11 +89,11 @@ XDIFF_FORCEINLINE StepResult rk_adapt_step(T& t_new_, T& habs_new_, T* q_new_, c
             set_max(factor, min_factor, safety * pow(err_norm, err_exp));
         }
 
-        if (!all_are_finite<T>(q_out, n)){
+        if (!all_are_finite<T, SD>(q_new)){
             return StepResult::NonFiniteError;
-        } else if (habs < min_step_abs){
+        } else if (habs_new < min_step_abs){
             return StepResult::TinyStepError;
-        } else if (!resize_step<T>(factor, habs, min_step, max_step)){
+        } else if (!resize_step<T>(factor, habs_new, min_step, max_step)){
             break;
         }
     }

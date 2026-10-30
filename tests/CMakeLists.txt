@@ -12,7 +12,7 @@
 # the matching include/<name>.hpp, and src/main.cpp includes those headers and calls each in
 # turn. All of src/*.cpp are compiled and linked into one odecraft_tests executable.
 
-cmake_minimum_required(VERSION 3.15...3.26)
+cmake_minimum_required(VERSION 3.21...3.26)
 
 project(odecraft_tests LANGUAGES CXX)
 

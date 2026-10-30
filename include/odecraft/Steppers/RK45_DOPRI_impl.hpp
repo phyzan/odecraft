@@ -1,195 +1,116 @@
 #ifndef ODECRAFT_RK45_DOPRI_IMPL_HPP
 #define ODECRAFT_RK45_DOPRI_IMPL_HPP
 
-#include "odecraft/Toolkit/Scratch.hpp"
+#include <odecraft/Steppers/DOPRI_impl.hpp>
 #include <odecraft/Steppers/RK45_DOPRI.hpp>
 
 namespace ode{
 
 namespace detail{
 
-template<size_t NSYS, typename T, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
-XDIFF_FORCEINLINE T rk45_step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h_, const T* __restrict__ q, size_t nsys,
-                 const T* K0, T* K, T* KF, T* r,
-                 const T& rtol_, const T& atol_,
+template<typename T, typename SD, typename Atab, typename Btab, typename Ctab, typename Etab, typename RhsFn>
+XDIFF_FORCEINLINE T rk45_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T> t, cache_t<T> h, const state_t<T, SD>& q,
+                 std::array<state_t<T, SD>, 7>& K, state_t<T, SD>& r, real_state_t<T, SD>& worker,
+                 const real_state_t<T, SD>& rtol, const real_state_t<T, SD>& atol,
                  const Atab& A, const Btab& B, const Ctab& C, const Etab& E, RhsFn&& rhs){
-    // NSYS is a constant, so this folds to a compile-time bound for fixed-size systems and
-    // keeps the loops unrolled whether or not the call itself gets inlined.
-    const size_t n = NSYS ? NSYS : nsys;
-    const size_t ld = rk_stage_stride<T>(n);
+    using S = value_t<T, SD>;
 
-    // The loops read these for every element. Through a reference the compiler must assume
-    // that each store to r or q_new may change them, and reloads them per element.
-    const auto& [h, rtol, atol] = make_scratch_view(h_, rtol_, atol_);
-
-    T* __restrict__ K1 = K;
-    T* __restrict__ K2 = K +   ld;
-    T* __restrict__ K3 = K + 2*ld;
-    T* __restrict__ K4 = K + 3*ld;
-    T* __restrict__ K5 = K + 4*ld;
-    T* __restrict__ K6 = KF;
-
-    // Stage 2
-    for (size_t j = 0; j < n; j++) {
-        r[j] = q[j] + h * (A(1,0)*K0[j]);
-    }
-    rhs(K1, t + C[1]*h, r);
-
-    // Stage 3
-    for (size_t j = 0; j < n; j++) {
-        r[j] = q[j] + h * (A(2,0)*K0[j] + A(2,1)*K1[j]);
-    }
-    rhs(K2, t + C[2]*h, r);
-
-    // Stage 4
-    for (size_t j = 0; j < n; j++) {
-        r[j] = q[j] + h * (A(3,0)*K0[j] + A(3,1)*K1[j] + A(3,2)*K2[j]);
-    }
-    rhs(K3, t + C[3]*h, r);
-
-    // Stage 5
-    for (size_t j = 0; j < n; j++) {
-        r[j] = q[j] + h * (A(4,0)*K0[j] + A(4,1)*K1[j] + A(4,2)*K2[j] + A(4,3)*K3[j]);
-    }
-    rhs(K4, t + C[4]*h, r);
-
-    // Stage 6
-    for (size_t j = 0; j < n; j++) {
-        r[j] = q[j] + h * (A(5,0)*K0[j] + A(5,1)*K1[j] + A(5,2)*K2[j] + A(5,3)*K3[j] + A(5,4)*K4[j]);
-    }
-    rhs(K5, t + h, r);
+    // Stage i: r = q + h * sum_j A(i, j) K[j], then K[i] = f(t + C[i] h, r)
+    rk_stage<SD>(r, q, h, K, A, 1, stages<0>);              rhs(K[1], t + C[1]*h, r);
+    rk_stage<SD>(r, q, h, K, A, 2, stages<0, 1>);           rhs(K[2], t + C[2]*h, r);
+    rk_stage<SD>(r, q, h, K, A, 3, stages<0, 1, 2>);        rhs(K[3], t + C[3]*h, r);
+    rk_stage<SD>(r, q, h, K, A, 4, stages<0, 1, 2, 3>);     rhs(K[4], t + C[4]*h, r);
+    rk_stage<SD>(r, q, h, K, A, 5, stages<0, 1, 2, 3, 4>);  rhs(K[5], t + h,      r);
 
     // Solution update (b2 = 0)
-    for (size_t j = 0; j < n; j++) {
-        q_new[j] = q[j] + h * (B(0)*K0[j] + B(2)*K2[j] + B(3)*K3[j] + B(4)*K4[j] + B(5)*K5[j]);
-    }
+    rk_stage<SD>(q_new, q, h, K, B, stages<0, 2, 3, 4, 5>);
 
-    // FSAL: K6 = f(t+h, q_new)
-    rhs(K6, t + h, q_new);
+    // FSAL: K[6] = f(t+h, q_new)
+    rhs(K[6], t + h, q_new);
     t_new = t + h;
 
     // Error norm calculation
-    T* __restrict__ scaled_err = r;
-    for (size_t j = 0; j < n; j++) {
-        const auto err   = h * (E[0]*K0[j] + E[2]*K2[j] + E[3]*K3[j] + E[4]*K4[j] + E[5]*K5[j] + E[6]*K6[j]);
-        const auto scale = atol + rtol * (abs(q[j]) + abs(K0[j] * h));
-        scaled_err[j] = abs(err) / scale;
-    }
-    
-    return *std::max_element(scaled_err, scaled_err + n);
+    SD::for_each([&](const S& q_i, const S& k0_i, const S& k2_i, const S& k3_i, const S& k4_i, const S& k5_i, const S& k6_i, const T& rtol_i, const T& atol_i, T& w){
+        const auto err   = h * (E[0]*k0_i + E[2]*k2_i + E[3]*k3_i + E[4]*k4_i + E[5]*k5_i + E[6]*k6_i);
+        const auto scale = atol_i + rtol_i * (abs(q_i) + abs(k0_i * h));
+        w = abs(err) / scale;
+    }, q, K[0], K[2], K[3], K[4], K[5], K[6], rtol, atol, worker);
+
+    return max_elem<T, SD>(worker);
 }
 
 
 } // namespace ode::detail
 
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-RK45<T, N, SP, OdeType, Derived>::RK45(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events)
-    : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, direction, std::move(events)),
-      K0_(q0.size()),
-      KF_(q0.size()), coef_mat(q0.size(), INTERP_ORDER),
-      rk_scratch_(request_scratch_page<T, (Nstages-1)*STAGE_STRIDE + N>((Nstages-1)*detail::rk_stage_stride<T>(q0.size()) + q0.size())),
-      rk_input_scratch_(request_scratch_page<T, 2*N>(2*q0.size())),
-      rk_scalar_scratch_(request_scratch_page<T, 1>()) {
-    if (q0.data() != nullptr){
-        this->rhs(KF_.data(), t0, q0.data());
-    }
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+RK45<T, SD, JD, OdeType, SP, Derived>::RK45(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events)
+    : Base(std::move(ode), t0, q0, rtol, std::move(atol), min_step, max_step, stepsize, direction, std::move(events)),
+      r_scratch_(q0), real_scratch(std::move(rtol)) {
+    // the arrays of states take the shape of q0 too
+    K_.fill(q0);
+    coef_mat.fill(q0);
+    this->rhs(K_[Nstages], t0, q0);
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Stepper RK45<T, N, SP, OdeType, Derived>::method() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+Stepper RK45<T, SD, JD, OdeType, SP, Derived>::method() const{
     return Stepper::RK45;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK45<T, N, SP, OdeType, Derived>::Reset(){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK45<T, SD, JD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    K0_.fill(0);
-    KF_.fill(0);
     mat_is_set = false;
-    this->rhs(KF_.data(), this->t_new(), this->vector_new().data());
+    this->rhs(K_[Nstages], this->t_new(), this->vector_new());
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK45<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK45<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
+    // freeze the interpolation coefficients (from t_old to t) before the last stage is overwritten
     this->set_coef_matrix();
-    this->rhs(KF_.data(), this->t(), new_vector);
+    this->rhs(K_[Nstages], this->t(), new_vector);
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK45<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK45<T, SD, JD, OdeType, SP, Derived>::set_coef_matrix() const{
     if (!mat_is_set){
-        // The stages of the step just taken are needed to build the dense-output polynomial,
-        // but the step's stage scratch is transient, so replay the sweep over the same
-        // interval. K0_ still holds the derivative at the start of that step and h_last_ the
-        // step size it used, so the replay reproduces the stages exactly. It writes into its
-        // own result/FSAL scratch, leaving KF_ - the next step's starting derivative - alone.
-        // Cost: Nstages RHS evaluations, paid only when an interpolation is actually asked for.
-        const size_t n = this->nsys();
-
-        auto r_buf = rk_input_scratch_.template request<N>(n);
-        auto K_buf = rk_scratch_.template request<(Nstages-1)*STAGE_STRIDE>((Nstages-1)*this->stage_stride());
-        auto kf_buf = rk_scratch_.template request<N>(n);
-        auto t_buf = rk_scalar_scratch_.template request<1>(1);
-        auto q_buf = rk_input_scratch_.template request<N>(n);
-
-        detail::rk45_step_impl<N>(
-            t_buf[0],
-            q_buf.data(),
-            this->t_old(),
-            h_last_,
-            this->vector_old().data(),
-            n,
-            K0_.data(),
-            K_buf.data(),
-            kf_buf.data(),
-            r_buf.data(),
-            this->rtol(),
-            this->atol(),
-            A, B, C, E,
-            [this](T* out, const T& time, const T* y){
-                this->rhs(out, time, y);
-            }
-        );
-
-        detail::rk_interp_matrix(coef_mat.data(), K_buf.data(), K0_.data(), kf_buf.data(),
-                                 P.data(), Nstages, INTERP_ORDER, n, this->stage_stride());
+        // K_ still holds the stages of the step just taken. The row of P for K_[1] is zero.
+        detail::rk_interp_matrix<T, SD, Nstages, INTERP_ORDER>(coef_mat, K_, P.table, detail::stages<0, Nstages, 2, 3, 4, 5>);
         mat_is_set = true;
     }
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T RK45<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q){
-    auto rhs_scratch   = rk_input_scratch_.template request<N>(this->nsys());
-    auto stage_scratch = rk_scratch_.template request<(Nstages-1)*STAGE_STRIDE>((Nstages-1)*this->stage_stride());
-    h_last_ = h; // remembered so set_coef_matrix can replay this sweep exactly
-    return detail::rk45_step_impl<N>(
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+T RK45<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q){
+    decltype(auto) rhs_scratch = r_scratch_.get();
+    decltype(auto) real_buf = real_scratch.get();
+    return detail::rk45_step_impl<T, SD>(
         t_new,
         q_new,
         t,
         h,
         q,
-        this->nsys(),
-        K0_.data(),
-        stage_scratch.data(),
-        KF_.data(),
-        rhs_scratch.data(),
+        K_,
+        rhs_scratch,
+        real_buf,
         this->rtol(),
         this->atol(),
         A, B, C, E,
-        [this](T* out, const T& time, const T* y){
+        [this](State& out, const T& time, const State& y){
             this->rhs(out, time, y);
         }
     );
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult RK45<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+StepResult RK45<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     mat_is_set = false;
-    std::copy(KF_.data(), KF_.data() + this->nsys(), K0_.data());
-    return detail::rk_adapt_step<N>(
-        t_new, habs_new, q_new, t, habs, q, this->nsys(),
+    // FSAL: the previous step's last stage becomes this step's first
+    copy_state<SD>(K_[0], K_[Nstages]);
+    return detail::rk_adapt_step<T, SD>(
+        t_new, habs_new, q_new, t, habs, q,
         this->min_step(),
         this->max_step(),
         this->tiny_factor(),
@@ -200,23 +121,23 @@ StepResult RK45<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T
         INC_EXP,
         MIN_ERR,
         this->direction(),
-        [this](T& t_out, T* q_out, const T& t_in, const T& h, const T* q_in){
+        [this](T& t_out, State& q_out, const T& t_in, const T& h, const State& q_in){
             return this->step_impl(t_out, q_out, t_in, h, q_in);
         }
     );
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK45<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK45<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& result, const T& t) const{
     this->set_coef_matrix();
-    coef_mat_interp(result, t, this->t_old(), this->t_new(), this->vector_old().data(), this->vector_new().data(), coef_mat.data(), INTERP_ORDER, this->nsys());
+    coef_mat_interp<T, SD>(result, t, this->t_old(), this->t_new(), this->vector_old(), this->vector_new(), coef_mat.data(), INTERP_ORDER);
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-auto RK45<T, N, SP, OdeType, Derived>::local_interp() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+auto RK45<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
     this->set_coef_matrix();
-    return [cm=this->coef_mat, t1=this->t_old(), t2=this->t_new(), y1=Array1D<T, N>(this->vector_old().data(), this->nsys()), y2=Array1D<T, N>(this->vector_new().data(), this->nsys()), n=this->nsys()](T* out, const T& t){
-        coef_mat_interp(out, t, t1, t2, y1.data(), y2.data(), cm.data(), INTERP_ORDER, n);
+    return [cm=this->coef_mat, t1=this->t_old(), t2=this->t_new(), y1=this->vector_old(), y2=this->vector_new()](State& out, const T& t){
+        coef_mat_interp<T, SD>(out, t, t1, t2, y1, y2, cm.data(), INTERP_ORDER);
     };
 }
 

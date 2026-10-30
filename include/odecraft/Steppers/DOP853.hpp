@@ -20,11 +20,11 @@ struct DOP_COEFS{
     static constexpr size_t INTERP_ORDER = 7;
     static constexpr int ERR_EST_ORDER = 7;
 
-    using DOP_A = Array2D<T, N_STAGES_EXT, N_STAGES_EXT, Allocation::Stack>;
-    using DOP_B = Array1D<T, N_STAGES, Allocation::Stack>;
-    using DOP_C = Array1D<T, N_STAGES_EXT, Allocation::Stack>;
-    using DOP_D = Array2D<T, INTERP_ORDER - 3, N_STAGES_EXT, Allocation::Stack>;
-    using DOP_E = Array1D<T, N_STAGES+1, Allocation::Stack>;
+    using DOP_A = CArray2D<T, N_STAGES_EXT, N_STAGES_EXT>;
+    using DOP_B = Array1D<T, N_STAGES>;
+    using DOP_C = Array1D<T, N_STAGES_EXT>;
+    using DOP_D = CArray2D<T, INTERP_ORDER - 3, N_STAGES_EXT>;
+    using DOP_E = Array1D<T, N_STAGES+1>;
 
     static constexpr DOP_A make_A();
 
@@ -40,32 +40,49 @@ struct DOP_COEFS{
 
 };
 
-template<typename T>
-void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* coef_mat, size_t order, size_t size);
+namespace detail{
 
-/// @brief DOP853's combined 3rd/5th order embedded error norm (Hairer, Norsett & Wanner).
-/// `K` holds the Nstages+1 stage rows, `ld` elements apart.
-template<typename T>
-T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q_new,
-                     const T& h, const T& rtol, const T& atol, size_t Nstages, size_t n, size_t ld);
+/// @brief One DOP853 stage sweep. On entry K[0] holds the derivative at the start of the step;
+/// the sweep fills K[1..12], K[12] being the final (FSAL) stage. Returns the scaled error norm.
+template<typename T, typename SD, typename Atab, typename Ctab, typename Etab, typename RhsFn>
+T dop853_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T> t, cache_t<T> h, const state_t<T, SD>& q,
+                   std::array<state_t<T, SD>, DOP_COEFS<T>::N_STAGES_EXT>& K, state_t<T, SD>& r,
+                   const real_state_t<T, SD>& rtol, const real_state_t<T, SD>& atol,
+                   const Atab& A, const Ctab& C, const Etab& E3, const Etab& E5, RhsFn&& rhs);
+
+/// @brief DOP853's combined 3rd/5th order embedded error norm (Hairer, Norsett & Wanner), of the
+/// step from q to q_new whose stages are K.
+template<typename T, typename SD, typename Etab>
+T dop853_error_norm(const std::array<state_t<T, SD>, DOP_COEFS<T>::N_STAGES_EXT>& K, const Etab& E3, const Etab& E5,
+                    const state_t<T, SD>& q, const state_t<T, SD>& q_new, cache_t<T> h,
+                    const real_state_t<T, SD>& rtol, const real_state_t<T, SD>& atol);
+
+/// @brief The dense output at t of the step [t1, t2] that starts at y1, from its coefficients F.
+template<typename T, typename SD>
+void coef_mat_interp_dop853(state_t<T, SD>& result, const T& t, const T& t1, const T& t2, const state_t<T, SD>& y1,
+                            const std::array<state_t<T, SD>, DOP_COEFS<T>::INTERP_ORDER>& F);
+
+} // namespace ode::detail
 
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
-class DOP853 : public detail::BaseDispatcher<GetDerived<DOP853<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
+class DOP853 : public detail::BaseDispatcher<GetDerived<DOP853<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
 
-    using Base = detail::BaseDispatcher<GetDerived<DOP853<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>;
+    using Base = detail::BaseDispatcher<GetDerived<DOP853<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
+    using Coefs = DOP_COEFS<T>;
 
 public:
+    using State = state_t<T, SD>;
+    using RealState = Base::RealState;
 
-    static constexpr size_t N_STAGES       = DOP_COEFS<T>::N_STAGES;       // 12
-    static constexpr size_t N_STAGES_EXTRA = 3;                            // extra stages, dense output only
-    static constexpr size_t N_STAGES_EXT   = DOP_COEFS<T>::N_STAGES_EXT;   // 16
+    static constexpr size_t N_STAGES       = Coefs::N_STAGES;       // 12
+    static constexpr size_t N_STAGES_EXT   = Coefs::N_STAGES_EXT;   // 16: the FSAL stage, then 3 for dense output only
     static constexpr size_t Norder         = 8;
-    static constexpr size_t INTERP_ORDER   = DOP_COEFS<T>::INTERP_ORDER;   // 7
-    static constexpr int    ERR_EST_ORDER  = DOP_COEFS<T>::ERR_EST_ORDER;  // 7
+    static constexpr size_t INTERP_ORDER   = Coefs::INTERP_ORDER;   // 7
+    static constexpr int    ERR_EST_ORDER  = Coefs::ERR_EST_ORDER;  // 7
     static constexpr bool   IS_IMPLICIT    = false;
 
-    DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
+    DOP853(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events = {});
 
     DEFAULT_RULE_OF_FOUR(DOP853)
 
@@ -75,51 +92,31 @@ public:
 
 protected:
 
-    void        ReAdjust(const T* new_vector);
-    StepResult  adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
-    void        interp_impl(T* result, const T& t) const;
+    void        ReAdjust(const State& new_vector);
+    StepResult  adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q);
+    void        interp_impl(State& result, const T& t) const;
     auto        local_interp() const;
 
 private:
 
-    using Atype      = Array2D<T, N_STAGES, N_STAGES, Allocation::Stack>;
-    using Btype      = Array1D<T, N_STAGES, Allocation::Stack>;
-    using Ctype      = Array1D<T, N_STAGES, Allocation::Stack>;
-    using AExtraType = Array2D<T, N_STAGES_EXTRA, N_STAGES_EXT, Allocation::Stack>;
-    using CExtraType = Array1D<T, N_STAGES_EXTRA, Allocation::Stack>;
-
-    static constexpr Atype      Amatrix();
-    static constexpr Btype      Bmatrix();
-    static constexpr Ctype      Cmatrix();
-    static constexpr AExtraType Amatrix_extra();
-    static constexpr CExtraType Cmatrix_extra();
-
-    // Elements between the rows of K_ (0 when N is a runtime size, see stage_stride)
-    static constexpr size_t STAGE_STRIDE = detail::rk_stage_stride<T>(N);
-
-    T           step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h, const T* __restrict__ q);
+    T           step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q);
 
     void        set_coef_matrix() const;
 
-    size_t      stage_stride() const { return detail::rk_stage_stride<T>(this->nsys()); }
+    // ndspan cannot constant-evaluate these tables (they are built with fill() and indexed writes),
+    // so, regardless of T, they are plain (computed-once-at-construction) instance members. A is
+    // the extended matrix: its row 12 holds the weights b, rows 13..15 the dense-output stages.
+    Coefs::DOP_A A  = Coefs::make_A();
+    Coefs::DOP_C C  = Coefs::make_C();
+    Coefs::DOP_D D  = Coefs::make_D();
+    Coefs::DOP_E E3 = Coefs::make_E3();
+    Coefs::DOP_E E5 = Coefs::make_E5();
 
-    // Unlike RK23/RK45, these tables are built with fill()+indexed writes rather than a
-    // plain aggregate initializer, which ndspan cannot constant-evaluate - so, regardless
-    // of T, they are always plain (computed-once-at-construction) instance members here.
-    Atype      A       = Amatrix();
-    Btype      B       = Bmatrix();
-    Ctype      C       = Cmatrix();
-    AExtraType A_extra = Amatrix_extra();
-    CExtraType C_extra = Cmatrix_extra();
-    typename DOP_COEFS<T>::DOP_D D  = DOP_COEFS<T>::make_D();
-    typename DOP_COEFS<T>::DOP_E E3 = DOP_COEFS<T>::make_E3();
-    typename DOP_COEFS<T>::DOP_E E5 = DOP_COEFS<T>::make_E5();
-
-    T                                                     h_last_ = 0; // step size actually used by the last sweep
-    mutable Array2D<T, N_STAGES_EXT, STAGE_STRIDE, Allocation::Auto> K_; // one stage per row, n used of each
-    mutable Array1D<T, N, Allocation::Auto>                           df_tmp_;
-    mutable Array2D<T, N, 0>                                          coef_mat_;
-    mutable bool                                                      mat_is_set_ = false;
+    T                                           h_last_ = 0; // step size actually used by the last sweep
+    mutable std::array<State, N_STAGES_EXT>     K_;          // the stages of the last step
+    mutable std::array<State, INTERP_ORDER>     coef_mat_;
+    worker_t<State>                             r_scratch_;  // the stage input of a sweep
+    mutable bool                                mat_is_set_ = false;
 
     T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1);
     T INC_EXP = T(-1)/T(Norder);
@@ -128,9 +125,9 @@ private:
 
 namespace detail{
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Stepper::DOP853, T, N, SP, OdeType, Derived>{
-    using type = DOP853<T, N, SP, OdeType, Derived>;
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+struct SolverTypeGetter<Stepper::DOP853, SP, T, SD, JD, OdeType, Derived>{
+    using type = DOP853<T, SD, JD, OdeType, SP, Derived>;
 };
 
 } // namespace ode::detail

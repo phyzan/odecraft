@@ -1,6 +1,7 @@
 #ifndef ODECRAFT_DOP853_IMPL_HPP
 #define ODECRAFT_DOP853_IMPL_HPP
 
+#include <odecraft/Steppers/DOPRI_impl.hpp>
 #include <odecraft/Steppers/DOP853.hpp>
 
 namespace ode{
@@ -11,7 +12,7 @@ namespace ode{
 // ============================================================================
 
 template<typename T>
-constexpr typename DOP_COEFS<T>::DOP_A DOP_COEFS<T>::make_A(){
+constexpr DOP_COEFS<T>::DOP_A DOP_COEFS<T>::make_A(){
     DOP_A res(N_STAGES_EXT, N_STAGES_EXT);
     res.fill(0);
 
@@ -131,7 +132,7 @@ constexpr typename DOP_COEFS<T>::DOP_A DOP_COEFS<T>::make_A(){
 }
 
 template<typename T>
-constexpr typename DOP_COEFS<T>::DOP_B DOP_COEFS<T>::make_B(){
+constexpr DOP_COEFS<T>::DOP_B DOP_COEFS<T>::make_B(){
     // B coefficients are row 12 of the A matrix (the 8th order solution weights)
     DOP_A a = make_A();
     DOP_B res(N_STAGES);
@@ -142,7 +143,7 @@ constexpr typename DOP_COEFS<T>::DOP_B DOP_COEFS<T>::make_B(){
 }
 
 template<typename T>
-constexpr typename DOP_COEFS<T>::DOP_C DOP_COEFS<T>::make_C(){
+constexpr DOP_COEFS<T>::DOP_C DOP_COEFS<T>::make_C(){
     DOP_C res(N_STAGES_EXT);
     res(0) = 0;
     res(1) = 0.526001519587677318785587544488e-01;
@@ -164,7 +165,7 @@ constexpr typename DOP_COEFS<T>::DOP_C DOP_COEFS<T>::make_C(){
 }
 
 template<typename T>
-constexpr typename DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E3(){
+constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E3(){
     DOP_E res(N_STAGES + 1);
     // E3 = B - B3 (3rd order embedded method)
     // Most values are zero, only differences are specified
@@ -185,7 +186,7 @@ constexpr typename DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E3(){
 }
 
 template<typename T>
-constexpr typename DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E5(){
+constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E5(){
     DOP_E res(N_STAGES + 1);
     res.fill(0);
     // E5 = B - B5 (5th order embedded method)
@@ -201,7 +202,7 @@ constexpr typename DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E5(){
 }
 
 template<typename T>
-constexpr typename DOP_COEFS<T>::DOP_D DOP_COEFS<T>::make_D(){
+constexpr DOP_COEFS<T>::DOP_D DOP_COEFS<T>::make_D(){
     DOP_D res(INTERP_ORDER - 3, N_STAGES_EXT);
     res.fill(0);
 
@@ -264,77 +265,54 @@ constexpr typename DOP_COEFS<T>::DOP_D DOP_COEFS<T>::make_D(){
     return res;
 }
 
-// coef_mat_interp_dop853 implementation
-template<typename T>
-void coef_mat_interp_dop853(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* coef_mat, size_t order, size_t size){
-    // coef_mat dimensions: size x order (7 columns for DOP853)
-    // Implements the Horner-like scheme from scipy with alternating θ and (1-θ)
-    // y(θ) = y_old + sum of terms with alternating θ and (1-θ) multiplications
+namespace detail{
+
+template<typename T, typename SD>
+void coef_mat_interp_dop853(state_t<T, SD>& result, const T& t, const T& t1, const T& t2, const state_t<T, SD>& y1,
+                            const std::array<state_t<T, SD>, DOP_COEFS<T>::INTERP_ORDER>& F){
+    // The Horner-like scheme from scipy, alternating theta and (1 - theta):
+    // y = y1 + x*(F0 + (1-x)*(F1 + x*(F2 + (1-x)*(F3 + x*(F4 + (1-x)*(F5 + x*F6))))))
     assert( (t != t1 && t != t2) && "coef_mat_interp_dop853 must only be called on the open interval");
+    using S = value_t<T, SD>;
 
-    auto h = t2 - t1;
-    auto x = (t - t1) / h;  // theta
-    auto one_minus_x = 1 - x;  // (1 - theta)
+    const T h = t2 - t1;
+    const T x = (t - t1) / h;  // theta
+    const T one_minus_x = 1 - x;
 
-    // Initialize result with 0 (NOT y_old - that gets added at the end)
-    simd_for<T>(size, [&](size_t i){
-        result[i] = 0;
-    });
-
-    // Horner-like scheme: process F coefficients from last to first
-    // for i, f in enumerate(reversed(self.F)):
-    //     y += f
-    //     if i % 2 == 0: y *= x
-    //     else: y *= (1 - x)
-
-    for (size_t idx = 0; idx < order; idx++){
-        size_t i = order - 1 - idx;  // reversed index: 6, 5, 4, 3, 2, 1, 0
-
-        // Add F[i] coefficient
-        simd_for<T>(size, [&](size_t j){
-            result[j] += coef_mat[j * order + i];
-        });
-
-        // Multiply by θ or (1-θ) based on iteration
-        if (idx % 2 == 0){
-            simd_for<T>(size, [&](size_t j){
-                result[j] *= x;
-            });
-        } else {
-            simd_for<T>(size, [&](size_t j){
-                result[j] *= one_minus_x;
-            });
-        }
-    }
-
-    // Add y_old at the end
-    simd_for<T>(size, [&](size_t i){
-        result[i] += y1[i];
-    });
+    SD::for_each([&](S& r_i, const S& y1_i, const S& F0, const S& F1, const S& F2, const S& F3, const S& F4, const S& F5, const S& F6){
+        S r = F6 * x;
+        r = (r + F5) * one_minus_x;
+        r = (r + F4) * x;
+        r = (r + F3) * one_minus_x;
+        r = (r + F2) * x;
+        r = (r + F1) * one_minus_x;
+        r = (r + F0) * x;
+        r_i = r + y1_i;
+    }, result, y1, F[0], F[1], F[2], F[3], F[4], F[5], F[6]);
 }
 
-template<typename T>
-T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q_new,
-                     const T& h, const T& rtol, const T& atol, size_t Nstages, size_t n, size_t ld){
+template<typename T, typename SD, typename Etab>
+T dop853_error_norm(const std::array<state_t<T, SD>, DOP_COEFS<T>::N_STAGES_EXT>& K, const Etab& E3, const Etab& E5,
+                    const state_t<T, SD>& q, const state_t<T, SD>& q_new, cache_t<T> h,
+                    const real_state_t<T, SD>& rtol, const real_state_t<T, SD>& atol){
     // Combination of 3rd and 5th order embedded error estimates (Hairer, Norsett & Wanner):
     // error_norm = |h| * ||err5||_2 / sqrt(||err5||_2^2 + 0.01 * ||err3||_2^2) / sqrt(n)
+    using S = value_t<T, SD>;
     T err5_norm_2 = 0;
     T err3_norm_2 = 0;
+    size_t n = 0;
 
-    for (size_t j = 0; j < n; j++){
-        T err5 = 0;
-        T err3 = 0;
-        for (size_t i = 0; i <= Nstages; i++){
-            err5 += K[i*ld + j] * E5[i];
-            err3 += K[i*ld + j] * E3[i];
-        }
-        const T scale = atol + rtol * ndspan::max<T>(abs(q[j]), abs(q_new[j]));
-        err5 /= scale;
-        err3 /= scale;
-
-        err5_norm_2 += err5*err5;
-        err3_norm_2 += err3*err3;
-    }
+    // E3 and E5 vanish but for the stages 0 and 5..11
+    [&]<size_t... k>(std::index_sequence<k...>){
+        SD::for_each([&](const S& q_j, const S& q_new_j, const T& rtol_j, const T& atol_j, const auto&... K_kj){
+            const T scale = atol_j + rtol_j * ndspan::max<T>(abs(q_j), abs(q_new_j));
+            const S err5 = (S(0) + ... + (K_kj * E5[k])) / scale;
+            const S err3 = (S(0) + ... + (K_kj * E3[k])) / scale;
+            err5_norm_2 += SD::norm_sqr(err5);
+            err3_norm_2 += SD::norm_sqr(err3);
+            ++n;
+        }, q, q_new, rtol, atol, K[k]...);
+    }(stages<0, 5, 6, 7, 8, 9, 10, 11>);
 
     if (err5_norm_2 == 0 && err3_norm_2 == 0){
         return 0;
@@ -344,179 +322,136 @@ T dop853_error_norm(const T* K, const T* E3, const T* E5, const T* q, const T* q
     return abs(h) * err5_norm_2 / sqrt(denom * n);
 }
 
+template<typename T, typename SD, typename Atab, typename Ctab, typename Etab, typename RhsFn>
+XDIFF_FORCEINLINE T dop853_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T> t, cache_t<T> h, const state_t<T, SD>& q,
+                   std::array<state_t<T, SD>, DOP_COEFS<T>::N_STAGES_EXT>& K, state_t<T, SD>& r,
+                   const real_state_t<T, SD>& rtol, const real_state_t<T, SD>& atol,
+                   const Atab& A, const Ctab& C, const Etab& E3, const Etab& E5, RhsFn&& rhs){
+    // Stage i: r = q + h * sum_j A(i, j) K[j] over the j with a nonzero A(i, j), then K[i] = f(t + C[i] h, r)
+    rk_stage<SD>(r, q, h, K, A, 1,  stages<0>);                                 rhs(K[1],  t + C[1]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 2,  stages<0, 1>);                              rhs(K[2],  t + C[2]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 3,  stages<0, 2>);                              rhs(K[3],  t + C[3]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 4,  stages<0, 2, 3>);                           rhs(K[4],  t + C[4]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 5,  stages<0, 3, 4>);                           rhs(K[5],  t + C[5]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 6,  stages<0, 3, 4, 5>);                        rhs(K[6],  t + C[6]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 7,  stages<0, 3, 4, 5, 6>);                     rhs(K[7],  t + C[7]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 8,  stages<0, 3, 4, 5, 6, 7>);                  rhs(K[8],  t + C[8]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 9,  stages<0, 3, 4, 5, 6, 7, 8>);               rhs(K[9],  t + C[9]*h,  r);
+    rk_stage<SD>(r, q, h, K, A, 10, stages<0, 3, 4, 5, 6, 7, 8, 9>);            rhs(K[10], t + C[10]*h, r);
+    rk_stage<SD>(r, q, h, K, A, 11, stages<0, 3, 4, 5, 6, 7, 8, 9, 10>);        rhs(K[11], t + h,       r);
+
+    // Solution update: row 12 of A holds the weights b (b1 = b2 = b3 = b4 = 0)
+    rk_stage<SD>(q_new, q, h, K, A, 12, stages<0, 5, 6, 7, 8, 9, 10, 11>);
+
+    // FSAL: K[12] = f(t+h, q_new), also used for error estimation and the next step
+    rhs(K[12], t + h, q_new);
+    t_new = t + h;
+
+    return dop853_error_norm<T, SD>(K, E3, E5, q, q_new, h, rtol, atol);
+}
+
+} // namespace ode::detail
+
 
 // ============================================================================
 // DOP853
 // ============================================================================
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-DOP853<T, N, SP, OdeType, Derived>::DOP853(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events)
-    : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, direction, std::move(events)),
-      K_(N_STAGES_EXT, detail::rk_stage_stride<T>(q0.size())), df_tmp_(q0.size()), coef_mat_(q0.size(), INTERP_ORDER) {
-    if (q0.data() != nullptr){
-        this->rhs(K_.data() + N_STAGES*this->stage_stride(), t0, q0.data());
-    }
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+DOP853<T, SD, JD, OdeType, SP, Derived>::DOP853(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events)
+    : Base(std::move(ode), t0, q0, std::move(rtol), std::move(atol), min_step, max_step, stepsize, direction, std::move(events)),
+      r_scratch_(q0) {
+    // the arrays of states take the shape of q0 too
+    K_.fill(q0);
+    coef_mat_.fill(q0);
+    this->rhs(K_[N_STAGES], t0, q0);
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Stepper DOP853<T, N, SP, OdeType, Derived>::method() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+Stepper DOP853<T, SD, JD, OdeType, SP, Derived>::method() const{
     return Stepper::DOP853;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void DOP853<T, N, SP, OdeType, Derived>::Reset(){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void DOP853<T, SD, JD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    K_.fill(0);
     mat_is_set_ = false;
-    this->rhs(K_.data() + N_STAGES*this->stage_stride(), this->t_new(), this->vector_new().data());
+    this->rhs(K_[N_STAGES], this->t_new(), this->vector_new());
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void DOP853<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void DOP853<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
     this->set_coef_matrix();
-    this->rhs(K_.data() + N_STAGES*this->stage_stride(), this->t(), new_vector);
+    this->rhs(K_[N_STAGES], this->t(), new_vector);
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void DOP853<T, N, SP, OdeType, Derived>::set_coef_matrix() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void DOP853<T, SD, JD, OdeType, SP, Derived>::set_coef_matrix() const{
     if (mat_is_set_){
         return;
     }
     mat_is_set_ = true;
+    using S = value_t<T, SD>;
 
     // The step size that was actually used, not stepsize(): that returns the newest step's habs,
     // which rk_adapt_step has already grown/shrunk into the *next* step's proposed size, and it
     // also differs from the accepted h whenever an attempt was rejected.
     const T h = h_last_;
-    const T* y_old = this->vector_old().data();
     const T& t_old = this->t_old();
-    const size_t n = this->nsys();
-    const size_t ld = this->stage_stride();
-    T* K = K_.data();
+    const State& y_old = this->vector_old();
+    const State& y_new = this->vector_new();
+    decltype(auto) r = r_scratch_.get();
 
     // Three extra stages, evaluated only for dense-output interpolation.
-    for (size_t s = 0; s < N_STAGES_EXTRA; s++){
-        const size_t stage_idx = N_STAGES + 1 + s; // 13, 14, 15
-        for (size_t j = 0; j < n; j++){
-            df_tmp_(j) = y_old[j];
-            for (size_t i = 0; i < stage_idx; i++){
-                df_tmp_(j) += K[i*ld + j] * A_extra(s, i) * h;
-            }
-        }
-        this->rhs(K + stage_idx*ld, t_old + C_extra(s)*h, df_tmp_.data());
-    }
+    detail::rk_stage<SD>(r, y_old, h, K_, A, 13, detail::stages<0, 6, 7, 8, 9, 10, 11, 12>);
+    this->rhs(K_[13], t_old + C[13]*h, r);
+    detail::rk_stage<SD>(r, y_old, h, K_, A, 14, detail::stages<0, 5, 6, 7, 10, 11, 12, 13>);
+    this->rhs(K_[14], t_old + C[14]*h, r);
+    detail::rk_stage<SD>(r, y_old, h, K_, A, 15, detail::stages<0, 5, 6, 7, 8, 12, 13, 14>);
+    this->rhs(K_[15], t_old + C[15]*h, r);
 
-    const T* f_old = K;                    // K[0]
-    const T* f_new = K + N_STAGES*ld;      // K[12]
-    const T* y_new = this->vector_new().data();
+    // F[0..2], from the end points of the step and the derivatives there: K[0] and K[12]
+    SD::for_each([&h](S& F0, S& F1, S& F2, const S& y_old_i, const S& y_new_i, const S& f_old_i, const S& f_new_i){
+        F0 = y_new_i - y_old_i;                                     // delta_y
+        F1 = h*f_old_i - (y_new_i - y_old_i);                       // h*f_old - delta_y
+        F2 = T(2)*(y_new_i - y_old_i) - h*(f_new_i + f_old_i);
+    }, coef_mat_[0], coef_mat_[1], coef_mat_[2], y_old, y_new, K_[0], K_[N_STAGES]);
 
-    for (size_t i = 0; i < n; i++){
-        coef_mat_(i, 0) = y_new[i] - y_old[i];                                      // F[0] = delta_y
-        coef_mat_(i, 1) = h*f_old[i] - (y_new[i] - y_old[i]);                       // F[1] = h*f_old - delta_y
-        coef_mat_(i, 2) = T(2)*(y_new[i] - y_old[i]) - h*(f_new[i] + f_old[i]);     // F[2]
-    }
-
-    // F[3:] = h * D @ K, D has shape (4, 16), K has shape (16, Nsys)
-    for (size_t j = 0; j < INTERP_ORDER - 3; j++){
-        for (size_t i = 0; i < n; i++){
-            T sum = 0;
-            for (size_t k = 0; k < N_STAGES_EXT; k++){
-                sum += D(j, k) * K[k*ld + i];
-            }
-            coef_mat_(i, 3+j) = h*sum;
-        }
+    // F[3:] = h * D @ K, where D vanishes but for the stages 0 and 5..15
+    for (size_t i = 0; i < INTERP_ORDER - 3; i++){
+        detail::rk_dot<SD>(coef_mat_[3 + i], h, K_, D, i, detail::stages<0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>);
     }
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T DOP853<T, N, SP, OdeType, Derived>::step_impl(T& t_new, T* __restrict__ q_new, const T& t, const T& h_, const T* __restrict__ q){
-    // The stage loops read h for every element. Through a reference the compiler must assume
-    // that each store to r or q_new may change it, and reloads it per element.
-    const auto& [h] = make_scratch_view(h_);
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+T DOP853<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q){
+    decltype(auto) rhs_scratch = r_scratch_.get();
     h_last_ = h; // remembered for the dense-output coefficients
-    T* __restrict__ K = K_.data();
-    T* __restrict__ r = df_tmp_.data();
-    const size_t n = this->nsys();
-    const size_t ld = this->stage_stride();
-
-    const T* __restrict__ K0 = K;
-    T* __restrict__ K1 = K + ld;
-    T* __restrict__ K2 = K + 2*ld;
-    T* __restrict__ K3 = K + 3*ld;
-    T* __restrict__ K4 = K + 4*ld;
-    T* __restrict__ K5 = K + 5*ld;
-    T* __restrict__ K6 = K + 6*ld;
-    T* __restrict__ K7 = K + 7*ld;
-    T* __restrict__ K8 = K + 8*ld;
-    T* __restrict__ K9 = K + 9*ld;
-    T* __restrict__ K10 = K + 10*ld;
-    T* __restrict__ K11 = K + 11*ld;
-
-    // Stage 2 (K1)
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(1,0)*K0[j]); }
-    this->rhs(K1, t + C[1]*h, r);
-
-    // Stage 3 (K2)
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(2,0)*K0[j] + A(2,1)*K1[j]); }
-    this->rhs(K2, t + C[2]*h, r);
-
-    // Stage 4 (K3) - a31=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(3,0)*K0[j] + A(3,2)*K2[j]); }
-    this->rhs(K3, t + C[3]*h, r);
-
-    // Stage 5 (K4) - a41=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(4,0)*K0[j] + A(4,2)*K2[j] + A(4,3)*K3[j]); }
-    this->rhs(K4, t + C[4]*h, r);
-
-    // Stage 6 (K5) - a51=a52=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(5,0)*K0[j] + A(5,3)*K3[j] + A(5,4)*K4[j]); }
-    this->rhs(K5, t + C[5]*h, r);
-
-    // Stage 7 (K6) - a61=a62=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(6,0)*K0[j] + A(6,3)*K3[j] + A(6,4)*K4[j] + A(6,5)*K5[j]); }
-    this->rhs(K6, t + C[6]*h, r);
-
-    // Stage 8 (K7) - a71=a72=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(7,0)*K0[j] + A(7,3)*K3[j] + A(7,4)*K4[j] + A(7,5)*K5[j] + A(7,6)*K6[j]); }
-    this->rhs(K7, t + C[7]*h, r);
-
-    // Stage 9 (K8) - a81=a82=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(8,0)*K0[j] + A(8,3)*K3[j] + A(8,4)*K4[j] + A(8,5)*K5[j] + A(8,6)*K6[j] + A(8,7)*K7[j]); }
-    this->rhs(K8, t + C[8]*h, r);
-
-    // Stage 10 (K9) - a91=a92=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(9,0)*K0[j] + A(9,3)*K3[j] + A(9,4)*K4[j] + A(9,5)*K5[j] + A(9,6)*K6[j] + A(9,7)*K7[j] + A(9,8)*K8[j]); }
-    this->rhs(K9, t + C[9]*h, r);
-
-    // Stage 11 (K10) - a101=a102=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(10,0)*K0[j] + A(10,3)*K3[j] + A(10,4)*K4[j] + A(10,5)*K5[j] + A(10,6)*K6[j] + A(10,7)*K7[j] + A(10,8)*K8[j] + A(10,9)*K9[j]); }
-    this->rhs(K10, t + C[10]*h, r);
-
-    // Stage 12 (K11) - a111=a112=0
-    for (size_t j = 0; j < n; j++) { r[j] = q[j] + h * (A(11,0)*K0[j] + A(11,3)*K3[j] + A(11,4)*K4[j] + A(11,5)*K5[j] + A(11,6)*K6[j] + A(11,7)*K7[j] + A(11,8)*K8[j] + A(11,9)*K9[j] + A(11,10)*K10[j]); }
-    this->rhs(K11, t + h, r);
-
-    // Solution update (b1=b2=b3=b4=0)
-    for (size_t j = 0; j < n; j++) {
-        q_new[j] = q[j] + h * (B(0)*K0[j] + B(5)*K5[j] + B(6)*K6[j] + B(7)*K7[j] + B(8)*K8[j] + B(9)*K9[j] + B(10)*K10[j] + B(11)*K11[j]);
-    }
-
-    // FSAL: K12 = f(t+h, q_new), also used for error estimation and the next step
-    this->rhs(K + N_STAGES*ld, t + h, q_new);
-    t_new = t + h;
-
-    return dop853_error_norm(K, E3.data(), E5.data(), q, q_new, h, this->rtol(), this->atol(), N_STAGES, n, ld);
+    return detail::dop853_step_impl<T, SD>(
+        t_new,
+        q_new,
+        t,
+        h,
+        q,
+        K_,
+        rhs_scratch,
+        this->rtol(),
+        this->atol(),
+        A, C, E3, E5,
+        [this](State& out, const T& time, const State& y){
+            this->rhs(out, time, y);
+        }
+    );
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+StepResult DOP853<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     mat_is_set_ = false;
-    T* dest = K_.data();
-    const T* src = K_.data() + N_STAGES*this->stage_stride();
-    std::copy(src, src + this->nsys(), dest);
-    return detail::rk_adapt_step<N>(
-        t_new, habs_new, q_new, t, habs, q, this->nsys(),
+    // FSAL: the previous step's last stage becomes this step's first
+    copy_state<SD>(K_[0], K_[N_STAGES]);
+    return detail::rk_adapt_step<T, SD>(
+        t_new, habs_new, q_new, t, habs, q,
         this->min_step(),
         this->max_step(),
         this->tiny_factor(),
@@ -527,69 +462,24 @@ StepResult DOP853<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new,
         INC_EXP,
         MIN_ERR,
         this->direction(),
-        [this](T& t_out, T* q_out, const T& t_in, const T& h, const T* q_in){
+        [this](T& t_out, State& q_out, const T& t_in, const T& h, const State& q_in){
             return this->step_impl(t_out, q_out, t_in, h, q_in);
         }
     );
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void DOP853<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void DOP853<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& result, const T& t) const{
     this->set_coef_matrix();
-    coef_mat_interp_dop853(result, t, this->t_old(), this->t_new(), this->vector_old().data(), this->vector_new().data(), coef_mat_.data(), INTERP_ORDER, this->nsys());
+    detail::coef_mat_interp_dop853<T, SD>(result, t, this->t_old(), this->t_new(), this->vector_old(), coef_mat_);
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-auto DOP853<T, N, SP, OdeType, Derived>::local_interp() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+auto DOP853<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
     this->set_coef_matrix();
-    const size_t n = this->nsys();
-
-    return [cm=this->coef_mat_, t1=this->t_old(), t2=this->t_new(), y1=Array1D<T, N>(this->vector_old().data(), n), y2=Array1D<T, N>(this->vector_new().data(), n), n](T* out, const T& t){
-        coef_mat_interp_dop853(out, t, t1, t2, y1.data(), y2.data(), cm.data(), INTERP_ORDER, n);
+    return [cm=this->coef_mat_, t1=this->t_old(), t2=this->t_new(), y1=this->vector_old()](State& out, const T& t){
+        detail::coef_mat_interp_dop853<T, SD>(out, t, t1, t2, y1, cm);
     };
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr DOP853<T, N, SP, OdeType, Derived>::Atype DOP853<T, N, SP, OdeType, Derived>::Amatrix(){
-    Atype result(N_STAGES, N_STAGES);
-    auto full_A = DOP_COEFS<T>::make_A();
-    for(size_t i = 0; i < N_STAGES; ++i){
-        for(size_t j = 0; j < N_STAGES; ++j){
-            result(i, j) = full_A(i, j);
-        }
-    }
-    return result;
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr DOP853<T, N, SP, OdeType, Derived>::Btype DOP853<T, N, SP, OdeType, Derived>::Bmatrix(){
-    return DOP_COEFS<T>::make_B();
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr DOP853<T, N, SP, OdeType, Derived>::Ctype DOP853<T, N, SP, OdeType, Derived>::Cmatrix(){
-    Ctype result(N_STAGES);
-    auto C = DOP_COEFS<T>::make_C();
-    std::copy(C.data(), C.data() + N_STAGES, result.data());
-    return result;
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr DOP853<T, N, SP, OdeType, Derived>::AExtraType DOP853<T, N, SP, OdeType, Derived>::Amatrix_extra(){
-    AExtraType result(N_STAGES_EXTRA, N_STAGES_EXT);
-    auto A = DOP_COEFS<T>::make_A();
-    T* dest = result.data();
-    const T* src = A.data() + (N_STAGES+1)*N_STAGES_EXT;
-    std::copy(src, src + N_STAGES_EXTRA*N_STAGES_EXT, dest);
-    return result;
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-constexpr DOP853<T, N, SP, OdeType, Derived>::CExtraType DOP853<T, N, SP, OdeType, Derived>::Cmatrix_extra(){
-    CExtraType result(N_STAGES_EXTRA);
-    auto C = DOP_COEFS<T>::make_C();
-    std::copy(C.data() + N_STAGES+1, C.data() + N_STAGES+1 + N_STAGES_EXTRA, result.data());
-    return result;
 }
 
 } // namespace ode

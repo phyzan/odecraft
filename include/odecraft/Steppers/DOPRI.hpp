@@ -47,42 +47,44 @@ template<typename T, auto Generator>
 using CoefTable = std::conditional_t<std::is_arithmetic_v<T>, StaticCoefTable<T, Generator>, DynamicCoefTable<T, Generator>>;
 
 
-// ============================================================================
-// Shared adaptive Runge-Kutta building blocks, used by RK23, RK45 and DOP853.
-// The per-stage arithmetic itself (e.g. h * (a21*K0 + ...)) stays hardcoded in each
-// solver's step_impl for performance; only the surrounding, method-agnostic machinery
-// (step-size control, dense-output coefficient assembly) is shared here.
-// ============================================================================
+/// @brief The stages that a weighted sum of stages runs over, e.g. stages<0, 3, 4>: those with a
+/// nonzero weight, so that the zeros of a Butcher tableau cost nothing.
+template<size_t... j>
+inline constexpr std::index_sequence<j...> stages{};
 
-/// @brief Distance, in elements, between consecutive stage rows of n elements (K1, K2, ...).
-/// This padding is more cache-friendly and can increase performance
-template<typename T>
-constexpr size_t rk_stage_stride(size_t n){
-    constexpr size_t line = 64;
-    if constexpr (sizeof(T) > line || line % sizeof(T) != 0){
-        return n;
-    } else {
-        constexpr size_t per_line = line / sizeof(T);
-        const size_t lines = (n + per_line - 1) / per_line;
-        return n == 0 ? 0 : (lines | 1) * per_line;
-    }
-}
+/// @brief r = q + h * sum_j A(i, j) * K[j], over the stages j listed.
+template<typename SD, typename State, size_t NK, typename T, typename Tab, size_t... j>
+void rk_stage(State& r, const State& q, const T& h, const std::array<State, NK>& K, const Tab& A, size_t i, std::index_sequence<j...>);
 
-/// @brief Dense-output coefficients from the stage derivatives - K0, the Nstages-1 rows of K
-/// (`ld` elements apart) and the final stage KF - and the interpolation weights P
-/// (Nstages+1 x order).
-template<typename T>
-void rk_interp_matrix(T* coef_mat, const T* K, const T* K0, const T* KF, const T* P, size_t Nstages, size_t order, size_t n, size_t ld);
+/// @brief r = q + h * sum_j b(j) * K[j], over the stages j listed.
+template<typename SD, typename State, size_t NK, typename T, typename Tab, size_t... j>
+void rk_stage(State& r, const State& q, const T& h, const std::array<State, NK>& K, const Tab& b, std::index_sequence<j...>);
+
+/// @brief out = h * sum_j D(i, j) * K[j], over the stages j listed.
+template<typename SD, typename State, size_t NK, typename T, typename Tab, size_t... j>
+void rk_dot(State& out, const T& h, const std::array<State, NK>& K, const Tab& D, size_t i, std::index_sequence<j...>);
+
+/// @brief Dense-output coefficients from the stage derivatives K of a step: K[0] at its start,
+/// K[NS] at its end. coef_mat[j] = sum_k P(k, j) * K[k], over the stages k listed (those whose
+/// row of P is not zero), added in the order listed.
+template<typename T, typename SD, size_t NS, size_t ORD, size_t... k>
+void rk_interp_matrix(
+    std::array<state_t<T, SD>, ORD>& coef_mat, // mat[i][j] = j-th elem of i-th state
+    const std::array<state_t<T, SD>, NS+1>& K,
+    const CArray2D<T, NS+1, ORD>& P,
+    std::index_sequence<k...>);
 
 /// @brief Shared step-size control loop: repeatedly calls step_fn(t_new, q_new, t, h, q) -> err_norm,
 /// halving/growing habs until the local error is accepted (mirrors scipy/boost step control).
 /// Same in/out contract as BaseSolver::adapt_impl.
-template<size_t N, typename T, typename StepFn>
-StepResult rk_adapt_step(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q, size_t n,
-                          const T& min_step, const T& max_step, const T& min_step_abs,
-                          const T& safety, const T& max_factor, const T& min_factor,
-                          const T& err_exp, const T& inc_exp, const T& min_err,
-                          int direction, StepFn&& step_fn);
+template<typename T, typename SD, typename StepFn>
+StepResult rk_adapt_step(
+    T& t_new, T& habs_new, state_t<T, SD>& q_new,
+    cache_t<T> t, cache_t<T> habs, cache_t<state_t<T, SD>> q,
+    cache_t<T> min_step, cache_t<T> max_step, cache_t<T> min_step_abs,
+    cache_t<T> safety, cache_t<T> max_factor, cache_t<T> min_factor,
+    cache_t<T> err_exp, cache_t<T> inc_exp, cache_t<T> min_err,
+    int direction, StepFn&& step_fn);
 
 } // namespace ode::detail
 
