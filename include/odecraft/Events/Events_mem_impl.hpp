@@ -177,7 +177,7 @@ bool EventCollection<T, State>::detect_all_between(
         f(worker, t_mask);
 
         // Apply the mask transformation
-        events[masked_idx]->apply_mask(masked_data.masked_vector.data(), t_mask, worker);
+        events[masked_idx]->apply_mask(masked_data.masked_vector, t_mask, worker);
         masked_data.time = t_mask;
         masked_data.idx = masked_idx;
         has_masked_state = true;

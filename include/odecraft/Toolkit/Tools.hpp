@@ -410,7 +410,7 @@ struct SolverRichState : public SolverState<T, SD>{
 
     std::string event_name;
 
-    SolverRichState(State q, T t, T habs, size_t Nsys, size_t Nt, std::string status, std::string event) : Base(std::move(q), std::move(t), std::move(habs), Nsys, Nt, std::move(status)), event_name(std::move(event)) {}
+    SolverRichState(State q, T t, T habs, size_t Nt, std::string status, std::string event) : Base(std::move(q), std::move(t), std::move(habs), Nt, std::move(status)), event_name(std::move(event)) {}
     
     void show(int precision = 15) const {
         Base::show(precision);

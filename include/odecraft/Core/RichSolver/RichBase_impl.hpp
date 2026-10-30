@@ -45,14 +45,14 @@ template<typename Derived, typename T, typename SD, typename JD, typename OdeTyp
 void RichSolver<Derived, T, SD, JD, OdeType, SP>::show_state(int prec) const{
     decltype(auto) worker = this->scratch_0.get();
     this->fill_current_vector(worker);
-    SolverRichState<T, SD>(worker, this->t(), this->stepsize(), this->nsys(), this->step_count(), this->message(), this->current_event().event ? this->current_event().event->name() : "").show(prec);
+    SolverRichState<T, SD>(worker, this->t(), this->stepsize(), this->step_count(), this->message().data(), this->current_event().event ? this->current_event().event->name() : "").show(prec);
 }
 
 // PUBLIC MODIFIERS
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 RichSolver<Derived, T, SD, JD, OdeType, SP>::RichSolver(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> evs) : Base(std::move(ode), t0, std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir), evt_col(std::move(evs)) {
-    this->evt_col.setup(t0, this->nsys(), this->direction());
+    this->evt_col.setup(t0, this->vector_new(), this->direction());
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
@@ -91,7 +91,7 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::advance_to_event(const T& tmax
     bool success = false;
     Base::advance_until(
         tmax,
-        [&](const T& /*t*/, const T* /*state*/, const T* /*extra*/) NDSPAN_LAMBDA_INLINE {
+        [&](const T& /*t*/, const State& /*state*/, const T* /*extra*/) NDSPAN_LAMBDA_INLINE {
             if (EventState<T, State> es = this->current_event()){
                 if (event_idx.empty() || std::find(event_idx.begin(), event_idx.end(), es.idx) != event_idx.end()){
                     success = true;
@@ -158,8 +158,8 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::RequestTimeFloor(T& out) {
     if ((is_event_waiting = evt_col.detect_all_between(
         this->t_old(),
         this->t_new(),
-        this->vector_old().data(),
-        this->vector_new().data(),
+        this->vector_old(),
+        this->vector_new(),
         [this](State& q_out, const T& t){
             this->interp(q_out, t);
         }
