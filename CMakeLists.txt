@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15...3.26)
+cmake_minimum_required(VERSION 3.21...3.26)
 
 project(odecraft LANGUAGES CXX)
 
@@ -33,7 +33,6 @@ target_include_directories(odecraft INTERFACE
 option(ODECRAFT_RK4_DENSE "Enable accurate RK4 dense output for the RK4 solver (extra memory, slightly slower performance)" OFF)
 option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
 option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for performance" OFF)
-option(ODECRAFT_USE_FLAT_AUTODIFF "Use the flat dual layout for compile-time sized systems (dynamic ones stay nested)" OFF)
 option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazex::LazyType<mpfr::mpreal> instead of plain mpfr::mpreal" ON)
 option(ODECRAFT_RHS_THROWS "Allow Rhs and the other user callbacks to throw (otherwise the solvers call them noexcept)" OFF)
 
@@ -52,7 +51,6 @@ target_compile_definitions(odecraft INTERFACE
     $<$<BOOL:${ODECRAFT_RK4_DENSE}>:ODECRAFT_RK4_DENSE>
     $<$<BOOL:${ODECRAFT_NO_WARN}>:ODECRAFT_NO_WARN>
     $<$<BOOL:${ODECRAFT_NO_NAN_CHECK}>:ODECRAFT_NO_NAN_CHECK>
-    $<$<BOOL:${ODECRAFT_USE_FLAT_AUTODIFF}>:ODECRAFT_USE_FLAT_AUTODIFF>
     $<$<BOOL:${ODECRAFT_USE_LAZY_MPREAL}>:ODECRAFT_USE_LAZY_MPREAL>
     $<$<BOOL:${ODECRAFT_RHS_THROWS}>:ODECRAFT_RHS_THROWS>
 )
@@ -64,16 +62,40 @@ if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # ode::crafted is compiled for mpreal_t as well as the built-in floats, so it needs lazex::mpfr
-# (mpreal.h plus the mpfr/gmp system libraries). LAZEX_ENABLE_MPREAL is consumed while xdiff is
+# (mpreal.h plus the mpfr/gmp system libraries). LAZEX_ENABLE_MPREAL is consumed while lazex is
 # configured below, hence setting it here.
 if(ODECRAFT_BUILD_CRAFTED)
     set(LAZEX_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
 endif()
 
 #===========================================================================================
-#                                           xdiff
+#                           mpreal (header-only, used through lazex::mpfr)
 #===========================================================================================
-add_subdirectory(external/xdiff)
+# lazex::mpfr takes mpreal.h from MPREAL_INCLUDE_DIR, and searches the system for it only when
+# that is unset. lazex requires mpreal >= 3.7.2, newer than some distributions ship, so this
+# defaults to the submodule rather than to whichever version happens to be installed.
+set(MPREAL_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/mpreal" CACHE PATH "Directory containing mpreal.h")
+if(LAZEX_ENABLE_MPREAL AND NOT EXISTS "${MPREAL_INCLUDE_DIR}/mpreal.h")
+    message(FATAL_ERROR
+        "mpreal.h was not found in ${MPREAL_INCLUDE_DIR}. If that is the external/mpreal "
+        "submodule, fetch it with `git submodule update --init --recursive`.")
+endif()
+
+#===========================================================================================
+#                           lazex (xdiff's submodule, with a CMakeLists of its own)
+#===========================================================================================
+# Defines lazex::lazex, plus lazex::mpfr when LAZEX_ENABLE_MPREAL is on.
+add_subdirectory(external/xdiff/external/lazex)
+
+#===========================================================================================
+#                           xdiff (header-only, no CMakeLists of its own)
+#===========================================================================================
+add_library(odecraft_xdiff INTERFACE)
+add_library(odecraft::xdiff ALIAS odecraft_xdiff)
+target_include_directories(odecraft_xdiff INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/xdiff/include
+)
+target_link_libraries(odecraft_xdiff INTERFACE lazex::lazex)
 
 #===========================================================================================
 #                           ndspan (header-only, no CMakeLists of its own)
@@ -118,7 +140,7 @@ target_link_libraries(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_LIBRARY})
 # ----------- Link everything into the umbrella target ---------------
 
 target_link_libraries(odecraft INTERFACE
-    xdiff
+    odecraft::xdiff
     odecraft::ndspan
     odecraft::polybox
     odecraft::qhull

@@ -44,32 +44,33 @@ namespace ode{
  * @note This class uses static polymorphism (CRTP).
  *       The solver policy must be RichStatic or RichVirtual for this class to be used.
  */
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-class RichSolver : public BaseSolver<Derived, T, N, SP, OdeType>{
+template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+class RichSolver : public BaseSolver<Derived, T, SD, JD, OdeType, SP>{
 
-    using Base = BaseSolver<Derived, T, N, SP, OdeType>;
+    using Base = BaseSolver<Derived, T, SD, JD, OdeType, SP>;
 
 public:
-
+    using State = Base::State;
+    using RealState = Base::RealState;
     // ACCESSORS
     /**
      * @brief Get a reference to the event collection.
      * @return Const reference to the internal EventCollection.
      */
-    const EventCollection<T>&   event_col() const;
+    const EventCollection<T, State>&   event_col() const;
 
     bool                        at_event(int event_idx = -1) const;
 
-    EventState<T>               current_event() const{
+    EventState<T, State>               current_event() const{
         if (this->at_event()){
-            return EventState<T>{
+            return EventState<T, State>{
                 .event = &evt_col.event(current_idx),
                 .idx = current_idx,
                 .is_masked = is_at_canon_event,
                 .active = true,
             };
         } else {
-            return EventState<T>{.active = false};
+            return EventState<T, State>{.active = false};
         }
     }
 
@@ -117,10 +118,10 @@ public:
 
     // VIRTUAL INTERFACE ALIASES (inline overrides to avoid virtual calls)
     // Accessors
-    const EventCollection<T>&   get_event_col() const { return event_col(); }
+    const EventCollection<T, State>&   get_event_col() const { return event_col(); }
     int                         get_event_idx(const std::string& name) const { return event_idx(name); }
     bool                        get_at_event(int event_idx = -1) const { return at_event(event_idx); }
-    EventState<T>               get_current_event() const { return current_event(); }
+    EventState<T, State>        get_current_event() const { return current_event(); }
     bool                        get_at_canon_event() const { return at_canon_event(); }
     // Modifiers
     bool                        do_advance_to_event(const std::vector<size_t>& event_idx = {}) { return advance_to_event(event_idx); }
@@ -137,7 +138,7 @@ protected:
      * @param events Vector of event pointers to monitor during integration.
      * @see SOLVER_CONSTRUCTOR macro for other parameter details.
      */
-    RichSolver(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> evs = {});
+    RichSolver(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> evs = {});
 
     DEFAULT_RULE_OF_FOUR(RichSolver)
 
@@ -148,7 +149,7 @@ protected:
     bool        Adv_Impl(Args&&... args);
 
     /// @brief Re-adjustment hook for state changes at events.
-    void ReAdjust(const T* new_vector);
+    void ReAdjust(const State& new_state);
 
     struct Accessor : Base::Accessor {};
     
@@ -160,7 +161,7 @@ protected:
     /// but the ReAdjust that writes it into the new state is deferred so that the step stays
     /// interpolable for dense output. Between those two points the masked vector is read
     /// from evt_col's MaskedState, which stores it outside the solver's state buffers.
-    void fill_current_vector_impl(T* out) const;
+    void fill_current_vector_impl(State& out) const;
 
     bool    RequestTimeFloor(T& out);
     //=========================================================
@@ -171,7 +172,7 @@ private:
     bool push_event_queue();
 
     /// @brief Collection of events being monitored.
-    EventCollection<T>                      evt_col;
+    EventCollection<T, State>               evt_col;
     size_t                                  current_idx = 0; //index of the currently triggered event. If not at an event, this should not be accessed.
     int                                     detection_idx = -1; //index of the currently triggered event in the detection order. At the start of an event detection this is -1, at the end of the iteration it is equal to the number of detections - 1.
     bool                                    is_at_event = false;
@@ -182,7 +183,6 @@ private:
 
 
 namespace detail{
-
 /**
  * @brief Type alias that selects between BaseSolver and RichSolver based on policy.
  *
@@ -196,8 +196,8 @@ namespace detail{
  * @tparam RhsType Type of the right-hand side function.
  * @tparam JacPolicy Type of the Jacobian function.
  */
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-using BaseDispatcher = std::conditional_t<(SP == SolverPolicy::RichStatic || SP == SolverPolicy::RichVirtual), RichSolver<Derived, T, N, SP, OdeType>, BaseSolver<Derived, T, N, SP, OdeType>>;
+template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+using BaseDispatcher = std::conditional_t<(SP == SolverPolicy::RichStatic || SP == SolverPolicy::RichVirtual), RichSolver<Derived, T, SD, JD, OdeType, SP>, BaseSolver<Derived, T, SD, JD, OdeType, SP>>;
 
 } // namespace ode::detail
 

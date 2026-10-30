@@ -6,9 +6,15 @@
 
 namespace ode{
 
-template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
-template<isStateInterp<T> Callable>
-bool EventBase<Derived, EP, T, MaskFunc>::locate_state(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f){
+template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
+template<isStateInterp<T, State> Callable>
+bool EventBase<Derived, EP, T, State, MaskFunc>::locate_state(T& out,
+    const T& t_old,
+    const T& t_new,
+    const State& q_old,
+    const State& q_new,
+    Callable&& f){
+
     assert(this->is_setup_ && "Call setup() method before trying to locate an event");
     assert((sgn(t_old, t_new) == this->direction_) && "Invalid direction");
     if (THIS->locate_impl(out, t_old, t_new, q_old, q_new, std::forward<Callable>(f))){
@@ -20,17 +26,29 @@ bool EventBase<Derived, EP, T, MaskFunc>::locate_state(T& out, const T& t_old, c
     }
 }
 
-template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
-template<isStateInterp<T> Callable>
-bool EventBase<Derived, EP, T, MaskFunc>::locate_impl(T& /*t*/, const T& /*t_old*/, const T& /*t_new*/, const T* /*q_old*/, const T* /*q_new*/, Callable&& /*f*/) const{
+template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
+template<isStateInterp<T, State> Callable>
+bool EventBase<Derived, EP, T, State, MaskFunc>::locate_impl(T& /*t*/,
+    const T& /*t_old*/,
+    const T& /*t_new*/,
+    const State& /*q_old*/,
+    const State& /*q_new*/,
+    Callable&& /*f*/) const{
+
     // Always false but only fires if the function is instantiated
     static_assert(sizeof(Callable) == 0, "static override");
     return false;
 }
 
-template<typename T, isObjFun<T> Target, typename MaskFunc, EventPolicy EP, typename Derived>
-template<isStateInterp<T> Callable>
-bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t_out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const{
+template<typename T, typename State, isObjFun<T, State> Target, typename MaskFunc, EventPolicy EP, typename Derived>
+template<isStateInterp<T, State> Callable>
+bool PreciseEvent<T, State, Target, MaskFunc, EP, Derived>::locate_impl(T& t_out,
+    const T& t_old,
+    const T& t_new,
+    const State& q_old,
+    const State& q_new,
+    Callable&& f) const{
+
     T f_old = this->obj_fun(t_old, q_old);
 
     int dir = this->direction() * this->sign_change_dir();
@@ -41,15 +59,15 @@ bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t_out, const
             return false;
         } else {
             T f_new = this->obj_fun(t_new, q_new);
-            T* vec = this->worker.data();
+            decltype(auto) worker = this->worker_.get();
 
             RootStatus rs = bisect_root(
                 t_out,
-                (T*)nullptr,
+                static_cast<T*>(nullptr),
                 [&](const T& t){
                     // interpolate the state vector at time t, and pass the value on vec
-                    f(vec, t);
-                    return this->obj_fun(t, vec);
+                    f(worker, t);
+                    return this->obj_fun(t, worker);
                 },
                 t_old, t_new,
                 std::move(f_old), std::move(f_new),
@@ -64,9 +82,15 @@ bool PreciseEvent<T, Target, MaskFunc, EP, Derived>::locate_impl(T& t_out, const
 }
 
 
-template<typename T, typename MaskFunc, EventPolicy EP, typename Derived>
-template<isStateInterp<T> Callable>
-bool PeriodicEvent<T, MaskFunc, EP, Derived>::locate_impl(T& t, const T& t_old, const T& t_new, const T* /*q_old*/, const T* /*q_new*/, Callable&& /*f*/) const{
+template<typename T, typename State, typename MaskFunc, EventPolicy EP, typename Derived>
+template<isStateInterp<T, State> Callable>
+bool PeriodicEvent<T, State, MaskFunc, EP, Derived>::locate_impl(T& t,
+    const T& t_old,
+    const T& t_new,
+    const State& /*q_old*/,
+    const State& /*q_new*/,
+    Callable&& /*f*/) const{
+
     n_aux_ = n_;
     int d = this->direction();
 
@@ -82,16 +106,22 @@ bool PeriodicEvent<T, MaskFunc, EP, Derived>::locate_impl(T& t, const T& t_old, 
 
 
 
-template<typename T>
-template<isStateInterp<T> Callable>
-bool EventCollection<T>::detect_all_between(const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) {
+template<typename T, typename State>
+template<isStateInterp<T, State> Callable>
+bool EventCollection<T, State>::detect_all_between(
+    const T& t_old,
+    const T& t_new,
+    const State& q_old,
+    const State& q_new,
+    Callable&& f) {
+
     if (this->size() == 0){
         return false;
     }
 
     detections = 0;
     has_masked_state = false;
-    located.fill(false);
+    located.assign(located.size(), false);
 
     // Locate all events and record which ones were found
     for (size_t i=0; i<this->size(); i++){
@@ -143,10 +173,11 @@ bool EventCollection<T>::detect_all_between(const T& t_old, const T& t_new, cons
         T t_mask = event_times[masked_idx];
 
         // Interpolate state at mask time
-        f(worker.data(), t_mask);
+        decltype(auto) worker = this->worker_.get();
+        f(worker, t_mask);
 
         // Apply the mask transformation
-        events[masked_idx]->apply_mask(masked_data.masked_vector.data(), t_mask, worker.data());
+        events[masked_idx]->apply_mask(masked_data.masked_vector.data(), t_mask, worker);
         masked_data.time = t_mask;
         masked_data.idx = masked_idx;
         has_masked_state = true;

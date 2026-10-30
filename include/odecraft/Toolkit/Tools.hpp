@@ -2,22 +2,19 @@
 #define ODECRAFT_TOOLS_HPP
 
 
-#include <complex>
 #include <chrono>
 #include <functional>
 #include <cmath>
 #include <type_traits>
-#include <odecraft/math.hpp>
 #include <xdiff/xdiff.hpp>
 #include <polybox/polybox.hpp>
-#include <xdiff/tools.hpp>
 #include <ndspan/ndspan.hpp>
-#include "Cache.hpp" // IWYU pragma: keep
-#include "Scratch.hpp"
+#include <lazex/lazex.hpp>
 
 
+#define ODECRAFT_LAMBDA(out, t, q) [=](auto& out, const auto& t, const auto& q) -> void 
 
-#define ODECRAFT_LAMBDA(out, t, q) [=](auto* out, const auto& t, auto q) -> void 
+#define ODECRAFT_USING_MATH XDIFF_USING_MATH
 
 namespace ode {
 
@@ -28,46 +25,85 @@ namespace ode {
 // see odecraft/math.hpp.
 ODECRAFT_USING_MATH;
 
-using std::real, std::imag, ndspan::min, ndspan::max, std::complex;
-
-using ndspan::Array, ndspan::Array1D, ndspan::Array2D, ndspan::View, ndspan::MutView, ndspan::View1D, ndspan::View2D, ndspan::View3D, ndspan::Allocation, ndspan::Layout, ndspan::prod;
-
-using xdiff::Vector, xdiff::make_vector;
-
 template<typename cls, typename derived>
 using GetDerived = std::conditional_t<(std::is_same_v<derived, void>), cls, derived>;
 
 // USEFUL ALIASES
 
-// The layout is the only part of DualType that varies with N, and it does not depend
-// on Order. Keeping it in its own constant lets DualType stay a direct alias to a class
-// template specialisation, which leaves `Order` in a *deducible* position.
-//
-// Spelling DualType as std::conditional_t<...> instead would expand it to
-// `typename std::conditional<...>::type`, a dependent qualified name and therefore a
-// non-deduced context: no function template taking a DualType<T, N, Order>* parameter
-// could then deduce Order from its argument, and every such overload would silently
-// drop out of overload resolution (and out of the supportsDualRhs/Jac concepts).
-#ifdef ODECRAFT_USE_FLAT_AUTODIFF
-template<size_t N>
-inline constexpr xdiff::Layout dual_layout = (N > 0) ? xdiff::Layout::Flat : xdiff::Layout::Nested;
-#else
-template<size_t N>
-inline constexpr xdiff::Layout dual_layout = xdiff::Layout::Nested;
-#endif
+using ndspan::Array1D, ndspan::CArray2D, ndspan::FArray2D;
 
-template<typename T, size_t N, size_t Order>
-using DualType = xdiff::Dual<T, (N == 0 ? -1 : int(N)), Order, dual_layout<N>>;
+template<typename F>
+using cache_t = std::conditional_t<
+    std::is_trivially_copyable_v<F>,
+    const F,
+    const F&>;
 
-template<typename T, size_t N, size_t Order>
-using SeedVec = xdiff::SeedVector<T, (N == 0 ? -1 : int(N)), int(Order), dual_layout<N>>;
+template<typename T, typename SD>
+using value_t = SD::template scalar<T>;
+
+template<typename T, typename SD, int Order>
+using dual_t = xdiff::Dual<value_t<T, SD>, SD, Order>;
+
+template<typename T, typename SD, int Order>
+using seed_t = xdiff::Seed<value_t<T, SD>, SD, Order>;
+
+template<typename T, typename SD, int Order>
+using seed_state_t = xdiff::SeedState<value_t<T, SD>, SD, Order>;
+
+template<typename T, typename SD, int Order>
+using dual_state_t = xdiff::dual_state_t<value_t<T, SD>, SD, Order>;
+
+template<typename T, typename SD>
+using real_state_t = SD::template state_type<T>;
+
+template<typename T, typename SD>
+using state_t = SD::template state_type<value_t<T, SD>>;
+
+template<typename T, typename SD>
+using jacmat_t = SD::template jacobian_matrix<value_t<T, SD>>;
+
+template<typename T, typename SD, typename JD, int Order>
+using dual_jacmat_t = SD::template jacobian_matrix<dual_t<T, SD, Order>>;
 
 
-template<typename T, size_t N>
-using JacMat = Array2D<T, N, N, Allocation::Auto, Layout::F>;
+template<typename State>
+class worker_t{
+    static constexpr bool is_trivial = std::is_trivially_copyable_v<State>;
+public:
+    worker_t() = default;
+    worker_t(const State& /*proto*/) requires is_trivial {}
+    worker_t(State proto) requires (!is_trivial) : state_(std::move(proto)) {}
 
+    worker_t(const worker_t&) = default;
+    worker_t(worker_t&&) noexcept = default;
+    worker_t& operator=(const worker_t&) = default;
+    worker_t& operator=(worker_t&&) = default;
+    ~worker_t() = default;
 
-using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+    worker_t& operator=(const State& state){
+        if constexpr (!is_trivial){
+            state_ = state;
+        }
+        return *this;
+    }
+
+    decltype(auto) get() const{
+        if constexpr (is_trivial){
+            return State();
+        } else {
+            return static_cast<State&>(state_);
+        }
+    }
+
+private:
+
+    struct empty_t{};
+    using storage_t = std::conditional_t<
+        is_trivial,
+        empty_t,
+        State>;
+    [[no_unique_address]] mutable storage_t state_;
+};
 
 namespace detail{
 
@@ -81,99 +117,58 @@ inline constexpr bool rhs_may_throw = true;
 inline constexpr bool rhs_may_throw = false;
 #endif
 
-/**
- * @brief True for scalar types whose arithmetic maps onto SIMD registers.
- */
-template<class T>
-struct is_vectorizable : std::bool_constant<
-       std::is_integral_v<T>
-    || std::is_same_v<T, float>
-    || std::is_same_v<T, double>> {};
 
-template<class T>
-inline constexpr bool is_simd_scalar_v =
-    is_vectorizable<std::remove_cv_t<T>>::value;
-
-template<typename F, typename T, size_t N, size_t Order>
-concept supportsDualRhsAt =
-    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, int(Order)> q) {
+template<typename F, typename T, typename State>
+concept supportsRhs =
+    requires(F f, State& out, T t, const State& q) {
         { f.Rhs(out, t, q) } -> std::same_as<void>;
     };
 
-template<typename F, typename T, size_t N, size_t Order>
+template<typename F, int Order, typename T, typename SD>
+concept supportsDualRhsAt =
+    requires(F f, dual_state_t<T, SD, Order>& out, T t, const seed_state_t<T, SD, Order>& q) {
+        { f.Rhs(out, t, q) } -> std::same_as<void>;
+    };
+
+template<typename F, int Order, typename T, typename SD, typename JD>
 concept supportsDualJacAt =
-    requires(F f, DualType<T, N, Order>* out, T t, SeedVec<T, N, int(Order)> q) {
+    requires(F f, dual_jacmat_t<T, SD, JD, Order>& out, T t, const seed_state_t<T, SD, Order>& q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
     };
 
-template<typename F, typename T, size_t N, typename Seq>
+template<typename F, typename T, typename SD, typename Seq>
 inline constexpr bool supportsDualRhsAll = false;
 
-template<typename F, typename T, size_t N, typename Seq>
+template<typename F, typename T, typename SD, typename JD, typename Seq>
 inline constexpr bool supportsDualJacAll = false;
 
-template<typename F, typename T, size_t N, size_t... Is>
-inline constexpr bool supportsDualRhsAll<F, T, N, std::index_sequence<Is...>> =
-    (supportsDualRhsAt<F, T, N, Is + 1> && ...);
+template<typename F, typename T, typename SD, int... Is>
+inline constexpr bool supportsDualRhsAll<F, T, SD, std::integer_sequence<int, Is...>> =
+    (supportsDualRhsAt<F, Is+1, T, SD> && ...);
 
-template<typename F, typename T, size_t N, size_t... Is>
-inline constexpr bool supportsDualJacAll<F, T, N, std::index_sequence<Is...>> =
-    (supportsDualJacAt<F, T, N, Is + 1> && ...);
-
-template<typename T>
-inline T copy_elem(const T& item){
-    return item;
-}
-
-template<typename T>
-inline const T& ref_elem(const T& item){
-    return item;
-}
-
-template<typename T>
-inline T& mut_ref_elem(T& item){
-    return item;
-}
-
+template<typename F, typename T, typename SD, typename JD, int... Is>
+inline constexpr bool supportsDualJacAll<F, T, SD, JD, std::integer_sequence<int, Is...>> =
+    (supportsDualJacAt<F, Is+1, T, SD, JD> && ...);
 } // namespace ode::detail
 
 
-/**
- * @brief Runs body(i) for every i in [0, n), asking for SIMD only where it can be applied.
- *     simd_for<T>(nsys, [&](size_t i){ out[i] += a * rhs[i]; });
- */
-template<typename T, typename F>
-XDIFF_FORCEINLINE void simd_for(size_t n, F&& body){
-    if constexpr (detail::is_simd_scalar_v<T>){
-        #pragma omp simd
-        for (size_t i = 0; i < n; i++){
-            body(i);
-        }
-    } else {
-        for (size_t i = 0; i < n; i++){
-            body(i);
-        }
-    }
-}
-
-
-template<typename F, typename T>
+template<typename F, typename T, typename State>
 concept isRhsFunc = 
-requires(F f, T* out, T t, const T* q){
+requires(F f, State& out, T t, const State& q){
     { f(out, t, q) } -> std::same_as<void>;
 };
 
 // Check if F has a callable Rhs (static or non-static, non-template)
-template<typename F, typename T>
+template<typename F, typename T, typename State>
 concept hasRhsFunc =
-    requires(F f, T* out, T t, const T* q) {
+    requires(F f, State& out, T t, const State& q) {
         { f.Rhs(out, t, q) } -> std::same_as<void>;
     };
 
 // Check if F has a callable Jac (static or non-static, non-template)
-template<typename F, typename T>
+template<typename F, typename T, typename State, typename JM>
 concept hasJacFunc =
-    requires(F f, T* out, T t, const T* q) {
+    requires(F f, JM& out , T t, const State& q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
     };
 
@@ -191,21 +186,15 @@ concept hasNullableJac =
         { f.Jac == nullptr } -> std::convertible_to<bool>;
     };
 
-template<typename F, typename T>
-concept hasRhsOnly = hasRhsFunc<F, T> && !hasJacFunc<F, T>;
-
-template<typename F, typename T>
-concept hasRhsAndJac = hasRhsFunc<F, T> && hasJacFunc<F, T>;
-
-template<typename F, typename T>
+template<typename F, typename T, typename State>
 concept isObjFun =
-requires(F f, T t, const T* q){
+requires(F f, T t, const State& q){
     { f(t, q) } -> std::convertible_to<T>;
 };
 
-template<typename F, typename T>
+template<typename F, typename T, typename State>
 concept isObserver =
-requires(F f, T t, const T* q, const T* t_ptr){
+requires(F f, T t, const State& q, const T* t_ptr){
     { f(t, q, t_ptr) } -> std::convertible_to<bool>;
 };
 
@@ -219,43 +208,61 @@ requires(const F& f, size_t i){
 
 // Satisfied when f.Rhs(out, t, q) allows for `out` and `q`
 // to be Duals of order 1 <= order <= MaxOrder
-template<typename F, typename T, size_t N, size_t MaxOrder>
+template<typename F, int MaxOrder, typename T, typename SD>
 concept supportsDualRhs =
     MaxOrder > 0 &&
-    detail::supportsDualRhsAll<F, T, N, std::make_index_sequence<MaxOrder>>;
+    detail::supportsDualRhsAll<F, T, SD, std::make_integer_sequence<int, MaxOrder>>;
 
 // Satisfied when f.Jac(out, t, q) allows for `out` and `q`
 // to be Duals of order 1 <= order <= MaxOrder
-template<typename F, typename T, size_t N, size_t MaxOrder>
+template<typename F, int MaxOrder, typename T, typename SD, typename JD>
 concept supportsDualJac =
     MaxOrder > 0 &&
-    detail::supportsDualJacAll<F, T, N, std::make_index_sequence<MaxOrder>>;
+    detail::supportsDualJacAll<F, T, SD, JD, std::make_integer_sequence<int, MaxOrder>>;
 
 
-template<typename F, typename T>
-concept isStateInterp = requires(F f, T* out, T t){
+template<typename F, typename T, typename State>
+concept isStateInterp = requires(F f, State& out, T t){
     { f(out, t) } -> std::same_as<void>;
 };
 
-// f(T t, const T* q) -> T
-template<typename T>
-using objfun_t = std::function<T(const T&, const T*)>;
+// f(time, State) -> T
+template<typename T, typename State>
+using objfun_t = std::function<T(const T&, const State&)>;
 
-// f(T* out, const T& t, const T* q) -> void
-template<typename T>
-using rhs_t = std::function<void(T*, const T&, const T*)>;
+// f(State& out, const T& t, const State& q) -> void
+template<typename T, typename State>
+using rhs_t = std::function<void(State& out, T t, const State& q)>;
 
+// f(State& out, const T& t)
+template<typename T, typename State>
+using interp_t = std::function<void(State&, const T&)>;
 
-// f(T* out, const T& t)
-template<typename T>
-using interp_t = std::function<void(T*, const T&)>;
-
-// f(time, state_vector, optional_address)
-template<typename T>
-using observer_t = std::function<bool(const T&, const T*, const T*)>;
+// f(time, state, optional_address)
+template<typename T, typename State>
+using observer_t = std::function<bool(const T&, const State&, const T*)>;
 
 enum class RootPolicy : std::uint8_t { Left, Middle, Right};
 
+template<typename SD, typename U>
+void copy_state(typename SD::template state_type<U>& dst, const typename SD::template state_type<U>& src){
+    SD::for_each([](U& xi, const U& si){
+        xi = si;
+    }, dst, src);
+}
+
+template<typename F>
+double timeit_ms(F&& action) {
+    const auto t_start = std::chrono::steady_clock::now();
+
+    std::forward<F>(action)();
+
+    const auto t_end = std::chrono::steady_clock::now();
+
+    return std::chrono::duration<double, std::milli>(
+        t_end - t_start
+    ).count();
+}
 
 template<typename T>
 inline int sgn(const T& x){
@@ -286,16 +293,6 @@ NDSPAN_INLINE const T& max_ref(const T& a, const T& b){
 template<typename T>
 NDSPAN_INLINE const T& min_ref(const T& a, const T& b){
     return (a < b) ? a : b;
-}
-
-template<typename T>
-bool allEqual(const T* a, const T* b, size_t n){
-    for (size_t i=0; i<n; i++){
-        if (a[i] != b[i]){
-            return false;
-        }
-    }
-    return true;
 }
 
 // Returned after a bisection algorithm
@@ -376,139 +373,19 @@ RootStatus bisect_root(T& out, T* f_out, Callable&& f, T a, T b, const T& ftol){
     );
 }
 
-template<typename T>
-void inv_mat_row_major(T* out, const T* mat, size_t N, T* work, size_t* pivot) {
-    // out: size N*N, row-major order
-    // mat: size N*N, row-major order
-    // work: size N
-    // pivot: size N
-    if (N == 0){
-        return;
-    }
-
-    std::vector<T> lu(N * N);
-    for (size_t i = 0; i < N * N; ++i){
-        lu[i] = mat[i];
-    }
-
-    for (size_t i = 0; i < N; ++i){
-        pivot[i] = i;
-    }
-
-    for (size_t i = 0; i < N; ++i) {
-        size_t max_row = i;
-        T max_val = abs(lu[i*N + i]);
-        for (size_t j = i + 1; j < N; ++j) {
-            T val = abs(lu[j*N + i]);
-            if (val > max_val) { max_val = val; max_row = j; }
-        }
-        // assert(max_val != 0 && "Matrix is singular");
-
-        if (max_row != i) {
-            for (size_t k = 0; k < N; ++k){
-                std::swap(lu[i*N + k], lu[max_row*N + k]);
-            }
-            std::swap(pivot[i], pivot[max_row]);
-        }
-
-        for (size_t j = i + 1; j < N; ++j) {
-            lu[j*N + i] /= lu[i*N + i];
-            for (size_t k = i + 1; k < N; ++k){
-                lu[j*N + k] -= lu[j*N + i] * lu[i*N + k];
-            }
-        }
-    }
-
-    for (size_t col = 0; col < N; ++col) {
-        for (size_t i = 0; i < N; ++i){
-            work[i] = (pivot[i] == col) ? 1 : 0;
-        }
-
-        for (size_t i = 0; i < N; ++i) {
-            for (size_t j = 0; j < i; ++j){
-                work[i] -= lu[i*N + j] * work[j];
-            }
-        }
-
-        for (size_t i = N; i-- > 0;) {
-            for (size_t j = i + 1; j < N; ++j){
-                work[i] -= lu[i*N + j] * work[j];
-            }
-            work[i] /= lu[i*N + i];
-        }
-
-        for (size_t i = 0; i < N; ++i){
-            out[i*N + col] = work[i];
-        }
-
-    }
-}
-
-template<typename T>
-T choose_step(const T& habs, const T& hmin, const T& hmax) {
-    return std::max<T>(std::min<T>(habs, hmax), hmin);
-}
-
-template<typename T>
-T detLU_row_major(T* mat, size_t N) {
-    if (N == 0) {
-        return 1;
-    }
-
-    T det = 1;
-    int sign = 1;
-
-    for (size_t i = 0; i < N; ++i) {
-        // Partial pivoting
-        size_t pivot = i;
-        T max_val = abs(mat[i * N + i]);
-        for (size_t j = i + 1; j < N; ++j) {
-            T val = abs(mat[j * N + i]);
-            if (val > max_val) {
-                pivot = j;
-                max_val = val;
-            }
-        }
-
-        if (max_val == T(0)) {
-            return T(0);
-        }
-
-        if (pivot != i) {
-            // Swap rows
-            for (size_t k = 0; k < N; ++k) {
-                T tmp = mat[i * N + k];
-                mat[i * N + k] = mat[pivot * N + k];
-                mat[pivot * N + k] = tmp;
-            }
-            sign = -sign;
-        }
-
-        det *= mat[i * N + i];
-
-        // Eliminate below pivot
-        for (size_t j = i + 1; j < N; ++j) {
-            T factor = mat[j * N + i] / mat[i * N + i];
-            for (size_t k = i; k < N; ++k) {
-                mat[j * N + k] = mat[j * N + k] - factor * mat[i * N + k];
-            }
-        }
-    }
-
-    return det*sign;
-}
 
 
-template<typename T, size_t N>
+
+template<typename T, typename SD>
 struct SolverState{
-    
-    ndspan::Array1D<T, N> vector;
-    size_t nt;
+    using State = state_t<T, SD>;
+    State state;
     T time;
     T stepsize;
+    size_t nt;
     std::string msg;
 
-    SolverState(const T* q, T t, T habs, size_t nsys, size_t updates, std::string message) : vector(q, nsys), nt(updates), time(t), stepsize(habs), msg(std::move(message)){}
+    SolverState(State q, T t, T habs, size_t updates, std::string message) : state(std::move(q)), time(std::move(t)), stepsize(std::move(habs)), nt(updates), msg(std::move(message)){}
 
     void show(int precision = 15) const {
         std::cout << "\n" << std::setprecision(precision) << 
@@ -516,8 +393,7 @@ struct SolverState{
         "\ttime       : " << time << "\n" <<
         "\tq          : ";
         
-        array_repr(std::cout, vector);
-        std::cout << "\n" <<
+        SD::console(std::cout, state) << "\n" <<
         "\tstepsize   : " << stepsize << "\n" <<
         "\tUpdates    : " << nt << "\n" <<
         "\tStatus     : " << msg << std::endl;
@@ -526,15 +402,18 @@ struct SolverState{
 };
 
 
-template<typename T, size_t N>
-struct SolverRichState : public SolverState<T, N>{
+template<typename T, typename SD>
+struct SolverRichState : public SolverState<T, SD>{
+
+    using Base = SolverState<T, SD>;
+    using State = Base::State;
 
     std::string event_name;
 
-    SolverRichState(const T* q, T t, T habs, size_t Nsys, size_t Nt, std::string status, std::string event) : SolverState<T, N>(q, t, habs, Nsys, Nt, std::move(status)), event_name(std::move(event)) {}
+    SolverRichState(State q, T t, T habs, size_t Nsys, size_t Nt, std::string status, std::string event) : Base(std::move(q), std::move(t), std::move(habs), Nsys, Nt, std::move(status)), event_name(std::move(event)) {}
     
     void show(int precision = 15) const {
-        SolverState<T, N>::show(precision);
+        Base::show(precision);
         std::cout << "\tEvent     : " << event_name << "\n" << std::endl;
     }
 
@@ -556,7 +435,7 @@ struct OdeData {
 
     The jacobian function takes as first input the output matrix (just like the rhs function takes as input the output array).
     However, the output matrix stores its data in a column-major order, but is passed as the flattened array.
-    Since the output matrix, must behave as J(i, j) = df_i / dx_j, the output array must be accessed
+    Since the output matrix must behave as J(i, j) = df_i / dx_j, the output array must be accessed
     as m[j + i*n] = df_i/dx_j, and not m[i + j*n].
 
     In other words, if the jacobian matrix is
@@ -592,9 +471,11 @@ enum class JacPolicy : std::uint8_t{
 };
 
 
-template<typename T, size_t N, hasRhsFunc<T> F>
+template<typename T, typename SD, typename F>
 constexpr JacPolicy getJacPolicy(){
-    if constexpr (hasJacFunc<F, T>){
+    static_assert(hasRhsFunc<F, T, state_t<T, SD>>, "F::Rhs has invalid signature");
+    using JM = SD::template jacobian_matrix<value_t<T, SD>>;
+    if constexpr (hasJacFunc<F, T, state_t<T, SD>, JM>){
         // An explicitly provided Jacobian should
         // always be utilized, even when the Rhs supports Duals
         // If the explicitly provided Jacobian is nullable,
@@ -611,7 +492,7 @@ constexpr JacPolicy getJacPolicy(){
         } else {
             return JacPolicy::Exact;
         }
-    } else if (supportsDualRhs<F, T, N, 1>) {
+    } else if (supportsDualRhs<F, 1, T, SD>) {
         return JacPolicy::Autodiff;
     } else {
         return JacPolicy::Approx;
@@ -628,49 +509,6 @@ enum class StepResult : std::uint8_t {
     SingularMatrixError, // The linear system of an implicit step is singular
 };
 
-
-class Clock{
-
-public:
-
-    Clock() = default;
-
-    inline static TimePoint now(){
-        return std::chrono::high_resolution_clock::now();
-    }
-
-    inline static double as_duration(const TimePoint& t1, const TimePoint& t2){
-        std::chrono::duration<double> duration = t2-t1;
-        return duration.count();
-    }
-
-
-    inline static std::string format_duration(double t){
-        int h = int(t/3600);
-        int m = int((t - h*3600)/60);
-        int s = int(t - h*3600 - m*60);
-
-        return std::to_string(h) + " h, " + std::to_string(m) + " m, " + std::to_string(s) + " s";  
-    }
-
-    inline void start(){
-        _start = now();
-    }
-
-    inline double seconds() const{
-        return as_duration(_start, now());
-    }
-
-    inline std::string message() const{
-        return format_duration(seconds());
-    }
-
-private:
-
-    TimePoint _start;
-};
-
-
 template <typename T>
 inline T inf() {
     // When using -ffast-math, infinity() may cause issues or segfaults
@@ -680,16 +518,6 @@ inline T inf() {
     #else
     return std::numeric_limits<T>::infinity();
     #endif
-}
-
-template<typename T>
-T norm_squared(const T* x, size_t size){
-    //optimize
-    T res = 0;
-    for (size_t i=0; i<size; i++){
-        res += x[i]*x[i];
-    }
-    return res;
 }
 
 template<typename T>
@@ -728,37 +556,40 @@ inline bool isfinite(const T& value) {
 #endif
 }
 
-
-template<typename T>
-T rms_norm(const T* x, size_t size){
-    return sqrt(norm_squared(x, size)/size);
-}
-
-template<typename T>
-T rms_norm(const T* x, const T* scale, size_t size){
-    T norm_sq = 0;
-    for (size_t i=0; i<size; i++){
-        norm_sq += x[i]*x[i]/(scale[i]*scale[i]);
-    }
-    return sqrt(norm_sq/size);
-}
-
-
-template<typename T>
-T norm(const T* x, size_t size){
-    return sqrt(norm_squared(x, size));
-}
-
-template<typename T>
-NDSPAN_INLINE bool all_are_finite(const T* data, size_t n){
+template<typename T, typename SD>
+bool all_are_finite(const state_t<T, SD>& state){
 #ifndef ODECRAFT_NO_NAN_CHECK
-    for (size_t i=0; i<n; i++){
-        if (!isfinite(data[i])){
-            return false;
-        }
-    }
-#endif
+    // TODO optimize similar to allEqual
+    bool res = true;
+    SD::for_each([&res](const value_t<T, SD>& x){
+        res = res ? isfinite(x) : false;
+    }, state);
+    return res;
+#else
     return true;
+#endif
+}
+
+template<typename T, typename SD>
+bool allEqual(const state_t<T, SD>& a, const state_t<T, SD>& b){
+    // TODO optimize so that SD::for_each does not unnecessarily call all
+    // items when the first `false` is encountered.
+    bool res;
+    SD::for_each([&res](const value_t<T, SD>& x, const value_t<T, SD>& y){
+        res = res ? x == y : false;
+    }, a, b);
+    return res;
+}
+
+template<typename T, typename SD>
+T max_elem(const real_state_t<T, SD>& err){
+    T res{0};
+    SD::for_each([&res](const T& xi){
+        if (xi > res){
+            res = xi;
+        }
+    }, err);
+    return res;
 }
 
 
@@ -768,25 +599,6 @@ std::string GetStr(Args&&... args) {
     (out << ... << std::forward<Args>(args));
     return out.str();
 }
-
-inline void show_progress(int n, int target, const Clock& clock){
-    std::cout << "\033[2K\rProgress: " << std::setprecision(2) << n*100./target << "%" <<   " : " << n << "/" << target << "  Time elapsed : " << clock.message() << "      Estimated duration: " << Clock::format_duration(target*clock.seconds()/n) << std::flush;
-}
-
-template<typename... Arg>
-NDSPAN_INLINE void print(Arg&&... x){
-    ((std::cout << x << ' '), ...);
-    std::cout << "\n";
-}
-
-
-template<typename T, typename... Args>
-void update_static_pool(Args&&... args){
-    static_assert(!std::is_trivially_copyable_v<T>, "Updating static variables can reduce performance for trivial types.");
-    lazex::update_workers<T>();
-    detail::update_scratch<T>(std::forward<Args>(args)...);
-}
-
 
 } // namespace ode
 

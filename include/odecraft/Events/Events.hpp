@@ -20,20 +20,20 @@
  */
 
 #include <odecraft/Toolkit/Tools.hpp>
-
+#include <odecraft/Toolkit/Vector.hpp>
 
 namespace ode {
 
 using pbox::owner;
 
-template<typename T>
+template<typename T, typename State>
 class Event;
 
-template<typename T>
-using BoxedEvent = pbox::Box<Event<T>>;
+template<typename T, typename State>
+using BoxedEvent = pbox::Box<Event<T, State>>;
 
-template<typename T>
-using EventList = Vector<BoxedEvent<T>>;
+template<typename T, typename State>
+using EventList = Vector<BoxedEvent<T, State>>;
 
 // ============================================================================
 // DECLARATIONS
@@ -48,7 +48,7 @@ struct EventOptions{
 
 enum class EventPolicy : uint8_t {
     Static,
-    Virtual
+    Virtual,
 };
 
 namespace detail{
@@ -66,7 +66,7 @@ struct EventStaticBase{};
  *
  * @tparam T Scalar type for computations.
  */
-template<typename T>
+template<typename T, typename State>
 class Event{
 
 public:
@@ -85,12 +85,12 @@ public:
     virtual bool                        mask_delayed() const = 0;
 
     /**
-     * @brief Apply the mask transformation to a state vector.
-     * @param[out] out Output array for transformed state.
+     * @brief Apply the mask transformation to a state.
+     * @param[out] out Output state for transformed state.
      * @param[in]  t   Time at which to apply mask.
-     * @param[in]  q   Input state vector to transform.
+     * @param[in]  q   Input state to transform.
      */
-    virtual void                        apply_mask(T* out, const T& t, const T* q) const = 0;
+    virtual void                        apply_mask(State& out, const T& t, const State& q) const = 0;
 
     /// @brief Get the number of times this event has been triggered.
     virtual size_t                      counter() const = 0;
@@ -102,7 +102,7 @@ public:
     virtual bool                        is_located() const = 0;
     
     /// @brief Create a dynamically allocated copy of this event.
-    virtual std::unique_ptr<Event<T>>   clone() const = 0;
+    virtual std::unique_ptr<Event<T, State>>   clone() const = 0;
 
 
     // MODIFIERS
@@ -125,7 +125,12 @@ public:
      * @param interp Interpolation object for intermediate states.
      * @return True if event was detected in the interval.
      */
-    virtual bool locate(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, const interp_t<T>& interp) = 0;
+    virtual bool locate(T& out,
+        const T& t_old,
+        const T& t_new,
+        const State& q_old,
+        const State& q_new,
+        const interp_t<T, State>& interp) = 0;
 
     /// @brief Register the event after it has been located. If the last locate() returned True, this finalizes
     /// the event detection and returns true. Otherwise returns false and nothing happens.
@@ -146,8 +151,8 @@ public:
  * @tparam Derived The derived event class (CRTP pattern).
  * @tparam T       Scalar type for computations.
  */
-template<typename Derived, EventPolicy EP, typename T, typename MaskFunc>
-class EventBase : public std::conditional_t<(EP == EventPolicy::Virtual), Event<T>, detail::EventStaticBase>{
+template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
+class EventBase : public std::conditional_t<(EP == EventPolicy::Virtual), Event<T, State>, detail::EventStaticBase>{
 
 public:
 
@@ -165,21 +170,18 @@ public:
     /**
      * @brief Apply the mask transformation to a state.
      * 
-     * @param out Output array
+     * @param out Output state
      * @param t time
-     * @param q input array
+     * @param q input state
      * @throws std::runtime_error if the event has no mask
      */
-    void                    apply_mask(T* out, const T& t, const T* q) const;
-
-    /// @brief Get the ODE system size.
-    size_t                  nsys() const;
+    void                    apply_mask(State& out, const T& t, const State& q) const;
 
     /// @brief Get the trigger count.
     size_t                  counter() const;
 
     /// @brief Clone this event.
-    std::unique_ptr<Event<T>> clone() const;
+    std::unique_ptr<Event<T, State>> clone() const;
 
     /// @brief Get the integration direction.
     int                     direction() const;
@@ -196,18 +198,28 @@ public:
      * @brief Initialize event for use with solver.
      * 
      * @param t_start Starting time of event detection
-     * @param n_sys Ode system size
+     * @param proto Starting state at t_start
      * @param direction Detection direction (+/- 1)
      * @throws std::domain_error if the direction is not 1 or -1
      */
-    void                    setup(T t_start, size_t n_sys, int direction);
+    void                    setup(T t_start, const State& state, int direction);
 
-    /// @brief Attempt to locate event in an interval. f(T* out, T t) -> void fills the state vector at time t.
-    template<isStateInterp<T> Callable>
-    bool                    locate_state(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f);
+    /// @brief Attempt to locate event in an interval. `f(State& out, T t) -> void`fills the state at time t.
+    template<isStateInterp<T, State> Callable>
+    bool                    locate_state(T& out,
+        const T& t_old,
+        const T& t_new,
+        const State& q_old,
+        const State& q_new,
+        Callable&& f);
 
     /// @brief Attempt to locate event in an interval.
-    bool                    locate(T& out, const T& t_old, const T& t_new, const T* q_old, const T* q_new, const interp_t<T>& interp);
+    bool                    locate(T& out,
+        const T& t_old,
+        const T& t_new,
+        const State& q_old,
+        const State& q_new,
+        const interp_t<T, State>& interp);
 
     /// @brief Register the event after location.
     bool                    lock();
@@ -217,7 +229,7 @@ public:
 
 protected:
 
-    using Main = EventBase<Derived, EP, T, MaskFunc>;
+    using Main = EventBase<Derived, EP, T, State, MaskFunc>;
 
     /**
      * @brief Construct an unmasked event. Only available when there is no mask type to supply.
@@ -247,8 +259,13 @@ protected:
      * @param[in]  f Interpolation function (T* out, const T& t) -> void to compute state at intermediate times (for masked events).
      * @return True if event was found in interval.
      */
-    template<isStateInterp<T> Callable>
-    bool locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const;
+    template<isStateInterp<T, State> Callable>
+    bool locate_impl(T& t,
+        const T& t_old,
+        const T& t_new,
+        const State& q_old,
+        const State& q_new,
+        Callable&& f) const;
 
     // ============= STATIC OVERRIDE (OPTIONAL) ================
 
@@ -266,8 +283,8 @@ private:
     std::string             name_;
     T                       start_;
 protected:
-    /// @brief Auxiliary array for intermediate calculations.
-    mutable Array1D<T>      worker;
+    /// @brief Auxiliary state for intermediate calculations.
+    worker_t<State>         worker_;
     /// @brief User object pointer passed to callbacks.
 private:
     MaskFunc                mask_;
@@ -290,10 +307,10 @@ private:
  * @tparam T       Scalar type for computations.
  * @tparam Derived Optional derived class for further CRTP extension.
  */
-template<typename T, isObjFun<T> Target, typename MaskFunc = std::nullptr_t, EventPolicy EP = EventPolicy::Virtual, typename Derived = void>
-class PreciseEvent : public EventBase<GetDerived<PreciseEvent<T, Target, MaskFunc, EP, Derived>, Derived>, EP, T, MaskFunc>{
+template<typename T, typename State, isObjFun<T, State> Target, typename MaskFunc = std::nullptr_t, EventPolicy EP = EventPolicy::Virtual, typename Derived = void>
+class PreciseEvent : public EventBase<GetDerived<PreciseEvent<T, State, Target, MaskFunc, EP, Derived>, Derived>, EP, T, State, MaskFunc>{
 
-    using Base = EventBase<GetDerived<PreciseEvent<T, Target, MaskFunc, EP, Derived>, Derived>, EP, T, MaskFunc>;
+    using Base = EventBase<GetDerived<PreciseEvent<T, State, Target, MaskFunc, EP, Derived>, Derived>, EP, T, State, MaskFunc>;
     friend Base;
 
 public:
@@ -331,7 +348,7 @@ public:
     );
 
     /// @brief Evaluate the objective function at given time and state.
-    T    obj_fun(const T& t, const T* q) const;
+    T    obj_fun(const T& t, const State& q) const;
 
     /// @brief Get the required sign change direction (+1, -1, or 0).
     int  sign_change_dir() const;
@@ -339,8 +356,13 @@ public:
 protected:
 
     /// @brief Locate zero crossing using bisection.
-    template<isStateInterp<T> Callable>
-    bool locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const;
+    template<isStateInterp<T, State> Callable>
+    bool locate_impl(T& t,
+        const T& t_old,
+        const T& t_new,
+        const State& q_old,
+        const State& q_new,
+        Callable&& f) const;
 
     Target  target = nullptr;      ///< Objective function to monitor.
     int     crossing_dir = 1;        ///< Required crossing direction.
@@ -358,10 +380,10 @@ protected:
  * @tparam T       Scalar type for computations.
  * @tparam Derived Optional derived class for further CRTP extension.
  */
-template<typename T, typename MaskFunc = std::nullptr_t, EventPolicy EP = EventPolicy::Virtual, typename Derived = void>
-class PeriodicEvent : public EventBase<GetDerived<PeriodicEvent<T, MaskFunc, EP, Derived>, Derived>, EP, T, MaskFunc>{
+template<typename T, typename State, typename MaskFunc = std::nullptr_t, EventPolicy EP = EventPolicy::Virtual, typename Derived = void>
+class PeriodicEvent : public EventBase<GetDerived<PeriodicEvent<T, State, MaskFunc, EP, Derived>, Derived>, EP, T, State, MaskFunc>{
 
-    using Base = EventBase<GetDerived<PeriodicEvent<T, MaskFunc, EP, Derived>, Derived>, EP, T, MaskFunc>;
+    using Base = EventBase<GetDerived<PeriodicEvent<T, State, MaskFunc, EP, Derived>, Derived>, EP, T, State, MaskFunc>;
     friend Base;
 
 public:
@@ -400,8 +422,13 @@ protected:
     T           get_t(size_t n) const;
 
     /// @brief Locate next periodic trigger in interval.
-    template<isStateInterp<T> Callable>
-    bool        locate_impl(T& t, const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f) const;
+    template<isStateInterp<T, State> Callable>
+    bool        locate_impl(T& t,
+        const T& t_old,
+        const T& t_new,
+        const State& q_old,
+        const State& q_new,
+        Callable&& f) const;
 
     /// @brief Update period counter on registration.
     void        register_impl();
@@ -418,38 +445,39 @@ private:
 };
 
 
-template<typename T>
+template<typename T, typename State>
 struct MaskedState{
-    Array1D<T> masked_vector;
+    State masked_vector;
     T time;
     size_t idx; //index of event that produced this masked state
 };
 
 
-template<typename T>
+template<typename T, typename State>
 class EventCollection{
 
 public:
-
     /// @brief Construct from vector of event pointers.
-    EventCollection(EventList<T> evs);
+    EventCollection(EventList<T, State> evs);
 
     // Default constructors
     EventCollection() = default;
-    EventCollection(const EventCollection<T>& other) = default;
-    EventCollection(EventCollection<T>&& other) noexcept = default;
-    EventCollection<T>& operator=(const EventCollection<T>& other) = default;
-    EventCollection<T>& operator=(EventCollection<T>&& other) noexcept = default;
+    EventCollection(const EventCollection& other) = default;
+    EventCollection(EventCollection&& other) noexcept = default;
+    EventCollection& operator=(const EventCollection& other) = default;
+    EventCollection& operator=(EventCollection&& other) noexcept = default;
     ~EventCollection() = default;
+
+    using event_t = Event<T, State>;
 
     // ------------------------ ACCESSORS ----------------------------
 
     /// @brief Get event by index.
-    const Event<T>&         event(size_t event_idx) const;
+    const event_t&          event(size_t event_idx) const;
 
     T                       get_time(size_t detection_idx) const;
 
-    const Event<T>*         get_event(size_t detection_idx) const;
+    const event_t*         get_event(size_t detection_idx) const;
 
     bool                    is_located(size_t event_idx) const;
 
@@ -465,7 +493,7 @@ public:
     size_t                  detection_size() const;
 
     /// @brief Initialize all events for use with solver.
-    void                    setup(T t_start, size_t n_sys, int direction);
+    void                    setup(T t_start, const State& state, int direction);
 
     /**
      * @brief Detect all events between two states.
@@ -478,10 +506,15 @@ public:
         * @param q_new State vector at t_new.
         * @param f Interpolation function (T* out, const T& t) -> void to compute state at intermediate times (for masked events).
      */
-    template<isStateInterp<T> Callable>
-    bool                    detect_all_between(const T& t_old, const T& t_new, const T* q_old, const T* q_new, Callable&& f);
+    template<isStateInterp<T, State> Callable>
+    bool                    detect_all_between(
+        const T& t_old,
+        const T& t_new,
+        const State& q_old,
+        const State& q_new,
+        Callable&& f);
 
-    const MaskedState<T>*   masked_state() const;
+    const MaskedState<T, State>*   masked_state() const;
 
     /// @brief Reset all events to initial state.
     void                    reset(int direction = 0);
@@ -492,20 +525,20 @@ private:
 
 
     std::unordered_map<std::string, size_t> idx_of_name;    // Map from event names to indices for quick lookup.
-    Array1D<owner<Event<T>>>                events;
-    Array1D<T>                              event_times;    // Detection time of each event. If located[i] is false, this value is invalid.
-    Array1D<T>                              worker;       // Auxiliary array for intermediate calculations during detection.
-    Array1D<size_t>                         detection_order;  // Indices of events sorted by detection time after detect_all_between() is called.
-    Array1D<bool>                           located;
-    MaskedState<T>                          masked_data;
+    std::vector<owner<event_t>>             events;
+    std::vector<T>                          event_times;    // Detection time of each event. If located[i] is false, this value is invalid.
+    std::vector<size_t>                     detection_order;  // Indices of events sorted by detection time after detect_all_between() is called.
+    std::vector<bool>                       located;
+    MaskedState<T, State>                   masked_data;
+    worker_t<State>                         worker_;       // Auxiliary state for intermediate calculations during detection.
     size_t                                  detections = 0;
     bool                                    has_masked_state = false;
 };
 
 
-template<typename T>
+template<typename T, typename State>
 struct EventState{
-    const Event<T>* event = nullptr; // Pointer to the event that triggered, or nullptr if no event is active
+    const Event<T, State>* event = nullptr; // Pointer to the event that triggered, or nullptr if no event is active
     size_t idx = 0; //index of the event in the event collection. garbage if the event is not active
     bool is_masked = false;
     bool active = false; //true if the solver is currently at this event
@@ -514,14 +547,14 @@ struct EventState{
 };
 
 
-template<typename T, isObjFun<T> Target>
-inline BoxedEvent<T> make_precise_event(std::string name, Target obj_fun, T event_tol=1e-20, int dir=0){
-    return pbox::make_box<PreciseEvent<T, Target, std::nullptr_t, EventPolicy::Virtual>>(std::move(name), std::move(obj_fun), std::move(event_tol), dir);
+template<typename T, typename State, isObjFun<T, State> Target>
+inline BoxedEvent<T, State> make_precise_event(std::string name, Target obj_fun, T event_tol=1e-20, int dir=0){
+    return pbox::make_box<PreciseEvent<T, State, Target, std::nullptr_t, EventPolicy::Virtual>>(std::move(name), std::move(obj_fun), std::move(event_tol), dir);
 }
 
-template<typename T, isObjFun<T> Target, isRhsFunc<T> MaskFunc>
-inline BoxedEvent<T> make_precise_event(std::string name, Target obj_fun, T event_tol, int dir, MaskFunc mask, bool delay_mask=false){
-    return pbox::make_box<PreciseEvent<T, Target, MaskFunc, EventPolicy::Virtual>>(
+template<typename T, typename State, isObjFun<T, State> Target, isRhsFunc<T, State> MaskFunc>
+inline BoxedEvent<T, State> make_precise_event(std::string name, Target obj_fun, T event_tol, int dir, MaskFunc mask, bool delay_mask=false){
+    return pbox::make_box<PreciseEvent<T, State, Target, MaskFunc, EventPolicy::Virtual>>(
         std::move(name),
         std::move(obj_fun),
         std::move(event_tol),
@@ -532,13 +565,13 @@ inline BoxedEvent<T> make_precise_event(std::string name, Target obj_fun, T even
 }
 
 
-template<typename T>
-inline BoxedEvent<T> make_periodic_event(std::string name, T period){
-    return pbox::make_box<PeriodicEvent<T>>(std::move(name), std::move(period));
+template<typename T, typename State>
+inline BoxedEvent<T, State> make_periodic_event(std::string name, T period){
+    return pbox::make_box<PeriodicEvent<T, State>>(std::move(name), std::move(period));
 }
 
-template<typename T, isRhsFunc<T> MaskFunc>
-inline BoxedEvent<T> make_periodic_event(std::string name, T period, MaskFunc mask, bool delay_mask=false){
+template<typename T, typename State, isRhsFunc<T, State> MaskFunc>
+inline BoxedEvent<T, State> make_periodic_event(std::string name, T period, MaskFunc mask, bool delay_mask=false){
     return pbox::make_box<PeriodicEvent<T, MaskFunc>>(
         std::move(name),
         std::move(period),
@@ -548,10 +581,10 @@ inline BoxedEvent<T> make_periodic_event(std::string name, T period, MaskFunc ma
 }
 
 
-template<typename T, typename... U>
-requires (std::is_same_v<T, U> && ...)
-inline EventList<T> make_event_list(BoxedEvent<U>... events){
-    return make_vector<BoxedEvent<T>>(std::move(events)...);
+template<typename T, typename State, typename... U, typename... V>
+requires ((std::is_same_v<T, U> && std::is_same_v<State, V>) && ...)
+inline EventList<T, State> make_event_list(BoxedEvent<U, V>... events){
+    return make_vector<BoxedEvent<T, State>>(std::move(events)...);
 }
 
 

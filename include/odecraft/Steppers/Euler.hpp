@@ -5,28 +5,30 @@
 
 namespace ode{
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
-class Euler : public detail::BaseDispatcher<GetDerived<Euler<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
+class Euler : public detail::BaseDispatcher<GetDerived<Euler<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
 
-    using Base = detail::BaseDispatcher<GetDerived<Euler<T, N, SP, OdeType, Derived>, Derived>, T, N, SP, OdeType>;
+    using Base = detail::BaseDispatcher<GetDerived<Euler<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
 
 public:
+    using State = state_t<T, SD>;
+    using RealState = Base::RealState;
 
     static constexpr int ERR_EST_ORDER = 1;
     static constexpr bool IS_IMPLICIT = false;
 
     DEFAULT_RULE_OF_FOUR(Euler)
-    Euler(OdeType ode, T t0, View1D<T, N> q0, T stepsize, int dir=1, EventList<T> events = {});
+    Euler(OdeType ode, T t0, State q0, T stepsize, int dir=1, EventList<T, State> events = {});
 
     // Constructor signature that follows the main constructor pattern
-    Euler(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
+    Euler(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events = {});
 
     Stepper method() const;
 
 protected:
 
-    StepResult  adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
-    void        interp_impl(T* result, const T& t) const;
+    StepResult  adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State&);
+    void        interp_impl(State& result, const T& t) const;
     auto        local_interp() const;
 
 };
@@ -34,9 +36,9 @@ protected:
 
 namespace detail{
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Stepper::Euler, T, N, SP, OdeType, Derived>{
-    using type = Euler<T, N, SP, OdeType, Derived>;
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+struct SolverTypeGetter<Stepper::Euler, SP, T, SD, JD, OdeType, Derived>{
+    using type = Euler<T, SD, JD, OdeType, SP, Derived>;
 };
 
 } // namespace ode::detail

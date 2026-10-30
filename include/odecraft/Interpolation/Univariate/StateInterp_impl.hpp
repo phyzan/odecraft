@@ -134,11 +134,8 @@ std::string Interval<T>::signature(int prec) const{
 }
 
 
-template<typename T, size_t N>
-Interpolator<T, N>::Interpolator(size_t n) : _array_size(n) {}
-
-template<typename T, size_t N>
-void Interpolator<T, N>::call(T* result, const T& t) const{
+template<typename T, typename SD>
+void Interpolator<T, SD>::call(State& result, const T& t) const{
     if (this->is_out_of_bounds(t)){
         std::ostringstream oss;
         oss << std::setprecision(8) << "Scalar " << t << " is out of bounds in LinkedInterpolator with range " << interval().signature(8);
@@ -147,93 +144,81 @@ void Interpolator<T, N>::call(T* result, const T& t) const{
     this->_call_impl(result, t);
 }
 
-template<typename T, size_t N>
-Array1D<T, N> Interpolator<T, N>::make_call(const T& t) const{
-    Array1D<T, N> res(this->array_size());
-    this->call(res.data(), t);
-    return res;
-}
 
-template<typename T, size_t N>
-size_t Interpolator<T, N>::array_size() const{
-    return _array_size;
-}
-
-template<typename T, size_t N>
-LocalInterpolator<T, N>::LocalInterpolator(const T& t, const T* q, size_t size) : Interpolator<T, N>(size), _interval(t), _tmin(t), _tmax(t), _q_old(q, size), _q(q, size){}
+template<typename T, typename SD>
+LocalInterpolator<T, SD>::LocalInterpolator(T t, State q) : _interval(t), _tmin(t), _tmax(std::move(t)), _q_old(q), _q(std::move(q)){}
 
 
-template<typename T, size_t N>
-LocalInterpolator<T, N>::LocalInterpolator(T t1, T t2, const T* y1, const T* y2, size_t size, int left_bdr, int right_bdr) : Interpolator<T, N>(size), _interval(t1, t2, left_bdr, right_bdr), _tmin(t1), _tmax(t2), _q_old(y1, size), _q(y2, size){}
+template<typename T, typename SD>
+LocalInterpolator<T, SD>::LocalInterpolator(T t1, T t2, State y1, State y2, int left_bdr, int right_bdr) : _interval(t1, t2, left_bdr, right_bdr), _tmin(std::move(t1)), _tmax(std::move(t2)), _q_old(std::move(y1)), _q(std::move(y2)){}
 
-template<typename T, size_t N>
-const Interval<T>& LocalInterpolator<T, N>::interval() const{
+template<typename T, typename SD>
+const Interval<T>& LocalInterpolator<T, SD>::interval() const{
     return _interval;
 }
 
-template<typename T, size_t N>
-const Array1D<T, N>& LocalInterpolator<T, N>::q_start() const{
+template<typename T, typename SD>
+const LocalInterpolator<T, SD>::State& LocalInterpolator<T, SD>::q_start() const{
     return _q_old;
 }
 
-template<typename T, size_t N>
-const Array1D<T, N>& LocalInterpolator<T, N>::q_end() const{
+template<typename T, typename SD>
+const LocalInterpolator<T, SD>::State& LocalInterpolator<T, SD>::q_end() const{
     return _q;
 }
 
-template<typename T, size_t N>
-size_t LocalInterpolator<T, N>::order() const{
+template<typename T, typename SD>
+size_t LocalInterpolator<T, SD>::order() const{
     return 1;
 }
 
-template<typename T, size_t N>
-int LocalInterpolator<T, N>::start_bdr() const{
+template<typename T, typename SD>
+int LocalInterpolator<T, SD>::start_bdr() const{
     return _interval.start_bdr();
 }
 
-template<typename T, size_t N>
-int LocalInterpolator<T, N>::end_bdr() const{
+template<typename T, typename SD>
+int LocalInterpolator<T, SD>::end_bdr() const{
     return _interval.end_bdr();
 }
 
-template<typename T, size_t N>
-int LocalInterpolator<T, N>::dir() const{
+template<typename T, typename SD>
+int LocalInterpolator<T, SD>::dir() const{
     return _interval.dir();
 }
 
-template<typename T, size_t N>
-const T& LocalInterpolator<T, N>::t_start() const{
+template<typename T, typename SD>
+const T& LocalInterpolator<T, SD>::t_start() const{
     return _interval.start();
 }
 
-template<typename T, size_t N>
-const T& LocalInterpolator<T, N>::t_end() const{
+template<typename T, typename SD>
+const T& LocalInterpolator<T, SD>::t_end() const{
     return _interval.end();
 }
 
-template<typename T, size_t N>
-bool LocalInterpolator<T, N>::is_out_of_bounds(const T& t) const{
+template<typename T, typename SD>
+bool LocalInterpolator<T, SD>::is_out_of_bounds(const T& t) const{
     return !_interval.contains(t);
 }
 
-template<typename T, size_t N>
-bool LocalInterpolator<T, N>::can_link_with(const Interpolator<T, N>& other) const{
+template<typename T, typename SD>
+bool LocalInterpolator<T, SD>::can_link_with(const Interpolator<T, SD>& other) const{
     
-    if (const auto* p = dynamic_cast<const LocalInterpolator<T, N>*>(&other)){
+    if (const auto* p = dynamic_cast<const LocalInterpolator<T, SD>*>(&other)){
         return _interval.can_link_with(p->_interval);
-    }
-    else{
+    } else {
         return (t_end() == other.t_end()) && (end_bdr()*other.start_bdr() != 1) && !(end_bdr() == 0 && other.start_bdr() == 0) && (dir()+other.dir() != 0);
     }
 }
 
-template<typename T, size_t N>
-std::unique_ptr<Interpolator<T, N>> LocalInterpolator<T, N>::clone() const{
-    return std::make_unique<LocalInterpolator<T, N>>(*this);
+template<typename T, typename SD>
+std::unique_ptr<Interpolator<T, SD>> LocalInterpolator<T, SD>::clone() const{
+    return std::make_unique<LocalInterpolator<T, SD>>(*this);
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::adjust_start(const T& t_start){
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::adjust_start(const T& t_start){
     int d = _interval.dir();
     if ( t_start*d < _interval.end()*d && t_start*d >= _tmin*d){
         _interval.adjust_start(t_start);
@@ -243,8 +228,8 @@ void LocalInterpolator<T, N>::adjust_start(const T& t_start){
     }
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::adjust_end(const T& t_end){
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::adjust_end(const T& t_end){
     int d = _interval.dir();
     if (this->interval().is_point()){
         if (t_end != _interval.start()){
@@ -258,9 +243,9 @@ void LocalInterpolator<T, N>::adjust_end(const T& t_end){
     }
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::link_with(Interpolator<T, N>& other){
-    if (auto* p = dynamic_cast<LocalInterpolator<T, N>*>(&other)){
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::link_with(Interpolator<T, SD>& other){
+    if (auto* p = dynamic_cast<LocalInterpolator<T, SD>*>(&other)){
         _interval.link_with(p->_interval);
     }
     else{
@@ -268,83 +253,64 @@ void LocalInterpolator<T, N>::link_with(Interpolator<T, N>& other){
     }
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::link_after(Interpolator<T, N>& other){
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::link_after(Interpolator<T, SD>& other){
     other.link_with(*this);
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::close_end(){
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::close_end(){
     _interval.close_end();
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::close_start(){
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::close_start(){
     _interval.close_start();
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::open_end(){
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::open_end(){
     _interval.open_end();
 }
 
-template<typename T, size_t N>
-const T& LocalInterpolator<T, N>::_t_min() const{
+template<typename T, typename SD>
+const T& LocalInterpolator<T, SD>::_t_min() const{
     return _tmin;
 }
 
-template<typename T, size_t N>
-const T& LocalInterpolator<T, N>::_t_max() const{
+template<typename T, typename SD>
+const T& LocalInterpolator<T, SD>::_t_max() const{
     return _tmax;
 }
 
-template<typename T, size_t N>
-void LocalInterpolator<T, N>::_call_impl(T* result, const T& t) const{
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::_call_impl(State& result, const T& t) const{
     if (t == _interval.start()){
-        std::copy(
-            _q_old.data(),
-            _q_old.data()+this->array_size(),
-            result
-        );
+        SD::for_each([](value_t<T, SD>& x, const value_t<T, SD>& y){
+            x = y;
+        }, result, _q_old);
     } else if (t == _interval.end()) {
-        std::copy(
-            _q.data(),
-            _q.data()+this->array_size(),
-            result
-        );
+        SD::for_each([](value_t<T, SD>& x, const value_t<T, SD>& y){
+            x = y;
+        }, result, _q);
     } else {
-        return lin_interp(result, t, _interval.start(), _interval.end(), _q_old.data(), _q.data(), this->array_size());
+        return lin_interp<T, SD>(result, t, _interval.start(), _interval.end(), _q_old, _q);
     }
 }
 
+template<typename T, typename SD>
+LinkedInterpolator<T, SD>::LinkedInterpolator(BoxedInterp<T, SD> segment) : _dir(segment->dir()){
+    boxes_.push_back(std::move(segment));
+}
 
-
-template<typename T, size_t N, typename INTERPOLATOR>
-LinkedInterpolator<T, N, INTERPOLATOR>::LinkedInterpolator(const INTERPOLATOR* other) : Interpolator<T, N>(other->q_start().size()), _dir(other->dir()){
-    if constexpr (_is_void){
-        pbox::Box<INTERPOLATOR> box = other->clone();
-        boxes_.push_back(std::move(box));
-    }
-    else{
-        interps_.push_back(*other);
-    }
+template<typename T, typename SD>
+LinkedInterpolator<T, SD>::LinkedInterpolator(T t, State q) {
+    boxes_.push_back(pbox::make_box<LocalInterpolator<T, SD>>(std::move(t), std::move(q)));
 }
 
 
-
-template<typename T, size_t N, typename INTERPOLATOR>
-LinkedInterpolator<T, N, INTERPOLATOR>::LinkedInterpolator(const T& t, const T* q, size_t size) : Interpolator<T, N>(size){
-    if constexpr (_is_void) {
-        boxes_.push_back(pbox::make_box<LocalInterpolator<T, N>>(t, q, size));
-    }
-    else{
-        interps_.push_back(INTERPOLATOR(t, q, size));
-    }
-}
-
-
-template<typename T, size_t N, typename INTERPOLATOR>
-const Interval<T>& LinkedInterpolator<T, N, INTERPOLATOR>::interval() const{
+template<typename T, typename SD>
+const Interval<T>& LinkedInterpolator<T, SD>::interval() const{
     if (_interval_cached){
         return _interval;
     } else if (t_start() == t_end()){
@@ -357,67 +323,62 @@ const Interval<T>& LinkedInterpolator<T, N, INTERPOLATOR>::interval() const{
     return _interval;
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-size_t LinkedInterpolator<T, N, INTERPOLATOR>::size() const{
-    if constexpr (_is_void){
-        return boxes_.size();
-    }
-    else{
-        return interps_.size();
-    }
+template<typename T, typename SD>
+size_t LinkedInterpolator<T, SD>::size() const{
+    return boxes_.size();
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const Array1D<T, N>& LinkedInterpolator<T, N, INTERPOLATOR>::q_start() const{
+template<typename T, typename SD>
+const LinkedInterpolator<T, SD>::State& LinkedInterpolator<T, SD>::q_start() const{
     return _get(0).q_start();
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const Array1D<T, N>& LinkedInterpolator<T, N, INTERPOLATOR>::q_end() const{
+template<typename T, typename SD>
+const LinkedInterpolator<T, SD>::State& LinkedInterpolator<T, SD>::q_end() const{
     return _get_last().q_end();
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-int LinkedInterpolator<T, N, INTERPOLATOR>::start_bdr() const{
+template<typename T, typename SD>
+int LinkedInterpolator<T, SD>::start_bdr() const{
     return _get(0).start_bdr();
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-int LinkedInterpolator<T, N, INTERPOLATOR>::end_bdr() const{
+template<typename T, typename SD>
+int LinkedInterpolator<T, SD>::end_bdr() const{
     return _get_last().end_bdr();
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
- int LinkedInterpolator<T, N, INTERPOLATOR>::dir() const{
+template<typename T, typename SD>
+ int LinkedInterpolator<T, SD>::dir() const{
     return _dir;
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const T& LinkedInterpolator<T, N, INTERPOLATOR>::t_start() const{
+template<typename T, typename SD>
+const T& LinkedInterpolator<T, SD>::t_start() const{
     return _get(0).t_start();
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const T& LinkedInterpolator<T, N, INTERPOLATOR>::t_end() const{
+template<typename T, typename SD>
+const T& LinkedInterpolator<T, SD>::t_end() const{
     return _get_last().t_end();
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::interpolant(size_t i) const{
+template<typename T, typename SD>
+const Interpolator<T, SD>& LinkedInterpolator<T, SD>::interpolant(size_t i) const{
     return _get_safe(i);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::last_interpolant() const{
+template<typename T, typename SD>
+const Interpolator<T, SD>& LinkedInterpolator<T, SD>::last_interpolant() const{
     return _get_last();
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-bool LinkedInterpolator<T, N, INTERPOLATOR>::is_out_of_bounds(const T& t) const {
+template<typename T, typename SD>
+bool LinkedInterpolator<T, SD>::is_out_of_bounds(const T& t) const {
     if (t == t_start()){
         return _get(0).is_out_of_bounds(t);
     }
@@ -429,73 +390,43 @@ bool LinkedInterpolator<T, N, INTERPOLATOR>::is_out_of_bounds(const T& t) const 
     }
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-bool LinkedInterpolator<T, N, INTERPOLATOR>::can_link_with(const Interpolator<T, N>& interpolant) const{
+template<typename T, typename SD>
+bool LinkedInterpolator<T, SD>::can_link_with(const Interpolator<T, SD>& interpolant) const{
     return _get_last().can_link_with(interpolant) || _can_replace_last_with(interpolant);
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-std::unique_ptr<Interpolator<T, N>> LinkedInterpolator<T, N, INTERPOLATOR>::clone() const{
-    return std::make_unique<LinkedInterpolator<T, N, INTERPOLATOR>>(*this);
+template<typename T, typename SD>
+std::unique_ptr<Interpolator<T, SD>> LinkedInterpolator<T, SD>::clone() const{
+    return std::make_unique<LinkedInterpolator<T, SD>>(*this);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::link_with(Interpolator<T, N>& interpolant){
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::link_with(Interpolator<T, SD>& interpolant){
     _interval_cached = false;
     _get_last().link_with(interpolant);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::link_after(Interpolator<T, N>& interpolant){
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::link_after(Interpolator<T, SD>& interpolant){
     _interval_cached = false;
     _get(0).link_after(interpolant);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::adjust_start(const T& t_new) {
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::adjust_start(const T& t_new) {
     _interval_cached = false;
     _get(0).adjust_start(t_new);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::adjust_end(const T& t_new) {
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::adjust_end(const T& t_new) {
     _interval_cached = false;
     _get_last().adjust_end(t_new);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::expand(const INTERPOLATOR& interpolant) {
-    _interval_cached = false;
-    if (_can_replace_last_with(interpolant)){
-        if constexpr (_is_void){
-            boxes_.back() = interpolant.clone();
-        }
-        else{
-            interps_.back() = interpolant;
-        }
-    }
-    else if(_get_last().can_link_with(interpolant)){
-        if constexpr (_is_void){
-            boxes_.push_back(interpolant.clone());
-            boxes_[size()-2]->link_with(*boxes_[size()-1]);
-        }
-        else{
-            interps_.push_back(interpolant);
-            interps_[size()-2].link_with(interps_[size()-1]);
-        }
-    }
-    else{
-        this->_throw_invalid_interpolant(interpolant);
-    }
-
-    if ((interpolant.dir() != 0) && (_dir == 0)){
-        _dir = interpolant.dir();
-    }
-}
-
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::expand_by_owning(pbox::Box<Interpolator<T, N>>&& interpolant) requires (_is_void){
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::expand(pbox::Box<Interpolator<T, SD>>&& interpolant) {
     _interval_cached = false;
     int dir = interpolant->dir();
     if (_can_replace_last_with(*interpolant)){
@@ -512,29 +443,29 @@ void LinkedInterpolator<T, N, INTERPOLATOR>::expand_by_owning(pbox::Box<Interpol
     }
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::open_end(){
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::open_end(){
     _interval_cached = false;
     _get_last().open_end();
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::close_end(){
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::close_end(){
     _interval_cached = false;
     _get_last().close_end();
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::close_start(){
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::close_start(){
     _interval_cached = false;
     _get(0).close_end();
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-size_t LinkedInterpolator<T, N, INTERPOLATOR>::_search_index(const T& t) const{
+template<typename T, typename SD>
+size_t LinkedInterpolator<T, SD>::_search_index(const T& t) const{
     //no need to check for out of bounds, it must have just been checked before this function call.
     //t must NOT be equal to the _t_end(). This case has already been taken care of.
 
@@ -562,111 +493,87 @@ size_t LinkedInterpolator<T, N, INTERPOLATOR>::_search_index(const T& t) const{
     return right;
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-bool LinkedInterpolator<T, N, INTERPOLATOR>::_can_replace_last_with(const Interpolator<T, N>& other) const {
+template<typename T, typename SD>
+bool LinkedInterpolator<T, SD>::_can_replace_last_with(const Interpolator<T, SD>& other) const {
     //ideally we should check that the vectors match in the boundary, but this might be too expensive, so the user should check it if necessary.
     return (_get_last().t_start() == _get_last().t_end()) && other.start_bdr() == 1 && (_dir + other.dir() != 0);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::_call_impl(T* result, const T& t) const{
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::_call_impl(State& result, const T& t) const{
     size_t ind = _search_index(t);
     _get(ind).call(result, t);
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::_get(size_t i) {
-    if constexpr (_is_void){
-        return *boxes_[i];
-    }
-    else{
-        return interps_[i];
-    }
+template<typename T, typename SD>
+Interpolator<T, SD>& LinkedInterpolator<T, SD>::_get(size_t i) {
+    return *boxes_[i];
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::_get(size_t i) const{
-    if constexpr (_is_void){
-        return *boxes_[i];
-    }
-    else{
-        return interps_[i];
-    }
+template<typename T, typename SD>
+const Interpolator<T, SD>& LinkedInterpolator<T, SD>::_get(size_t i) const{
+    return *boxes_[i];
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::_get_last() {
-    if constexpr (_is_void){
-        return *boxes_.back();
-    }
-    else{
-        return interps_.back();
-    }
+template<typename T, typename SD>
+Interpolator<T, SD>& LinkedInterpolator<T, SD>::_get_last() {
+    return *boxes_.back();
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::_get_last() const {
-    if constexpr (_is_void){
-        return *boxes_.back();
-    }
-    else{
-        return interps_.back();
-    }
+template<typename T, typename SD>
+const Interpolator<T, SD>& LinkedInterpolator<T, SD>::_get_last() const {
+    return *boxes_.back();
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::_get_safe(size_t i){
-    if constexpr (_is_void){
-        return *boxes_.at(i);
-    }
-    else{
-        return interps_.at(i);
-    }
+template<typename T, typename SD>
+Interpolator<T, SD>& LinkedInterpolator<T, SD>::_get_safe(size_t i){
+    return *boxes_.at(i);
 }
 
-template<typename T, size_t N, typename INTERPOLATOR>
-const INTERPOLATOR& LinkedInterpolator<T, N, INTERPOLATOR>::_get_safe(size_t i) const {
-    if constexpr (_is_void){
-        return *boxes_.at(i);
-    }
-    else{
-        return interps_.at(i);
-    }
+template<typename T, typename SD>
+const Interpolator<T, SD>& LinkedInterpolator<T, SD>::_get_safe(size_t i) const {
+    return *boxes_.at(i);
 }
 
 
-template<typename T, size_t N, typename INTERPOLATOR>
-void LinkedInterpolator<T, N, INTERPOLATOR>::_throw_invalid_interpolant(const Interpolator<T, N>& interpolant) const {
+template<typename T, typename SD>
+void LinkedInterpolator<T, SD>::_throw_invalid_interpolant(const Interpolator<T, SD>& interpolant) const {
     throw std::runtime_error("Invalid interpolant in LinkedInterpolator. Cannot join intervals " + _get_last().interval().signature() + " + " + interpolant.interval().signature());
 }
 
 
-template<typename T>
-void lin_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, size_t size){
+template<typename T, typename SD>
+void lin_interp(state_t<T, SD>& result, const T& t, const T& t1, const T& t2, const state_t<T, SD>& y1, const state_t<T, SD>& y2){
     assert( (t != t1 && t != t2) && "lin_interp must only be called on the open interval");
 
     auto interval = t2 - t1;
     auto delta_t = t - t1;
-    simd_for<T>(size, [&](size_t i){
-        result[i] = y1[i] + (y2[i]-y1[i])/interval * delta_t;
-    });
+
+    SD::for_each([&interval, &delta_t](value_t<T, SD>& r_i, const value_t<T, SD>& y1_i, const value_t<T, SD>& y2_i){
+        r_i = y1_i + (y2_i - y1_i) / interval * delta_t;
+    }, result, y1, y2);
 }
 
-template<typename T>
-void coef_mat_interp(T* result, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* coef_mat, size_t order, size_t size){
+template<typename T, typename SD>
+void coef_mat_interp(state_t<T, SD>& result, const T& t, const T& t1, const T& t2, const state_t<T, SD>& y1, const state_t<T, SD>& /*y2*/, const state_t<T, SD>* coef_mat, size_t order){
     //coef_mat dimensions: size x order
     assert( (t != t1 && t != t2) && "coef_mat_interp must only be called on the open interval");
 
-    T h = t2-t1;
-    T x = (t-t1)/h;
+    auto h = t2-t1;
+    auto x = (t-t1)/h;
 
-    for (size_t i=0; i<size; i++){
-        T sum = 0;
-        for (size_t j=0; j<order; j++){
-            sum += coef_mat[i*order + j] * pow(x, j+1); // C_ij * x^(j+1)
-        }
-        result[i] = y1[i] + h*sum;
+    using S = value_t<T, SD>;
+
+    SD::for_each([](S& r_i, const S& y1_i){
+        r_i = y1_i;
+    }, result, y1);
+
+    for (size_t j=0; j<order; ++j){
+        const T x_pow = pow(x, j+1);
+        SD::for_each([&h, &x_pow](S& r_i, const S& c_i){
+            r_i += h*c_i * x_pow;
+        }, result, coef_mat[j]);
     }
 }
 

@@ -3,121 +3,144 @@
 
 
 #include "BDF.hpp"
-#include "odecraft/Toolkit/Cache.hpp"
+#include "odecraft/Toolkit/Scratch.hpp"
+#include "odecraft/Toolkit/linalg.hpp"
 
 
 namespace ode{
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-BDF<T, N, SP, OdeType, Derived>::BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events) : Base(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)), _J(q0.size(), q0.size()), _B(q0.size(), q0.size()), _LU(q0.size()), _R((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _U((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _RU((BDF_MAX_ORDER+1)*(BDF_MAX_ORDER+1)), _f(q0.size()), _dy(q0.size()), _b(q0.size()), _scale(q0.size()), _ypred(q0.size()), _psi(q0.size()), _d(q0.size()), _error(q0.size()), _error_m(q0.size()), _error_p(q0.size()) {
-    
-    if (rtol == 0){
-        rtol = 100*std::numeric_limits<T>::epsilon();
-#ifndef ODECRAFT_NO_WARN
-        this->cerr(GetStr("Warning: rtol=0 not allowed in the BDF method. Setting rtol = ", rtol));
-#endif
-    }
-    _newton_tol = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol, ndspan::min<T>(T(3)/100, pow(rtol, T(1)/T(2))));
+namespace detail{
 
-    if (this->is_running() && q0.data() != nullptr){
-        if (this->validate_ics_impl(t0, q0.data())){
-            this->reset_impl_alone();
-        }else{
-            this->set_status(StepperStatus::BadICS);
-        }
-    }
+// The number of elements of a state
+template<typename T, typename SD>
+size_t state_size(const state_t<T, SD>& q){
+    size_t n = 0;
+    SD::for_each([&n](const value_t<T, SD>&){
+        ++n;
+    }, q);
+    return n;
 }
 
-template<typename T, size_t N>
-LUResult<T, N>::LUResult(size_t Nsys) : LU(Nsys, Nsys), piv(Nsys) {}
+template<typename T, typename SD>
+ShiftedLU<T, SD>::ShiftedLU(const JacMat& J, const State& q) : lu_(J), work_(q) {
+    SD::resize_like(piv_, q);
+}
 
-template<typename T, size_t N>
-bool LUResult<T, N>::lu_factor(const JacMat<T, N>& A_input){
-    size_t n = A_input.Nrows();
-    JacMat<T, N>& A = LU;
+template<typename T, typename SD>
+bool ShiftedLU<T, SD>::factor(const JacMat& J, const T& c){
+    // The passes over piv_ count the rows and columns
 
-    // Copy input to output
-    std::copy(A_input.data(), A_input.data() + A_input.size(), A.data());
+    // lu = I - c*J
+    SD::for_each([&, i = size_t{0}](const size_t&) mutable {
+        SD::for_each([&, j = size_t{0}](const size_t&) mutable {
+            lu_(i, j) = (i == j) ? S(1) - c*J(i, j) : -c*J(i, j);
+            ++j;
+        }, piv_);
+        ++i;
+    }, piv_);
 
-    // Initialize pivot array as identity
-    for (size_t i = 0; i < n; ++i) {
-        piv[i] = i;
-    }
-
-    for (size_t k = 0; k < n - 1; ++k) {
-        // Find pivot row
-        size_t p = k;
-        T max_val = abs(A(k, k));
-        for (size_t i = k + 1; i < n; ++i) {
-            if (abs(A(i, k)) > max_val) {
-                max_val = abs(A(i, k));
-                p = i;
-            }
+    // Elimination below the diagonal, one column k at a time
+    bool regular = true;
+    SD::for_each([&, k = size_t{0}](size_t& piv_k) mutable {
+        if (!regular) {
+            return;
         }
 
-        // Check singular
+        // The pivot row is the one with the largest entry of column k, on or below the diagonal
+        piv_k = k;
+        T max_val = abs(lu_(k, k));
+        SD::for_each([&, i = size_t{0}](const size_t&) mutable {
+            if (i > k && abs(lu_(i, k)) > max_val) {
+                max_val = abs(lu_(i, k));
+                piv_k = i;
+            }
+            ++i;
+        }, piv_);
+
+        // Check singular. NaN passes, and surfaces as a non-finite step instead.
         if (max_val < 1e-15) {
-            return false;
+            regular = false;
+            return;
         }
 
-        // Record and apply pivot
-        if (p != k) {
-            std::swap(piv[k], piv[p]);  // Record which row k was swapped with
-            for (size_t c = 0; c < n; c++) {
-                std::swap(A(k, c), A(p, c));
-            }
+        if (piv_k != k) {
+            SD::for_each([&, j = size_t{0}](const size_t&) mutable {
+                std::swap(lu_(k, j), lu_(piv_k, j));
+                ++j;
+            }, piv_);
         }
 
-        // Eliminate below pivot
-        for (size_t i = k + 1; i < n; ++i) {
-            A(i, k) /= A(k, k);
-            for (size_t j = k + 1; j < n; ++j) {
-                A(i, j) -= A(i, k) * A(k, j);
+        SD::for_each([&, i = size_t{0}](const size_t&) mutable {
+            if (i > k) {
+                lu_(i, k) /= lu_(k, k);
+                SD::for_each([&, j = size_t{0}](const size_t&) mutable {
+                    if (j > k) {
+                        lu_(i, j) -= lu_(i, k) * lu_(k, j);
+                    }
+                    ++j;
+                }, piv_);
             }
-        }
-    }
-    // The loop above checks every pivot but the last one. Written as the negation of the check
-    // above so that NaN passes here too, and surfaces as a non-finite step instead.
-    return !(abs(A(n-1, n-1)) < 1e-15);
+            ++i;
+        }, piv_);
+
+        ++k;
+    }, piv_);
+
+    return regular;
 }
 
-template<typename T, size_t N>
-void LUResult<T, N>::lu_solve(T* x, const T* b) const{
-    size_t n = piv.size();
+template<typename T, typename SD>
+void ShiftedLU<T, SD>::solve(State& x, const State& b) const{
+    decltype(auto) y = work_.get();
+    copy_state<SD>(y, b); // all of b is read here, before x (which may be b) is written
 
-    // Apply permutation: x = P*b
-    for (size_t i = 0; i < n; ++i) {
-        x[i] = b[piv[i]];
-    }
-
-    // Forward substitution: L * y = P*b
-    for (size_t i = 0; i < n; ++i) {
-        for (size_t j = 0; j < i; ++j) {
-            x[i] -= LU(i, j) * x[j];
+    // Forward substitution: L * y = P*b. Row k first takes the swap of step k of the elimination,
+    // with a row below it. The swaps after it only exchange rows below it, so it is then final.
+    size_t n = 0;
+    SD::for_each([&](S& y_k, const size_t& piv_k){
+        const size_t k = n++;
+        if (piv_k != k) {
+            SD::for_each([&, i = size_t{0}](S& y_i) mutable {
+                if (i == piv_k) {
+                    std::swap(y_k, y_i);
+                }
+                ++i;
+            }, y);
         }
-    }
+        SD::for_each([&, j = size_t{0}](const S& y_j) mutable {
+            if (j < k) {
+                y_k -= lu_(k, j) * y_j;
+            }
+            ++j;
+        }, y);
+    }, y, piv_);
 
-    // Backward substitution: U * x = y
-    for (size_t i = n; i-- > 0; ) {
-        for (size_t j = i + 1; j < n; ++j) {
-            x[i] -= LU(i, j) * x[j];
-        }
-        x[i] /= LU(i, i);
-    }
-}
+    // Backward substitution: U * x = y, from the last row up. for_each only runs forward, so
+    // row i is picked up by the pass that subtracts the rows after it. That pass sums in acc
+    // rather than through the pointer, which would keep the sum in memory.
+    S acc{};
+    SD::for_each([&, r = size_t{1}](const S&) mutable {
+        const size_t i = n - r;
+        S* y_i = nullptr;
+        SD::for_each([&, j = size_t{0}](S& y_j) mutable {
+            if (j == i) {
+                y_i = &y_j;
+                acc = y_j;
+            } else if (j > i) {
+                acc -= lu_(i, j) * y_j;
+            }
+            ++j;
+        }, y);
+        *y_i = acc / lu_(i, i);
+        ++r;
+    }, y);
 
-template<typename T>
-Array1D<T> arange(size_t a, size_t b){
-    Array1D<T> res(b-a);
-    simd_for<T>(b-a, [&](size_t i){
-        res[i] = a+i;
-    });
-    return res;
+    copy_state<SD>(x, y);
 }
 
 template<typename T>
 BDFCONSTS<T>::BDFCONSTS(){
-    KAPPA = {0, -T(185)/1000, -T(1)/9, -T(823)/10000, -T(415)/10000, 0};
+    KAPPA = {T(0), -T(185)/1000, -T(1)/9, -T(823)/10000, -T(415)/10000, T(0)};
     GAMMA[0] = 0;
     T cumulative{0};
     const T one{1};
@@ -133,131 +156,210 @@ BDFCONSTS<T>::BDFCONSTS(){
 }
 
 template<typename T>
-void compute_R(T* R, size_t order, T factor) {
+void compute_R(BDFMatrix<T>& R, size_t order, const T& factor) {
     size_t n = order+1;
     // Initialize first row to 1
     for (size_t j=0; j<n; j++){
-        R[j] = 1;
+        R(0, j) = 1;
     }
 
     // Compute M[i,j] = (i-1 - factor*j) / i for i,j >= 1, then cumulative product
     for (size_t i = 1; i < n; ++i) {
         for (size_t j = 0; j < n; ++j) {
-            R[i*n+j] = R[(i-1)*n + j]*(i-1 - factor * j) / i;
+            R(i, j) = R(i-1, j)*(i-1 - factor * j) / i;
         }
     }
 }
 
-template<typename T>
-void bdf_interp(T* result, const T& t, const T& t2, const T& h, const T* D, size_t order, size_t size){
-    for (size_t i=0; i<size; i++){
-        T p = 1;
-        T sum = 0;
-        for (size_t j=0; j<order; j++){
-            p *= (t - (t2 - h*j))/(h*(1+j));
-            sum += D[(j+1)*size+i] * p;
+template<typename T, typename SD>
+void bdf_interp(state_t<T, SD>& result, const T& t, const T& t2, const T& h, const std::array<state_t<T, SD>, BDF_MAX_ORDER+3>& D, size_t order){
+    using S = value_t<T, SD>;
+
+    // result = D[0] + sum_j D[j+1] * p_j, where p_j = prod_{m <= j} (t - (t2 - h*m)) / (h*(1+m))
+    SD::for_each([](S& r_i){
+        r_i = 0;
+    }, result);
+
+    T p = 1;
+    for (size_t j=0; j<order; j++){
+        p *= (t - (t2 - h*j))/(h*(1+j));
+        SD::for_each([&p](S& r_i, const S& D_i){
+            r_i += D_i * p;
+        }, result, D[j+1]);
+    }
+
+    SD::for_each([](S& r_i, const S& D0_i){
+        r_i = D0_i + r_i;
+    }, result, D[0]);
+}
+
+} // namespace ode::detail
+
+
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+BDF<T, SD, JD, OdeType, SP, Derived>::BDF(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> events)
+    : Base(std::move(ode), t0, q0, std::move(rtol), std::move(atol), min_step, max_step, stepsize, dir, std::move(events)),
+      J_(jacobian_like(q0)), LU_(J_, q0),
+      ypred_scratch_(q0), psi_scratch_(q0), d_scratch_(q0), work_scratch_(q0), scale_scratch_(this->rtol()) {
+
+    // the differences take the shape of q0, reset_impl_alone gives them their values
+    for (Differences& D : D_){
+        D.fill(q0);
+    }
+
+    // The Newton tolerance follows the tightest relative tolerance, where a zero one counts as 100 eps
+    const T rtol_floor = 100*std::numeric_limits<T>::epsilon();
+    T rtol_min = inf<T>();
+    [[maybe_unused]] bool zero_rtol = false; // only read for the warning
+    SD::for_each([&](const T& rtol_i){
+        if (rtol_i == 0){
+            zero_rtol = true;
+            set_min(rtol_min, rtol_min, rtol_floor);
+        } else {
+            set_min(rtol_min, rtol_min, rtol_i);
         }
-        result[i] = D[i] + sum;
+    }, this->rtol());
+
+#ifndef ODECRAFT_NO_WARN
+    if (zero_rtol){
+        this->cerr(GetStr("Warning: rtol=0 not allowed in the BDF method. Setting rtol = ", rtol_floor));
+    }
+#endif
+    newton_tol_ = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol_min, ndspan::min<T>(T(3)/100, pow(rtol_min, T(1)/T(2))));
+
+    if (this->is_running()){
+        if (this->validate_ics_impl(t0, q0)){
+            this->reset_impl_alone();
+        }else{
+            this->set_status(StepperStatus::BadICS);
+        }
     }
 }
 
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+BDF<T, SD, JD, OdeType, SP, Derived>::JacMat BDF<T, SD, JD, OdeType, SP, Derived>::jacobian_like(const State& q){
+    const size_t n = detail::state_size<T, SD>(q);
+    return JacMat(n, n);
+}
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector) {
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void BDF<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector) {
+    using S = value_t<T, SD>;
     Base::ReAdjust(new_vector);
-    _D[0].fill(0);
-    _D[1].fill(0);
-    std::copy(new_vector, new_vector + this->nsys(), _D[0].data());
-    this->rhs(_D[0].data()+this->nsys(), this->t(), new_vector);
-    for (size_t i=0; i<this->nsys(); i++){
-        _D[0][i+this->nsys()] *= this->stepsize() * this->direction();
+    for (Differences& D : D_){
+        for (State& D_k : D){
+            SD::for_each([](S& d){
+                d = 0;
+            }, D_k);
+        }
     }
-    this->jac(_J.data(), this->t(), new_vector);
-    _order = 1;
-    _n_eq_steps = 0;
-    _valid_LU = false;
-    _idx_D = 0;
+    copy_state<SD>(D_[0][0], new_vector);
+    this->rhs(D_[0][1], this->t(), new_vector);
+    const T h = this->stepsize() * this->direction();
+    SD::for_each([&h](S& f_i){
+        f_i *= h;
+    }, D_[0][1]);
+    this->jac(J_, this->t(), new_vector);
+    order_ = 1;
+    n_eq_steps_ = 0;
+    valid_LU_ = false;
+    idx_D_ = 0;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-bool BDF<T, N, SP, OdeType, Derived>::validate_ics_impl(T t0, const T* q0) const{
-
-    // use _B as it is a dummy variable
-    if (Base::validate_ics_impl(t0, q0)){
-        this->jac(_B.data(), t0, q0);
-        return all_are_finite(_B.data(), _B.size());
-    }else {
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+bool BDF<T, SD, JD, OdeType, SP, Derived>::validate_ics_impl(const T& t0, const State& q0) const{
+    using S = value_t<T, SD>;
+    if (!Base::validate_ics_impl(t0, q0)){
         return false;
     }
+
+    JacMat J = J_; // only for its shape
+    this->jac(J, t0, q0);
+
+    // The passes over q0 count the rows and columns of J
+    bool finite = true;
+    SD::for_each([&, i = size_t{0}](const S&) mutable {
+        SD::for_each([&, j = size_t{0}](const S&) mutable {
+            finite = finite && isfinite(J(i, j));
+            ++j;
+        }, q0);
+        ++i;
+    }, q0);
+    return finite;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Stepper BDF<T, N, SP, OdeType, Derived>::method() const {
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+Stepper BDF<T, SD, JD, OdeType, SP, Derived>::method() const {
     return Stepper::BDF;
 }
 
 
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::Reset(){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void BDF<T, SD, JD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
     this->reset_impl_alone();
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::reset_impl_alone(){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void BDF<T, SD, JD, OdeType, SP, Derived>::reset_impl_alone(){
     // Only runs right after the base has been reset to the initial conditions,
     // so stepsize() is still the initial step size.
+    using S = value_t<T, SD>;
     const T& t0 = this->t_ics();
-    T h0 = this->stepsize() * this->direction();
-    const T* q0 = this->vector_ics().data();
-    // borrowed from the base page, which has room for it next to the Jacobian below
-    auto f = this->scratch_.template request<N>(this->nsys());
-    this->rhs(f.data(), t0, q0);
+    const T h0 = this->stepsize() * this->direction();
+    const State& q0 = this->vector_ics();
+    decltype(auto) f = work_scratch_.get();
+    this->rhs(f, t0, q0);
 
-    for (size_t k = 0; k<_D.size(); k++){
-        _D[k] = Dlike(BDF_MAX_ORDER+3, this->nsys());
-        for (size_t j=0; j<this->nsys(); j++){
-            _D[k](0, j) = q0[j];
-            _D[k](1, j) = f[j] * h0;
+    for (Differences& D : D_){
+        for (State& D_k : D){
+            SD::for_each([](S& d){
+                d = 0;
+            }, D_k);
         }
+        copy_state<SD>(D[0], q0);
+        SD::for_each([&h0](S& D1_i, const S& f_i){
+            D1_i = f_i * h0;
+        }, D[1], f);
     }
-    this->jac(_J.data(), t0, q0);
-    _order = 1;
-    _n_eq_steps = 0;
-    _valid_LU = false;
-    _idx_D = 0;
+    this->jac(J_, t0, q0);
+    order_ = 1;
+    n_eq_steps_ = 0;
+    valid_LU_ = false;
+    idx_D_ = 0;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T* q_out, const T& t_in, const T& habs_in, const T* q_in){
-    size_t nsys = this->nsys();
-    
-    T safety, max_factor, factor, c;
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+StepResult BDF<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_out, T& habs_out, State& q_out, const T& t, const T& stepsize, const State& q_in){
+    using S = value_t<T, SD>;
+
+    T safety, best_factor, factor, c, error_norm;
     int delta_order;
     bool converged;
     bool currentjac = false;
     bool step_accepted = false;
-    NewtConv conv_result;
-    
-    const auto& [h_min, max_step, atol, rtol, t, stepsize] = make_scratch_view(
-        this->min_step(), this->max_step(), this->atol(), this->rtol(), t_in, habs_in
-    );
+    detail::NewtConv conv_result;
+
+    const cache_t<T> h_min = this->min_step();
+    const cache_t<T> max_step = this->max_step();
+    const RealState& atol = this->atol();
+    const RealState& rtol = this->rtol();
 
     // ----------- Scratch pad ---------------
-    auto  scratch = make_scratch(t_out, habs_out);
-    auto& [t_new, habs] = scratch;
-
-    auto y_new = cache_mut_array<N>(q_out, nsys);
-
-    [[maybe_unused]] auto t_new_write_back = make_write_back(t_new, t_out);
-    [[maybe_unused]] auto habs_write_back  = make_write_back(habs, habs_out);
-    [[maybe_unused]] auto q_out_write_back  = make_array_write_back<N>(y_new, q_out);
+    auto  scratch    = make_scratch(t_out, habs_out, q_out);
+    auto& [t_new, habs, y_new] = scratch;
+    auto  write_back = make_write_back(scratch, t_out, habs_out, q_out);
     // ---------------------------------------
+
+    decltype(auto) y_pred = ypred_scratch_.get();
+    decltype(auto) psi    = psi_scratch_.get();
+    decltype(auto) d      = d_scratch_.get();
+    decltype(auto) work   = work_scratch_.get();
+    decltype(auto) scale  = scale_scratch_.get();
 
     t_new = t;
 
-    std::copy(q_in, q_in + nsys, y_new.data());
+    copy_state<SD>(y_new, q_in);
 
     if (stepsize > max_step){
         habs = max_step;
@@ -281,37 +383,26 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T*
         } else if (habs < this->tiny_factor()){
             return StepResult::TinyStepError;
         }
-        
+
         t_new = t + habs * this->direction();
 
-        this->set_prediction(_ypred.data());
-        // atol and rtol are structured bindings, which clang cannot capture in OpenMP mode,
-        // so they come in through reference init-captures instead
-        simd_for<T>(nsys, [&, &abs_tol = atol, &rel_tol = rtol](size_t i){
-            _scale[i] = abs_tol + rel_tol * abs(_ypred[i]);
-        });
-        this->set_psi(_psi.data());
+        this->set_prediction(y_pred);
+        SD::for_each([](T& scale_i, const T& atol_i, const T& rtol_i, const S& y_pred_i){
+            scale_i = atol_i + rtol_i * abs(y_pred_i);
+        }, scale, atol, rtol, y_pred);
+        this->set_psi(psi);
 
         converged = false;
-        c = habs * this->direction() / BDF_COEFS.ALPHA[_order];
+        c = habs * this->direction() / coefs_.ALPHA[order_];
         while (!converged){
-            if (!_valid_LU){
-                for (size_t i=0; i<nsys; i++){
-                    for (size_t j=0; j<nsys; j++){
-                        if (i == j){
-                            _B(i, j) = 1 - c*_J(i, j);
-                        } else {
-                            _B(i, j) = -c*_J(i, j);
-                        }
-                    }
-                }
-                if (!_LU.lu_factor(_B)){
+            if (!valid_LU_){
+                if (!LU_.factor(J_, c)){
                     return StepResult::SingularMatrixError;
                 }
-                _valid_LU = true;
+                valid_LU_ = true;
             }
 
-            conv_result = this->solve_bdf_system(y_new, _ypred.data(), _d, t_new, c, _psi, _LU, _scale);
+            conv_result = this->solve_bdf_system(y_new, y_pred, d, work, t_new, c, psi, scale);
             if (conv_result.flag != StepResult::Success){
                 return conv_result.flag;
             }
@@ -321,8 +412,8 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T*
                 if (currentjac){
                     break;
                 }
-                this->jac(_J.data(), t_new, _ypred.data());
-                _valid_LU = false;
+                this->jac(J_, t_new, y_pred);
+                valid_LU_ = false;
                 currentjac = true;
             }
         }
@@ -331,18 +422,19 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T*
             factor = T(1)/2;
             habs *= factor;
             this->change_D(factor);
-            _valid_LU = false;
+            valid_LU_ = false;
             continue;
         }
 
         safety = T(18UL * NEWTON_MAXITER + 9UL)/(20UL * NEWTON_MAXITER + 10UL*conv_result.n_iter);
-        simd_for<T>(nsys, [&, &abs_tol = atol, &rel_tol = rtol](size_t i){
-            _scale[i] = abs_tol + rel_tol * abs(y_new[i]);
-            _error[i] = BDF_COEFS.ERR_CONST[_order] * _d[i];
-        });
-        _error_norms[1] = rms_norm(_error.data(), _scale.data(), nsys);
-        if (_error_norms[1] > 1){
-            factor = max<T>(this->min_factor(), safety * pow(_error_norms[1], T(-1)/(_order+1)));
+        const cache_t<T> err_const = coefs_.ERR_CONST[order_];
+        SD::for_each([&err_const](T& scale_i, S& error_i, const T& atol_i, const T& rtol_i, const S& y_new_i, const S& d_i){
+            scale_i = atol_i + rtol_i * abs(y_new_i);
+            error_i = err_const * d_i;
+        }, scale, work, atol, rtol, y_new, d);
+        error_norm = rms_norm<SD, T>(work, scale);
+        if (error_norm > 1){
+            factor = ndspan::max<T>(this->min_factor(), safety * pow(error_norm, T(-1)/(order_+1)));
             habs *= factor;
             this->change_D(factor);
         } else {
@@ -350,96 +442,99 @@ StepResult BDF<T, N, SP, OdeType, Derived>::adapt_impl(T& t_out, T& habs_out, T*
         }
     }
 
-    _n_eq_steps++;
+    n_eq_steps_++;
 
-    T* D = _D[_idx_D].data();
+    Differences& D = D_[idx_D_];
 
-    simd_for<T>(nsys, [&](size_t i){
-        D[(_order+2)*nsys + i] = _d[i] - D[(_order+1)*nsys + i];
-        D[(_order+1)*nsys + i] = _d[i];
-    });
-    for (size_t i = _order + 1; i -- > 0;) {
-        simd_for<T>(nsys, [&](size_t j){
-            D[i*nsys + j] += D[(i+1)*nsys + j];
-        });
+    SD::for_each([](S& D_p2, S& D_p1, const S& d_i){
+        D_p2 = d_i - D_p1;
+        D_p1 = d_i;
+    }, D[order_+2], D[order_+1], d);
+    for (size_t i = order_ + 1; i -- > 0;) {
+        SD::for_each([](S& D_i, const S& D_i1){
+            D_i += D_i1;
+        }, D[i], D[i+1]);
     }
 
-    if (_n_eq_steps < _order + 1){
+    if (n_eq_steps_ < order_ + 1){
         return StepResult::Success;
     }
 
-    if (_order > 1){
-        simd_for<T>(nsys, [&](size_t i){
-            _error_m[i] = BDF_COEFS.ERR_CONST[_order-1] * D[_order*nsys + i];
-        });
-        _error_norms[0] = rms_norm(_error_m.data(), _scale.data(), nsys);
+    // the error norms of the orders order_-1, order_ and order_+1
+    std::array<T, 3> error_norms;
+    error_norms[1] = error_norm;
+
+    if (order_ > 1){
+        const cache_t<T> err_const = coefs_.ERR_CONST[order_-1];
+        SD::for_each([&err_const](S& error_i, const S& D_i){
+            error_i = err_const * D_i;
+        }, work, D[order_]);
+        error_norms[0] = rms_norm<SD, T>(work, scale);
     } else {
-        _error_norms[0] = inf<T>();
+        error_norms[0] = inf<T>();
     }
 
-
-    if (_order < BDF_MAX_ORDER){
-
-        simd_for<T>(nsys, [&](size_t i){
-            _error_p[i] = BDF_COEFS.ERR_CONST[_order+1] * D[(_order+2)*nsys + i];
-        });
-        _error_norms[2] = rms_norm(_error_p.data(), _scale.data(), nsys);
+    if (order_ < BDF_MAX_ORDER){
+        const cache_t<T> err_const = coefs_.ERR_CONST[order_+1];
+        SD::for_each([&err_const](S& error_i, const S& D_i){
+            error_i = err_const * D_i;
+        }, work, D[order_+2]);
+        error_norms[2] = rms_norm<SD, T>(work, scale);
     }
     else{
-        _error_norms[2] = inf<T>();
+        error_norms[2] = inf<T>();
     }
 
     delta_order = -1;
-    max_factor = pow(_error_norms[0], T(-1)/_order);
+    best_factor = pow(error_norms[0], T(-1)/order_);
     for (size_t i=1; i<3; i++){
-        T tmp = pow(_error_norms[i], T(-1)/(_order+i));
-        if (tmp > max_factor){
-            max_factor = tmp;
+        T tmp = pow(error_norms[i], T(-1)/(order_+i));
+        if (tmp > best_factor){
+            best_factor = tmp;
             delta_order = static_cast<int>(i) - 1;
         }
     }
 
-    _order += delta_order;
-    auto candidate_factor = safety * max_factor;
-    factor = std::min<T>(this->max_factor(), candidate_factor);
+    order_ += delta_order;
+    factor = ndspan::min<T>(this->max_factor(), safety * best_factor);
     habs *= factor;
     this->change_D(factor);
-    _valid_LU = false;
+    valid_LU_ = false;
     return StepResult::Success;
 }
 
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-auto BDF<T, N, SP, OdeType, Derived>::local_interp() const{
-    return [D = _D[_idx_D],
-            order=_order,
-            t2=this->t_new(),
-            n=this->nsys(),
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+auto BDF<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
+    return [D = D_[idx_D_],
+            order = order_,
+            t2 = this->t_new(),
             h = this->stepsize()*this->direction()]
-            (T* out, const T& t){
-                bdf_interp<T>(out, t, t2, h, D.data(), order, n);
+            (State& out, const T& t){
+                detail::bdf_interp<T, SD>(out, t, t2, h, D, order);
             };
 }
 
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::interp_impl(T* result, const T& t) const{
-    bdf_interp<T>(
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void BDF<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& result, const T& t) const{
+    detail::bdf_interp<T, SD>(
         result,
         t,
         this->t_new(),
         this->stepsize()*this->direction(),
-        _D[_idx_D].data(),
-        _order,
-        this->nsys()
+        D_[idx_D_],
+        order_
     );
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale){
-    d.fill(0);
-    size_t n = this->nsys();
-    std::copy(y_pred, y_pred + n, y);
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+detail::NewtConv BDF<T, SD, JD, OdeType, SP, Derived>::solve_bdf_system(State& y, const State& y_pred, State& d, State& work, const T& t_new, const T& c, const State& psi, const RealState& scale){
+    using S = value_t<T, SD>;
+    SD::for_each([](S& d_i){
+        d_i = 0;
+    }, d);
+    copy_state<SD>(y, y_pred);
     T dy_norm = 0;
     T dy_norm_old = 0;
     T rate = 0;
@@ -447,13 +542,13 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred
     size_t j=0;
     StepResult flag = StepResult::Success;
     for (size_t k=0; k<NEWTON_MAXITER; k++){
-        this->rhs(_f.data(), t_new, y);
-
-        simd_for<T>(n, [&](size_t i){
-            _b[i] = c * _f[i] - psi[i] - d[i];
-        });
-        LU.lu_solve(_dy.data(), _b.data());
-        dy_norm = rms_norm(_dy.data(), scale.data(), n);
+        // work holds f(t_new, y), then the right hand side c*f - psi - d, then the correction dy
+        this->rhs(work, t_new, y);
+        SD::for_each([&c](S& w_i, const S& psi_i, const S& d_i){
+            w_i = c * w_i - psi_i - d_i;
+        }, work, psi, d);
+        LU_.solve(work, work);
+        dy_norm = rms_norm<SD, T>(work, scale);
 
         if (dy_norm_old == 0){
             rate = 0;
@@ -461,19 +556,19 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred
             rate = dy_norm/dy_norm_old;
         }
 
-        if (rate != 0 && (rate >= 1 || (pow(rate, NEWTON_MAXITER-k)*dy_norm > _newton_tol * (1-rate)))){
+        if (rate != 0 && (rate >= 1 || (pow(rate, NEWTON_MAXITER-k)*dy_norm > newton_tol_ * (1-rate)))){
             break;
         }
 
-        simd_for<T>(n, [&](size_t i){
-            y[i] += _dy[i];
-            d[i] += _dy[i];
-        });
+        SD::for_each([](S& y_i, S& d_i, const S& dy_i){
+            y_i += dy_i;
+            d_i += dy_i;
+        }, y, d, work);
 
-        if (!all_are_finite(y, n)){
+        if (!all_are_finite<T, SD>(y)){
             flag = StepResult::NonFiniteError;
             break;
-        } else if (dy_norm == 0 || ((rate != 0) && (rate * dy_norm < _newton_tol * (1-rate)))){
+        } else if (dy_norm == 0 || ((rate != 0) && (rate * dy_norm < newton_tol_ * (1-rate)))){
             converged = true;
             break;
         }
@@ -486,90 +581,75 @@ NewtConv BDF<T, N, SP, OdeType, Derived>::solve_bdf_system(T* y, const T* y_pred
 
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::change_D(const T& factor){
-    T* R = _R.data();
-    T* U = _U.data();
-    T* RU = _RU.data();
-    size_t n = _order+1;
-    size_t nsys = this->nsys();
-    compute_R(_R.data(), _order, factor);
-    compute_R(_U.data(), _order, T(1));
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void BDF<T, SD, JD, OdeType, SP, Derived>::change_D(const T& factor){
+    using S = value_t<T, SD>;
+    const size_t n = order_+1;
+    detail::compute_R(R_, order_, factor);
+    detail::compute_R(U_, order_, T(1));
 
-    for (size_t i=0; i<_RU.size(); i++){
-        RU[i]=0;
-    }
-
+    // RU = R * U
+    RU_.fill(0);
     for (size_t i=0; i<n; i++){
         for (size_t k=0; k<n; k++){
-            auto p =  R[i*n+k];
+            const cache_t<T> p = R_(i, k);
             for (size_t j=0; j<n; j++){
-                RU[i * n+j] += p*U[k*n+j];
+                RU_(i, j) += p*U_(k, j);
             }
         }
     }
 
-    Dlike& D_new = _D[1-_idx_D];
-    const Dlike& D = _D[_idx_D];
+    Differences& D_new = D_[1-idx_D_];
+    const Differences& D = D_[idx_D_];
 
+    // D_new[i] = sum_k RU(k, i) * D[k]
     for (size_t i = 0; i < n; i++) {
-        T* __restrict__ out = &D_new[i*nsys];
-        std::fill(out, out+nsys, 0);
+        SD::for_each([](S& out_j){
+            out_j = 0;
+        }, D_new[i]);
 
         for (size_t k = 0; k < n; k++) {
-            const T r = RU[k*n + i];
-            const T* __restrict__ row = &D[k*nsys];
-            simd_for<T>(nsys, [&](size_t j){
-                out[j] += r * row[j];
-            });
+            const cache_t<T> r = RU_(k, i);
+            SD::for_each([&r](S& out_j, const S& D_kj){
+                out_j += r * D_kj;
+            }, D_new[i], D[k]);
         }
     }
 
-    // for (size_t i=0; i<n; i++){
-    //     for (size_t j=0; j< nsys; j++){
-    //         T sum = 0;
-    //         for (size_t k=0; k<n; k++){
-    //             sum += RU[k*n+i]*D[k*nsys+j];
-    //         }
-    //         D_new[i*nsys+j] = sum;
-    //     }
-    // }
-
-    _idx_D = 1 - _idx_D;
-    _n_eq_steps = 0;
+    idx_D_ = 1 - idx_D_;
+    n_eq_steps_ = 0;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::set_prediction(T* y){
-    size_t n=this->nsys();
-    T* D = _D[_idx_D].data();
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void BDF<T, SD, JD, OdeType, SP, Derived>::set_prediction(State& y) const{
+    using S = value_t<T, SD>;
+    const Differences& D = D_[idx_D_];
 
-    for (size_t j=0; j < n; j++){
-        y[j] = 0;
-    }
+    SD::for_each([](S& y_i){
+        y_i = 0;
+    }, y);
 
-    for (size_t i=0; i < _order+1; i++){
-        simd_for<T>(n, [&](size_t j){
-            y[j] += D[i * n + j];
-        });
+    for (size_t i=0; i < order_+1; i++){
+        SD::for_each([](S& y_i, const S& D_i){
+            y_i += D_i;
+        }, y, D[i]);
     }
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void BDF<T, N, SP, OdeType, Derived>::set_psi(T* psi){
-    size_t n = this->nsys();
-    const T* D = _D[_idx_D].data();
-    const T* g = BDF_COEFS.GAMMA.data();
-    const T& a = BDF_COEFS.ALPHA[_order];
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void BDF<T, SD, JD, OdeType, SP, Derived>::set_psi(State& psi) const{
+    using S = value_t<T, SD>;
+    const Differences& D = D_[idx_D_];
+    const cache_t<T> a = coefs_.ALPHA[order_];
 
-    for (size_t j=0; j < n; j++){
-        psi[j] = 0;
-    }
-    for (size_t i=1; i<_order+1; i++){
-        //optimize
-        simd_for<T>(n, [&](size_t j){
-            psi[j] += D[i * n + j] * g[i] / a;
-        });
+    SD::for_each([](S& psi_i){
+        psi_i = 0;
+    }, psi);
+    for (size_t i=1; i<order_+1; i++){
+        const cache_t<T> g = coefs_.GAMMA[i];
+        SD::for_each([&g, &a](S& psi_i, const S& D_i){
+            psi_i += D_i * g / a;
+        }, psi, D[i]);
     }
 }
 

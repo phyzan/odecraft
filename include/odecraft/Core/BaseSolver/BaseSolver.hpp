@@ -17,6 +17,7 @@
  * output interpolation, and event detection.
  */
 
+#include "odecraft/Toolkit/Tools.hpp"
 #include <odecraft/Core/VirtualTraits.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
 
@@ -109,22 +110,29 @@ using StepperFactors = std::conditional_t<
  *       first template parameter.
  */
 
-template<typename Derived, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType>
-class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, N, SP>::type {
+template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type {
 
-    using CloneType = traits::SolverCloneType<Derived, T, N, SP>;
+    static_assert(hasRhsFunc<OdeType, T, state_t<T, SD>>, "Invalid OdeType::Rhs signature");
+    using CloneType = traits::SolverCloneType<Derived, T, SD, SP>;
 
 public:
 
-    using Base = traits::SolverVirtualTypeTraits<Derived, T, N, SP>::type;
-    static constexpr JacPolicy JP = getJacPolicy<T, N, OdeType>();
-    
-
+    using Base = traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type;
     using value_type = T;
     using ode_type = OdeType;
-    static constexpr size_t NSYS = N;
-    static constexpr SolverPolicy Policy = SP;
+    using State = state_t<T, SD>;
+    using JacMat = SD::template jacobian_matrix<value_t<T, SD>>;
+    using RealState = SD::template state_type<T>;
 
+    template<int Order>
+    using DualState = dual_state_t<T, SD, Order>;
+
+    template<int Order>
+    using SeedState = seed_state_t<T, SD, Order>;
+
+    static constexpr JacPolicy JP = getJacPolicy<T, SD, OdeType>();
+    static constexpr SolverPolicy Policy = SP;
     
     BaseSolver() = delete;
 
@@ -132,12 +140,12 @@ public:
 
     /**
      * @brief Evaluate the right-hand side of the ODE system.
-     * @param[out] out Output array for the derivative dq/dt (size Nsys).
-     * @param[in]  t     Current time.
-     * @param[in]  q     Current state vector (size Nsys).
+     * @param[out] out  Output state for the derivative dq/dt.
+     * @param[in]  t    Integration parameter.
+     * @param[in]  q    State vector
      * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
     */
-    void                 Rhs(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
+    void                 Rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Compute the Jacobian matrix of the ODE system.
@@ -145,32 +153,31 @@ public:
      * Uses the exact Jacobian if provided, otherwise falls back to
      * finite difference approximation
      *
-     * @param[out] out Output array for Jacobian in column-major order (size Nsys x Nsys).
-     * @param[in]  t  Current time.
-     * @param[in]  q  Current state vector (size Nsys).
+     * @param[out] out  Output Jacobian matrix in column-major order (size Nsys x Nsys).
+     * @param[in]  t    Integration parameter.
+     * @param[in]  q    State vector
      * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
     */
-    void                 Jac(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
+    void                 Jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
+
+    void                 Jac(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Approximate the Jacobian using central finite differences.
-     * @param[out] out  Output array for Jacobian in column-major order (size Nsys x Nsys).
-     * @param[in]  t  Current time.
-     * @param[in]  q  Current state vector (size Nsys).
-     * @param[in]  dt Step sizes for each component (size Nsys). If nullptr, computed automatically.
-     * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
+     * @param[out] out  Output Jacobian matrix in column-major order (size Nsys x Nsys).
+     * @param[in]  t    Integration parameter.
+     * @param[in]  q    State vector
     */
-    void                 Jac(T* out, const T& t, const T* q, const T* dt) const noexcept(!detail::rhs_may_throw);
+    void                 JacApprox(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
 
     /**
-     * @brief Get a matrix view of a Jacobian array.
-     *
-     * Returns a 2D view that allows element access via matrix(i, j) syntax.
-     *
-     * @param[in] j Pointer to Jacobian data in column-major order.
-     * @return MutView object for convenient matrix element access.
+     * @brief Approximate the Jacobian using central finite differences.
+     * @param[out] out  Output Jacobian matrix in column-major order (size Nsys x Nsys).
+     * @param[in]  t    Integration parameter.
+     * @param[in]  q    State vector
+     * @param[in] dq    Perturbation state vector to use for finite differences
     */
-    MutView<T, Layout::F, N, N> jac_view(T* j) const;
+    void                 JacApprox(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw);
 
     // ACCESSORS
 
@@ -184,16 +191,16 @@ public:
     const T&            t_old() const;
 
     /// @brief Get a view of the state vector from the newest computed step.
-    View1D<T, N>        vector_new() const;
+    const State&        vector_new() const;
 
     /// @brief Get a view of the state vector from the previous accepted step.
-    View1D<T, N>        vector_old() const;
+    const State&        vector_old() const;
 
     /// @brief Get the initial integration time.
     const T&            t_ics() const;
 
     /// @brief Get a view of the initial state vector.
-    View1D<T, N>        vector_ics() const;
+    const State&        vector_ics() const;
 
     /// @brief Get the current step size (absolute value).
     const T&            stepsize() const;
@@ -202,10 +209,10 @@ public:
     int                 direction() const;
 
     /// @brief Get the relative tolerance for error control.
-    const T&            rtol() const;
+    const RealState&    rtol() const;
 
     /// @brief Get the absolute tolerance for error control.
-    const T&            atol() const;
+    const RealState&    atol() const;
 
     /// @brief Get the minimum allowed step size.
     const T&            min_step() const;
@@ -213,18 +220,16 @@ public:
     /// @brief Get the maximum allowed step size.
     const T&            max_step() const;
 
-    /// @brief Get the number of equations in the ODE system.
-    constexpr size_t    nsys() const {if constexpr (N > 0) {return N;} else {return nsys_;}}
-
     bool                is_running() const;
     
     /// @brief Get the number of successful integration steps taken.
     size_t              step_count() const;
 
     /// @brief Fills the values of an array with those of the current true state vector
-    void                fill_current_vector(T* out) const;
+    void                fill_current_vector(State& out) const;
     StepperStatus       status() const;
-    const char*         message() const;
+    std::string_view    message() const;
+
     /**
      * @brief Print the current solver state to stdout.
      * @param prec Number of decimal places for floating-point output.
@@ -237,7 +242,7 @@ public:
      * @param q0 Initial state vector.
      * @return True if the ICs are valid (finite values, finite RHS evaluation).
     */
-    bool                validate_ics(T t0, const T* q0) const;
+    bool                validate_ics(const T& t0, const State& q0) const;
 
     bool                has_valid_ics() const;
 
@@ -247,7 +252,7 @@ public:
      * @param[in]  t      Time to interpolate at (must be in [t_old, t_new]).
      * @throws std::out_of_range if `t` is outside the last step interval.
     */
-    void                interp(T* out, const T& t) const;
+    void                interp(State& out, const T& t) const;
 
     /**
      * @brief Get the number of RHS function evaluations performed so far.
@@ -267,7 +272,7 @@ public:
      * @param q Initial state vector.
      * @return Suggested step size based on local scales and tolerances.
      */
-    T                   auto_step(T t, const T* q) const;
+    T                   auto_step(const T& t, const State& q) const;
 
     /// @brief Compute an appropriate step size from the current state.
     T                   auto_step() const;
@@ -296,14 +301,14 @@ public:
     /**
      * @brief Integrate until the specified time is reached.
      * @param time Target time to integrate to.
-     * @param observer Callable `bool(t, q_ptr, t_ptr)`, invoked after every successful step.
+     * @param observer Callable `bool(t, q, t_ptr)`, invoked after every successful step.
      *     `t`     : Current integration time.
-     *     `q_ptr` : Current state vector.
+     *     `q` : Current state vector.
      *     `t_ptr` : const T*, this `advance_until` overload always passes null
      *     Return `false` to stop advancing immediately.
      * @returns `true` if the solver reached `time`, `false` if stopped early.
      */
-    template<isObserver<T> Callable>
+    template<isObserver<T, State> Callable>
     bool    advance_until(
         const T& time,
         Callable&& observer
@@ -312,16 +317,16 @@ public:
     /**
      * @brief Integrate until the specified time is reached.
      * @param time Target time to integrate to.
-     * @param observer Callable `bool(t, q_ptr, t_ptr)`, invoked after every successful step.
+     * @param observer Callable `bool(t, q, t_ptr)`, invoked after every successful step.
      *     `t`     : Current integration time.
-     *     `q_ptr` : Current state vector.
+     *     `q` : Current state vector.
      *     `t_ptr` : Address of the checkpoint the solver lands on, else null.
      *               If checkpoints.size() == 0, it is null on every call but the last,
      *               where it is `&time`.
      *     Return `false` to stop advancing immediately.
      * @return `true` if the solver reached `time`, `false` if stopped early
      */
-    template<isObserver<T> Callable, isArray<T> ArrayType>
+    template<isObserver<T, State> Callable, isArray<T> ArrayType>
     bool    advance_until(
         const T& time,
         Callable&& observer,
@@ -332,11 +337,11 @@ public:
      * @brief Integrate until `time`, returning the dense output of the span integrated
      * @note If the integration stops early, this will be reflected in the interpolator
      */
-    BoxedInterp<T, N>   interpolate_until(const T& time);
+    BoxedInterp<T, SD>   interpolate_until(const T& time);
 
     /// @brief Same as interpolate_until(time), calling `observer` like advance_until does.
-    template<isObserver<T> Callable>
-    BoxedInterp<T, N>   interpolate_until(const T& time, Callable&& observer);
+    template<isObserver<T, State> Callable>
+    BoxedInterp<T, SD>   interpolate_until(const T& time, Callable&& observer);
 
     /**
      * @brief Advance until (this->t() + interval*direction) is reached
@@ -354,7 +359,7 @@ public:
      * @return True if ICs were valid and set successfully. Otherwise returns false and nothing happens. 
      * @throws std::domain_error if the direction is not any of [-1, 0, 1]
      */
-    bool                set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0);
+    bool                set_ics(T t0, const State& y0, T stepsize = 0, int direction = 0);
 
     /**
      * @brief Permanently terminate the solver.
@@ -371,40 +376,39 @@ public:
      * @return Unique pointer to an interpolator object.
      * @note Must be implemented by derived class.
      */
-    BoxedInterp<T, N> state_interpolator(int bdr1, int bdr2) const;
+    BoxedInterp<T, SD> state_interpolator(int bdr1, int bdr2) const;
 
     // VIRTUAL INTERFACE ALIASES (inline overrides to avoid virtual calls)
     // Accessors
-    void                get_rhs(T* out, const T& t, const T* q) const { Rhs(out, t, q); }
-    void                get_jac(T* out, const T& t, const T* q) const { Jac(out, t, q); }
-    void                get_jac(T* out, const T& t, const T* q, const T* dt) const { Jac(out, t, q, dt); }
+    void                get_rhs(State& out, const T& t, const State& q) const { Rhs(out, t, q); }
+    void                get_jac(JacMat& out, const T& t, const State& q) const { Jac(out, t, q); }
+    void                get_jac(JacMat& out, const T& t, const State& q, const State& h) const { Jac(out, t, q, h); }
     const T&            get_time() const { return t(); }
     const T&            get_new_time() const { return t_new(); }
     const T&            get_old_time() const { return t_old(); }
-    void                get_current_vector(T* out) const { this->fill_current_vector(out); }
-    View1D<T, N>        get_new_vector() const { return vector_new(); }
-    View1D<T, N>        get_old_vector() const { return vector_old(); }
+    void                get_current_vector(State& out) const { this->fill_current_vector(out); }
+    const State&        get_new_vector() const { return vector_new(); }
+    const State&        get_old_vector() const { return vector_old(); }
     const T&            get_ics_time() const { return t_ics(); }
-    View1D<T, N>        get_ics_vector() const {return vector_ics();}
+    const State&        get_ics_vector() const {return vector_ics();}
     const T&            get_stepsize() const { return stepsize(); }
     int                 get_direction() const { return direction(); }
-    const T&            get_rtol() const { return rtol(); }
-    const T&            get_atol() const { return atol(); }
+    const RealState&    get_rtol() const { return rtol(); }
+    const RealState&    get_atol() const { return atol(); }
     const T&            get_min_step() const { return min_step(); }
     const T&            get_max_step() const { return max_step(); }
-    size_t              get_nsys() const { return nsys(); }
     size_t              get_step_count() const { return step_count(); }
     bool                get_is_running() const {return is_running();}
     StepperStatus       get_status() const { return status(); }
-    const char*         get_message() const { return message(); }
-    bool                get_validate_ics(T t0, const T* q0) const { return validate_ics(t0, q0); }
+    std::string_view    get_message() const { return message(); }
+    bool                get_validate_ics(const T& t0, const State& q0) const { return validate_ics(t0, q0); }
     bool                get_has_valid_ics() const { return has_valid_ics(); }
     Stepper             get_method() const { return method(); }
-    void                get_interp(T* result, const T& t) const { interp(result, t); }
+    void                get_interp(State& result, const T& t) const { interp(result, t); }
     size_t              get_rhs_eval_count() const { return rhs_eval_count_; }
     size_t              get_jac_eval_count() const { return jac_eval_count_; }
-    BoxedInterp<T, N>   get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
-    T                   get_auto_step(T t, const T* q) const { return auto_step(t, q); }
+    BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
+    T                   get_auto_step(const T& t, const State& q) const { return auto_step(t, q); }
     T                   get_auto_step() const { return auto_step(); }
     
     // Modifiers
@@ -413,33 +417,34 @@ public:
 
     bool                do_advance_until(T time) { return advance_until(time); }
 
-    bool                do_advance_until(T time, observer_t<T> observer) {
+    bool                do_advance_until(T time, const observer_t<T, State>& observer) {
         if (observer == nullptr){
             return advance_until(time);
         } else {
-            return advance_until(time, std::move(observer));
+            return advance_until(time, observer);
         }
     }
 
-    bool                do_advance_until(T time, observer_t<T> observer, View1D<T> checkpoints) {
+    bool                do_advance_until(T time, const observer_t<T, State>& observer, std::span<const T> checkpoints) {
         if (observer == nullptr){
-            return generic_advance_until(time, nullptr, std::move(checkpoints));
+            return generic_advance_until(time, nullptr, checkpoints);
         } else {
-            return generic_advance_until(time, std::move(observer), std::move(checkpoints));
+            return generic_advance_until(time, observer, checkpoints);
         }
     }
 
-    BoxedInterp<T, N>   do_interpolate_until(T time) { return interpolate_until(time); }
-    BoxedInterp<T, N>   do_interpolate_until(T time, observer_t<T> observer) {
+    BoxedInterp<T, SD>   do_interpolate_until(T time) { return interpolate_until(time); }
+    BoxedInterp<T, SD>   do_interpolate_until(T time, const observer_t<T, State>& observer) {
         if (observer == nullptr){
             return interpolate_until(time);
         } else {
-            return interpolate_until(time, std::move(observer));
+            return interpolate_until(time, observer);
         }
     }
+
     void                do_reset() { THIS->Reset(); }
     void                do_kill() { kill(); }
-    bool                do_set_ics(T t0, const T* y0, T stepsize = 0, int direction = 0) { return set_ics(t0, y0, stepsize, direction); }
+    bool                do_set_ics(T t0, const State& y0, T stepsize = 0, int direction = 0) { return set_ics(std::move(t0), std::move(y0), stepsize, direction); }
 
     // =================== STATIC OVERRIDES (NECESSARY) ===============================
     // Derived classes MUST implement these methods / attributes.
@@ -463,7 +468,7 @@ protected:
      * @note Writes the new vector to q_new, which may be q_old_ itself (see take_step), so it
      *       must not read vector_old() or interpolate. noexcept unless ODECRAFT_RHS_THROWS is defined.
      */
-    StepResult          adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q) noexcept(!detail::rhs_may_throw);
+    StepResult          adapt_impl(T& t_new, T& habs_new, State& y_new, const T& t, const T& habs, const State& q) noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Interpolate solution at time t using method-specific interpolation.
@@ -471,11 +476,11 @@ protected:
      * @param[in]  t      Time to interpolate at, in the open interval between two states
      * @note Must be implemented by derived class.
      */
-    void                interp_impl(T* result, const T& t) const;
+    void                interp_impl(State& result, const T& t) const;
 
     auto                local_interp() const;
 
-    void                fill_current_vector_impl(T* out) const;
+    void                fill_current_vector_impl(State& out) const;
 
     // ================================================================================
 
@@ -492,11 +497,11 @@ protected:
 
     /**
     @brief Re-adjustment hook right before the new state is modified. Derived should call base first.
-    @param new_vector New state vector values (size Nsys).
+    @param new_state New state vector values (size Nsys).
     @note Nothing has changed yet when this is called; it's a chance to update any internal data before the state is modified. The new state will be set to (t(), stepsize(), new_vector),
     where t() is the true current time, which might lie between t_old() and t_new() (e.g. if an event occurred).
     */
-    void    ReAdjust(const T* new_vector);
+    void    ReAdjust(const State& new_state);
 
     /**
      * @brief Validate initial conditions implementation.
@@ -505,7 +510,7 @@ protected:
      * @return True if ICs are valid.
      * @note Derived should call base first, then add additional checks.
      */
-    bool    validate_ics_impl(T t0, const T* q0) const;
+    bool    validate_ics_impl(const T& t0, const State& q0) const;
 
     // ================================================================================
 
@@ -526,10 +531,10 @@ protected:
     inline const OdeType& ode() const {return ode_;}
 
     /// @brief Same as this->Rhs, but increments the RHS evaluation counter.
-    void        rhs(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
+    void        rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
 
     /// @brief Same as this->Jac, but increments the Jacobian evaluation counter.
-    void        jac(T* out, const T& t, const T* q) const noexcept(!detail::rhs_may_throw);
+    void        jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
 
     void        set_status(StepperStatus new_status);
 
@@ -555,14 +560,14 @@ protected:
     // Main protected constructor
     BaseSolver(OdeType ode,
         T t0,
-        View1D<T, N> q0,
-        T rtol,
-        T atol,
+        State q0,
+        RealState rtol,
+        RealState atol,
         T min_step,
         T max_step,
         T stepsize,
         int direction,
-        EventList<T> events={});
+        EventList<T, State> events={});
 
     // ==================================================
 
@@ -586,15 +591,20 @@ protected:
     // nesting they reach, with one level of re-entry from an observer: advance_until holds a
     // vector while the observer calls auto_step(), which holds another while auto_step(t, q)
     // takes 4 more. RichSolver::show_state and BDF borrow from it too.
-    [[no_unique_address]] mutable detail::ScratchPageFor<T, 6*N>    scratch_;
-    [[no_unique_address]] mutable detail::ScratchPageFor<T, 2>      scalar_scratch_;
-    [[no_unique_address]] mutable detail::ScratchPageIf<JP == JacPolicy::Autodiff, DualType<T, N, 1>, N> dual_scratch_;
+    
+    worker_t<State>         scratch_0;
+    worker_t<State>         scratch_1;
+    worker_t<State>         scratch_2;
+    worker_t<State>         scratch_3;
+    worker_t<RealState>     real_scratch;
+    worker_t<DualState<1>>  dual_scratch;
+    worker_t<SeedState<1>>  seed_scratch;
 
 private:
 
     bool    validate_it(StepResult result, const T& new_time);
 
-    StepResult adapt_it(T* q_out, T& t_out, T& habs_out);
+    StepResult adapt_it(State& q_out, T& t_out, T& habs_out);
 
     /// @brief Takes a step from the newest state and, if it is accepted, makes it the newest
     /// state. Afterwards t_out and habs_out hold the previous t_old and step size.
@@ -611,7 +621,7 @@ private:
     );
 
     template<typename Callable>
-    BoxedInterp<T, N>   generic_interpolate_until(
+    BoxedInterp<T, SD>   generic_interpolate_until(
         const T& time,
         Callable&& observer
     );
@@ -629,13 +639,10 @@ private:
     void                    move_state(const T& time);
     
     OdeType         ode_;
-    T               t_ics_, habs_ics_;
-    Array1D<T, N>   q_ics_;
-    T               t_old_, t_new_, t_true_, habs_new_;
-    T               rtol_, atol_, min_step_, max_step_;
+    T               t_ics_, habs_ics_, t_old_, t_new_, t_true_, habs_new_, min_step_, max_step_;
+    State           q_ics_, q_old_, q_new_;
+    RealState       rtol_, atol_;
     detail::StepperFactors<T> factors_;
-    Array1D<T, N>   q_old_, q_new_;
-    size_t          nsys_ = N;
     size_t          step_count_ = 0;
     mutable size_t  rhs_eval_count_ = 0;
     mutable size_t  jac_eval_count_ = 0;

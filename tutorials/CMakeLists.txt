@@ -12,7 +12,7 @@
 # executable of the same name. They demonstrate the header-only interface in namespace ode,
 # so they link odecraft::odecraft rather than the compiled ode::crafted library.
 
-cmake_minimum_required(VERSION 3.15...3.26)
+cmake_minimum_required(VERSION 3.21...3.26)
 
 project(odecraft_tutorials LANGUAGES CXX)
 

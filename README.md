@@ -32,7 +32,7 @@ git clone --recursive https://github.com/phyzan/odecraft.git
 ```
 which will also pull all of its submodule dependencies. These can be updated via
 ```bash
-git submodule update --recursive
+git submodule update --init --recursive
 ```
 
 ## Requirements
@@ -66,15 +66,10 @@ For maximum performance, use lambdas or functors where possible, without buildin
 Configure the project with some [options](#CMake-options) and build it:
 ```bash
 cmake -S . -B build \
-  -DXDIFF_LAZY_NESTED_DUAL=ON \
   -DLAZEX_MPFR_RND=MPFR_RNDN \
-  -DXDIFF_FAST=ON \
-  -DXDIFF_LEIBNIZ_OPT=OFF \
-  -DXDIFF_SCALAR_OPTIMIZATIONS=ON \
   -DODECRAFT_RK4_DENSE=OFF \
   -DODECRAFT_NO_WARN=ON \
   -DODECRAFT_NO_NAN_CHECK=ON \
-  -DODECRAFT_USE_FLAT_AUTODIFF=OFF \
   -DODECRAFT_USE_LAZY_MPREAL=ON \
   -DODECRAFT_RHS_THROWS=OFF \
   -DCMAKE_BUILD_TYPE=Release
@@ -129,13 +124,12 @@ CMake options that toggle preprocessor macros across the library and its bundled
 | `ODECRAFT_RK4_DENSE` | Enable accurate RK4 dense output for the `RK4` solver, but for large ODE systems this can be expensive. |
 | `ODECRAFT_NO_WARN` | Disable ODE solver console warnings. |
 | `ODECRAFT_NO_NAN_CHECK` | Disable NaN/inf checks on solver output, for performance. |
-| `ODECRAFT_USE_FLAT_AUTODIFF` | Store automatic-differentiation duals in `xdiff`'s flat layout (a single contiguous array) for systems whose size `N` is known at compile time. Dynamically sized systems (`N == 0`) stay on the nested layout either way, since the flat one needs its variable count at compile time. Off by default, so every system uses the nested layout. |
 | `DEBUG` | Debug build: `-O0 -g3 -ggdb3 -fno-omit-frame-pointer -UNDEBUG` (asserts enabled), instead of the default optimized release build (`-O3 -DNDEBUG`, LTO where supported). Also triggered by `-DCMAKE_BUILD_TYPE=Debug`. |
 | `ODECRAFT_BUILD_CRAFTED` | Build the API for the `ode::crafted` namespace. Defaults to `ON` when configuring odecraft directly, `OFF` when pulled in via `add_subdirectory` by another project. |
 | `ODECRAFT_RHS_THROWS` | Allow `Rhs` and `Jac` to throw: the exception then propagates out of the stepping call. **Off by default**. See the [`OdeType`](#odetype-template-parameter) section. |
 | `ODECRAFT_USE_LAZY_MPREAL` | Compile `ode::crafted`'s `mpreal_t` as `lazex::LazyType<mpfr::mpreal>` instead of plain `mpfr::mpreal`. The lazy wrapper elides temporaries in compound expressions, a large win for MPFR where every temporary is a heap allocation. **On by default**; turn it off for plain `mpfr::mpreal`. Either way the type is spelled `mpreal_t`, so nothing else in your code changes. |
 
-See useful [options](https://github.com/phyzan/xdiff#CMake-Options) for the `xdiff` submodule.
+See useful [options](https://github.com/phyzan/lazex#cmake-options) for the `lazex` submodule.
 
 ## Calling math functions: `ODECRAFT_USING_MATH`
 
@@ -555,126 +549,9 @@ The `SolverPolicy` template parameter controls inheritance and feature availabil
 
 ---
 
-## Directory Structure
-
-```
-odecraft/
-├── include/
-│   └── odecraft/                    # All headers
-│       ├── Toolkit/                 # Shared foundation
-│       │   ├── Tools.hpp            # Utilities, shared concepts & OdeData
-│       │   └── FinDiff.hpp          # Finite difference Jacobian approximation
-│       │
-│       ├── Core/                    # Solver foundation & base classes
-│       │   ├── SolverFactory.hpp    # Stepper/SolverPolicy enums & solver factories
-│       │   ├── VirtualBase.hpp      # OdeSolver / OdeRichSolver virtual interfaces
-│       │   ├── VirtualTraits.hpp    # Traits for virtual solvers
-│       │   ├── BaseSolver/          # CRTP base solver
-│       │   │   └── BaseSolver.hpp
-│       │   └── RichSolver/          # Event-aware solver extension
-│       │       └── RichBase.hpp
-│       │
-│       ├── Events/                  # Event detection system
-│       │   └── Events.hpp
-│       │
-│       ├── Objectives/              # Compile-time event stepping
-│       │   └── StaticEventStepper.hpp
-│       │
-│       ├── Steppers/                # Concrete solver implementations
-│       │   ├── Steppers.hpp         # Common solver includes
-│       │   ├── Euler.hpp            # Simple Euler method (1st order)
-│       │   ├── RK4.hpp              # Constant-step classical RK4 method
-│       │   ├── DOPRI.hpp            # Dormand-Prince framework
-│       │   ├── RK23_DOPRI.hpp       # RK23 (adaptive)
-│       │   ├── RK45_DOPRI.hpp       # RK45 (adaptive)
-│       │   ├── DOP853.hpp           # High-order explicit RK (8th order)
-│       │   └── BDF.hpp              # Implicit solver for stiff systems
-│       │
-│       ├── Interpolation/           # Dense output & field interpolation
-│       │   ├── NdInterpolator.hpp   # N-dimensional interpolator base
-│       │   ├── VectorFields.hpp     # Sampled vector field interpolation
-│       │   ├── Regular/             # Regular grid interpolation
-│       │   │   ├── Grids.hpp        # Grid data structures
-│       │   │   └── RegularGridInterpolator.hpp
-│       │   ├── Scattered/           # Scattered data interpolation
-│       │   │   ├── Delaunay.hpp     # Delaunay triangulation
-│       │   │   └── ScatteredNdInterpolator.hpp
-│       │   └── Univariate/          # 1D interpolation
-│       │       └── StateInterp.hpp  # Dense output between solver steps
-│       │
-│       ├── Chaos/                   # Dynamical systems analysis
-│       │   └── VariationalSolvers.hpp    # Lyapunov exponent computation
-│       │
-│       ├── DenseOde/                # High-level ODE wrapper
-│       │   └── OdeInt.hpp           # Dense-output integration front end
-│       │
-│       ├── OdeResult/               # Integration result storage
-│       │   └── OdeResult.hpp        # Result container
-│       │
-│       ├── Compiled/                # The pre-compiled `ode::crafted` interface
-│       │   ├── Toolkit.hpp          # Shared vocabulary (rhs_t, ode_t, mpreal_t, ...)
-│       │   ├── SolverBase.hpp       # Abstract solver interfaces
-│       │   ├── Steppers.hpp         # All steppers (Euler, RK4, ...)
-│       │   ├── Events.hpp           # Runtime events
-│       │   ├── Interpolators.hpp    # Dense output
-│       │   ├── NdInterpolators.hpp  # Grid / scattered field interpolation
-│       │   ├── ODE.hpp              # ODE<T> integration front end
-│       │   ├── OdeHistory.hpp       # OdeResult<T> / OdeSolution<T>
-│       │   ├── Chaos.hpp            # Variational solvers
-│       │   └── odecraft.hpp         # All of `ode::crafted`
-│       │
-│       └── odecraft.hpp             # Main include for the header-only `ode` interface
-│
-├── src/                             # Explicit template instantiations of `ode::crafted`,
-│                                    #   one translation unit per Compiled/ header
-│
-├── external/                        # Git submodules (bundled header-only dependencies)
-│   ├── xdiff/                       # Automatic differentiation library (bundles its own `lazex` + `mpreal` submodules)
-│   ├── ndspan/                      # Multi-dimensional array views and utilities
-│   └── polybox/                     # Wrapper for dynamically allocated types
-│
-├── tests/                           # C++ test suite, compiled into one odecraft_tests executable
-│   ├── CMakeLists.txt               # Standalone project, pulls odecraft in as a subproject
-│   ├── include/                     # One <name>.hpp per test file, declaring void test_<name>()
-│   └── src/                         # One <name>.cpp per test file, implementing it; main.cpp calls them all
-│
-├── tutorials/                       # Standalone example programs referenced from the README
-│   ├── CMakeLists.txt               # Standalone project, pulls odecraft in as a subproject
-│   ├── ArbitraryPrecision.cpp       # Arbitrary-precision (mpreal / lazex) usage
-│   ├── Autodiff.cpp                 # Automatic differentiation vs analytic / finite-difference Jacobians
-│   ├── CompileTimeEvents.cpp        # Compile-time event system usage
-│   ├── MPRealCrafted.cpp            # mpreal_t through the compiled `ode::crafted` interface
-│   └── RuntimeEvents.cpp            # Runtime (polymorphic) event system usage
-│
-├── .clang-tidy                      # clang-tidy check configuration
-├── CMakeLists.txt                   # odecraft::odecraft interface target + odecraft::crafted library
-├── LICENSE
-└── README.md
-```
-
-Headers that declare templates are paired with an `X_impl.hpp` holding their out-of-line
-definitions, and a few also with an `X_mem_impl.hpp` carrying the templated member functions
-that the compiled interface cannot instantiate ahead of time. Include the plain header for the
-declarations, or the `_impl` one to get the definitions too — `<odecraft/odecraft.hpp>` and
-`<odecraft/Compiled/odecraft.hpp>` pull in everything their respective interfaces need.
-
----
-
 ## Performance Tips
 
 - **Prefer SolverPolicy::Static**  when no runtime-event detection or type-erasure is required 
 - **Set appropriate tolerances** - tighter tolerances mean smaller steps
 - **Use `BDF`** for stiff problems
 
-
----
-
-## License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
----
-
-<p align="center">
-  <sub>Built with modern C++ for scientists and engineers</sub>
-</p>

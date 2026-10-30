@@ -83,8 +83,7 @@ using ode_t = ::ode::OdeData<rhs_t<T>, rhs_t<T>>;
 using ::ode::OdeData,
       ::ode::StepResult,
       ::ode::JacPolicy,
-      ::ode::RootPolicy,
-      ::ode::Clock;
+      ::ode::RootPolicy;
 
 using ::ode::Array,
       ::ode::Array1D,

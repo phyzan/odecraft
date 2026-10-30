@@ -11,25 +11,43 @@ constexpr size_t BDF_MAX_ORDER = 5;
 // DECLARATIONS
 // ============================================================================
 
-// Struct declarations
-template<typename T, size_t N>
-struct LUResult {
-    LUResult(size_t Nsys);
-    JacMat<T, N> LU;
-    Array1D<size_t, N> piv;
+namespace detail{
 
-    /// @brief Factorizes A_input with partial pivoting. Returns false if it is (nearly) singular.
-    bool lu_factor(const JacMat<T, N>& A_input);
+/// @brief LU factorization, with partial pivoting, of I - c*J for a Jacobian J, and solutions of
+/// the linear systems with it. The matrix is only accessed as M(i, j), and the states through
+/// SD::for_each, whose passes also count the rows and columns: J must be as large as the states.
+template<typename T, typename SD>
+class ShiftedLU{
 
-    void lu_solve(T* x, const T* b) const;
+public:
+
+    using S = value_t<T, SD>;
+    using State = state_t<T, SD>;
+    using JacMat = jacmat_t<T, SD>;
+
+    /// @param J A Jacobian of the system, that gives the factorization its shape
+    /// @param q A state of the system
+    ShiftedLU(const JacMat& J, const State& q);
+
+    /// @brief Factorizes I - c*J. Returns false if it is (nearly) singular.
+    bool factor(const JacMat& J, const T& c);
+
+    /// @brief x = (I - c*J)^-1 b with the last factorization. x may be b itself.
+    void solve(State& x, const State& b) const;
+
+private:
+
+    JacMat                              lu_;
+    SD::template state_type<size_t>     piv_;  // step k of the elimination swapped row k with row piv_[k] >= k
+    worker_t<State>                     work_; // y of L*y = P*b, solved in place into x of U*x = y
 };
 
 template<typename T>
 struct BDFCONSTS{
-    Array1D<T, BDF_MAX_ORDER+1> KAPPA;
-    Array1D<T, BDF_MAX_ORDER+1> GAMMA;
-    Array1D<T, BDF_MAX_ORDER+1> ALPHA;
-    Array1D<T, BDF_MAX_ORDER+1> ERR_CONST;
+    std::array<T, BDF_MAX_ORDER+1> KAPPA;
+    std::array<T, BDF_MAX_ORDER+1> GAMMA;
+    std::array<T, BDF_MAX_ORDER+1> ALPHA;
+    std::array<T, BDF_MAX_ORDER+1> ERR_CONST;
 
     BDFCONSTS();
 };
@@ -40,80 +58,92 @@ struct NewtConv{
     StepResult flag;
 };
 
-// Function declarations
+// The matrices of change_D, at their largest size: an order uses their leading (order+1) x (order+1) block
+template<typename T>
+using BDFMatrix = CArray2D<T, BDF_MAX_ORDER+1, BDF_MAX_ORDER+1>;
 
 template<typename T>
-Array1D<T> arange(size_t a, size_t b);
+void compute_R(BDFMatrix<T>& R, size_t order, const T& factor);
 
-template<typename T>
-void compute_R(T* R, size_t order, T factor);
+/// @brief The solution at t, out of the backward differences D at t2 of order `order`, for steps h.
+template<typename T, typename SD>
+void bdf_interp(state_t<T, SD>& result, const T& t, const T& t2, const T& h, const std::array<state_t<T, SD>, BDF_MAX_ORDER+3>& D, size_t order);
 
-template<typename T>
-void bdf_interp(T* result, const T& t, const T& t2, const T& h, const T* D, size_t order, size_t size);
+} // namespace ode::detail
 
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
-class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, N, SP, OdeType>, Derived>, T, N, SP, OdeType>{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
+class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
+
+    using Base = detail::BaseDispatcher<GetDerived<BDF<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
 
 public:
-
-    BDF(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
-
-    DEFAULT_RULE_OF_FOUR(BDF)
-
-    void            Reset();
+    using State = state_t<T, SD>;
+    using RealState = Base::RealState;
+    using JacMat = Base::JacMat;
 
     static constexpr int ERR_EST_ORDER = 1;
     static constexpr bool IS_IMPLICIT = true;
     static constexpr size_t NEWTON_MAXITER = 4;
 
+    BDF(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events = {});
+
+    DEFAULT_RULE_OF_FOUR(BDF)
+
     Stepper method() const;
+
+    void            Reset();
 
 protected:
 
-    using Base = detail::BaseDispatcher<GetDerived<BDF<T, N, SP, OdeType>, Derived>, T, N, SP, OdeType>;
-    using Dlike = Array2D<T, 0, N>;
-    struct private_tag{};
-
-    StepResult      adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);
-    void            interp_impl(T* result, const T& t) const;
+    StepResult      adapt_impl(T& t_out, T& habs_out, State& q_out, const T& t, const T& stepsize, const State& q_in);
+    void            interp_impl(State& result, const T& t) const;
     auto            local_interp() const;
-    void            ReAdjust(const T* new_vector);
-    bool            validate_ics_impl(T t0, const T* q0) const;
+    void            ReAdjust(const State& new_vector);
+    bool            validate_ics_impl(const T& t0, const State& q0) const;
 
 private:
 
+    // The backward differences of the solution: D[k] is the k-th
+    using Differences = std::array<State, BDF_MAX_ORDER+3>;
+
     void    reset_impl_alone();
 
-    NewtConv solve_bdf_system(T* y, const T* y_pred, Array1D<T, N>& d, const T& t_new, const T& c, const Array1D<T, N>& psi, const LUResult<T, N>& LU, const Array1D<T, N>& scale);
+    detail::NewtConv solve_bdf_system(State& y, const State& y_pred, State& d, State& work, const T& t_new, const T& c, const State& psi, const RealState& scale);
 
-    void change_D(const T& factor);
+    void    change_D(const T& factor);
 
-    void set_prediction(T* y);
+    void    set_prediction(State& y) const;
 
-    void set_psi(T* psi);
+    void    set_psi(State& psi) const;
 
-    JacMat<T, N> _J;
-    mutable JacMat<T, N> _B;
-    std::array<Dlike, 3> _D;
-    LUResult<T, N> _LU;
-    T _newton_tol;
-    size_t _order = 1;
-    size_t _n_eq_steps = 0;
-    bool _valid_LU = false;
-    size_t _idx_D = 0;
-    mutable std::vector<T> _R, _U, _RU;
-    mutable Array1D<T, N> _f, _dy, _b, _scale, _ypred, _psi, _d, _error, _error_m, _error_p;
-    mutable std::array<T, 3> _error_norms;
-    BDFCONSTS<T> BDF_COEFS;
+    static JacMat jacobian_like(const State& q);
+
+    JacMat                      J_;
+    detail::ShiftedLU<T, SD>    LU_;
+    std::array<Differences, 2>  D_;  // change_D writes into the one that is not current
+    detail::BDFMatrix<T>        R_, U_, RU_;
+    detail::BDFCONSTS<T>        coefs_;
+    T                           newton_tol_;
+    size_t                      order_ = 1;
+    size_t                      n_eq_steps_ = 0;
+    size_t                      idx_D_ = 0;
+    bool                        valid_LU_ = false;
+
+    // the predicted solution, psi, the accumulated correction and a working state of a step, and its error scale
+    worker_t<State>             ypred_scratch_;
+    worker_t<State>             psi_scratch_;
+    worker_t<State>             d_scratch_;
+    worker_t<State>             work_scratch_;
+    worker_t<RealState>         scale_scratch_;
 
 };
 
 namespace detail{
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-struct SolverTypeGetter<Stepper::BDF, T, N, SP, OdeType, Derived>{
-    using type = BDF<T, N, SP, OdeType, Derived>;
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+struct SolverTypeGetter<Stepper::BDF, SP, T, SD, JD, OdeType, Derived>{
+    using type = BDF<T, SD, JD, OdeType, SP, Derived>;
 };
 
 } // namespace ode::detail

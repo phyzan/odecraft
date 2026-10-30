@@ -5,178 +5,154 @@
 
 namespace ode{
 
-#ifdef ODECRAFT_RK4_DENSE
 namespace detail{
 
-template<typename T, size_t N>
-class MutArray{
-public:
-    MutArray(size_t n) : vec{n} {}
+template<typename T, typename SD, typename RhsFn>
+void rk4_step(state_t<T, SD>& q_new, cache_t<T> t, cache_t<T> h, const state_t<T, SD>& q,
+              std::array<state_t<T, SD>, 5>& K, state_t<T, SD>& r, RhsFn&& rhs){
+    using S = value_t<T, SD>;
 
-    T* data() const{
-        return vec.data();
-    }
+    SD::for_each([&](S& r_i, const S& q_i, const S& k0_i){
+        r_i = q_i + h * k0_i / T(2);
+    }, r, q, K[0]);
+    rhs(K[1], t + h/2, r);
 
-private:
-    mutable Vector<T, N> vec;
-};
+    SD::for_each([&](S& r_i, const S& q_i, const S& k1_i){
+        r_i = q_i + h * k1_i / T(2);
+    }, r, q, K[1]);
+    rhs(K[2], t + h/2, r);
+
+    SD::for_each([&](S& r_i, const S& q_i, const S& k2_i){
+        r_i = q_i + h * k2_i;
+    }, r, q, K[2]);
+    rhs(K[3], t + h, r);
+
+    SD::for_each([&](S& qn_i, const S& q_i, const S& k0_i, const S& k1_i, const S& k2_i, const S& k3_i){
+        qn_i = q_i + h * (k0_i + T(2)*k1_i + T(2)*k2_i + k3_i) / T(6);
+    }, q_new, q, K[0], K[1], K[2], K[3]);
+}
+
+template<typename T, typename SD>
+void rk4_interp(state_t<T, SD>& out, const T& t, const T& t1, const T& t2, const state_t<T, SD>& y1, const state_t<T, SD>& y2,
+                const state_t<T, SD>& f1, const state_t<T, SD>& f2){
+    assert( (t != t1 && t != t2) && "rk4_interp must only be called on the open interval");
+    using S = value_t<T, SD>;
+
+    const T h = t2 - t1;
+    const T theta = (t - t1) / h;
+
+    const T x2 = theta * theta;
+    const T x3 = x2 * theta;
+    const T h00 = 1 - 3*x2 + 2*x3;
+    const T h10 = theta - 2*x2 + x3;
+    const T h01 = 3*x2 - 2*x3;
+    const T h11 = -x2 + x3;
+
+    SD::for_each([&](S& out_i, const S& y1_i, const S& y2_i, const S& f1_i, const S& f2_i){
+        out_i = h00 * y1_i + h * h10 * f1_i + h01 * y2_i + h * h11 * f2_i;
+    }, out, y1, y2, f1, f2);
+}
 
 } // namespace ode::detail
-#endif
 
 
-template<typename T, typename RhsType>
-void rk4_step(RhsType&& rhs, T* y_new, const T& t, const T& h, const T* y, T* k, size_t n, T* worker){
-    // rhs(out, t, y);
-
-    // ======= Perform RK4 core algorithm =======
-    T* k1 = k;
-    T* k2 = k + n;
-    T* k3 = k + 2*n;
-    T* k4 = k + 3*n;
-
-    rhs(k1, t, y);
-    for (size_t i=0; i<n; i++){
-        worker[i] = y[i] + h * k1[i] / 2;
-    }
-    rhs(k2, t + h/2, worker);
-    for (size_t i=0; i<n; i++){
-        worker[i] = y[i] + h * k2[i] / 2;
-    }
-    rhs(k3, t + h/2, worker);
-    for (size_t i=0; i<n; i++){
-        worker[i] = y[i] + h * k3[i];
-    }
-    rhs(k4, t + h, worker);
-    for (size_t i=0; i<n; i++){
-        y_new[i] = y[i] + h * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]) / 6;
-    }
-}
-
-template<typename T>
-void rk4_interp(T* out, const T& t, const T& t1, const T& t2, const T* y1, const T* y2, const T* y1dot, const T* y2dot, size_t n){
-    assert( (t != t1 && t != t2) && "rk4_interp must only be called on the open interval");
-    T h = t2 - t1;
-    T theta = (t - t1) / h;
-
-    T x2 = theta * theta;
-    T x3 = x2 * theta;
-    T h00 = 1 - 3*x2 + 2*x3;
-    T h10 = theta - 2*x2 + x3;
-    T h01 = 3*x2 - 2*x3;
-    T h11 = -x2 + x3;
-
-    for (size_t i=0; i<n; i++){
-        out[i] = h00 * y1[i] + h * h10 * y1dot[i] + h01 * y2[i] + h * h11 * y2dot[i];
-    }
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-RK4<T, N, SP, OdeType, Derived>::RK4(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T> events) : Base(ode, t0, q0, rtol, atol, 0, 0, stepsize, dir, std::move(events)),
-#ifdef ODECRAFT_RK4_DENSE
-K(9, q0.size())
-#else
-K(5, q0.size())
-#endif
-{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+RK4<T, SD, JD, OdeType, SP, Derived>::RK4(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T, State> events)
+    : Base(std::move(ode), t0, q0, std::move(rtol), std::move(atol), 0, 0, stepsize, dir, std::move(events)),
+      r_scratch_(q0) {
     // min_step and max_step are not used in RK4
+    // the arrays of states take the shape of q0 too
+    K_.fill(q0);
+#ifdef ODECRAFT_RK4_DENSE
+    K_scratch_.get().fill(q0);
+#endif
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Stepper RK4<T, N, SP, OdeType, Derived>::method() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+Stepper RK4<T, SD, JD, OdeType, SP, Derived>::method() const{
     return Stepper::RK4;
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-auto RK4<T, N, SP, OdeType, Derived>::local_interp() const{
-#ifdef ODECRAFT_RK4_DENSE
-    /*
-    TODO : This is expensive. If we could guarantee that the RK4 object does not go out of scope,
-    we can just reference the solver without copying this->K and this->ode()
-    in the lambda below
-    */
-    return
-        [K = detail::MutArray<T, 5*N>{
-            5*this->nsys()},
-        nsys = this->nsys(),
-        t_old = this->t_old(),
-        old = Array1D<T, N>(this->vector_old().data(), this->nsys()),
-        ode=this->ode()]
-        (T* out, const T& t) {
-            rk4_step(
-                [&ode](T* out_, const T& t_, const T* y_){
-                    ode.Rhs(out_, t_, y_);
-                },
-                out, t_old, t - t_old, old.data(), K.data(), nsys, K.data()+4*nsys
-            );
-        };
-#else
-    set_interp_data();
-    size_t nsys = this->nsys();
-    return [nsys, t1=this->t_old(), t2 = this->t_new(), y1=Array1D<T, N>(this->vector_old().data(), nsys), y2=Array1D<T, N>(this->vector_new().data(), nsys), y1dot=Array1D<T, N>(K.data(), nsys), y2dot=Array1D<T, N>(K.data()+nsys, nsys)](T* out, const T& t){
-        rk4_interp(out, t, t1, t2, y1.data(), y2.data(), y1dot.data(), y2dot.data(), nsys);
-    };
-#endif
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-StepResult RK4<T, N, SP, OdeType, Derived>::adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q){
-    // standard Runge-Kutta-4 with fixed step size
-
-    // rk4_step overwrites K[1], which set_interp_data fills with the derivative at t_new
-    interp_data_set = false;
-
-    const T& h = habs * this->direction();
-    size_t n = this->nsys();
-
-    t_new = t + h;
-    habs_new = habs;
-
-    auto rhs_caller = [this](T* out, const T& t_dummy, const T* y_dummy) NDSPAN_LAMBDA_INLINE{
-        this->rhs(out, t_dummy, y_dummy);
-    };
-
-    rk4_step(rhs_caller, q_new, t, h, q, K.data(), n, K.data() + 4*n);
-    if (!all_are_finite(q_new, n)){
-        return StepResult::NonFiniteError;
-    }else{
-        return StepResult::Success;
-    }
-
-}
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK4<T, N, SP, OdeType, Derived>::interp_impl(T* out, const T& t) const{
-    size_t nsys = this->nsys();
-#ifdef ODECRAFT_RK4_DENSE    
-    rk4_step([this](T* out_, const T& t_, const T* y_) NDSPAN_LAMBDA_INLINE{
-        this->rhs(out_, t_, y_);
-    }, out, this->t_old(), t - this->t_old(), this->vector_old().data(), K.data()+5*nsys, nsys, K.data() + 4*nsys);
-#else
-    set_interp_data();
-    rk4_interp(out, t, this->t_old(), this->t_new(), this->vector_old().data(), this->vector_new().data(), K.data(), K.data()+nsys, nsys);
-#endif
-}
-
-
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK4<T, N, SP, OdeType, Derived>::Reset(){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK4<T, SD, JD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    K.fill(0);
     interp_data_set = false;
-
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK4<T, N, SP, OdeType, Derived>::ReAdjust(const T* new_vector){
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK4<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
     set_interp_data();
 }
 
-template<typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void RK4<T, N, SP, OdeType, Derived>::set_interp_data() const{
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+StepResult RK4<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
+    // standard Runge-Kutta-4 with fixed step size
+
+    // the derivative at the end of the step being replaced is no longer valid
+    interp_data_set = false;
+
+    const T h = habs * this->direction();
+
+    t_new = t + h;
+    habs_new = habs;
+
+    decltype(auto) rhs_scratch = r_scratch_.get();
+
+    this->rhs(K_[0], t, q);
+    detail::rk4_step<T, SD>(q_new, t, h, q, K_, rhs_scratch, [this](State& out, const T& time, const State& y){
+        this->rhs(out, time, y);
+    });
+
+    if (!all_are_finite<T, SD>(q_new)){
+        return StepResult::NonFiniteError;
+    }else{
+        return StepResult::Success;
+    }
+}
+
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK4<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& out, const T& t) const{
+#ifdef ODECRAFT_RK4_DENSE
+    // a step straight from the start of the interval to t, which starts from the same derivative K_[0]
+    decltype(auto) stage_scratch = K_scratch_.get();
+    decltype(auto) rhs_scratch   = r_scratch_.get();
+    copy_state<SD>(stage_scratch[0], K_[0]);
+    detail::rk4_step<T, SD>(out, this->t_old(), t - this->t_old(), this->vector_old(), stage_scratch, rhs_scratch, [this](State& out_, const T& t_, const State& y_){
+        this->rhs(out_, t_, y_);
+    });
+#else
+    set_interp_data();
+    detail::rk4_interp<T, SD>(out, t, this->t_old(), this->t_new(), this->vector_old(), this->vector_new(), K_[0], K_[Nstages]);
+#endif
+}
+
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+auto RK4<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
+#ifdef ODECRAFT_RK4_DENSE
+    /*
+    TODO : This is expensive. If we could guarantee that the RK4 object does not go out of scope,
+    we can just reference the solver without copying the ode and the stages
+    in the lambda below
+    */
+    return [ode = this->ode(), t1 = this->t_old(), y1 = this->vector_old(), K = K_, r = K_[0]](State& out, const T& t) mutable {
+        // K[0] is the derivative at t1, which the steps from t1 only read
+        detail::rk4_step<T, SD>(out, t1, t - t1, y1, K, r, [&ode](State& out_, const T& t_, const State& y_){
+            ode.Rhs(out_, t_, y_);
+        });
+    };
+#else
+    set_interp_data();
+    return [t1 = this->t_old(), t2 = this->t_new(), y1 = this->vector_old(), y2 = this->vector_new(), f1 = K_[0], f2 = K_[Nstages]](State& out, const T& t){
+        detail::rk4_interp<T, SD>(out, t, t1, t2, y1, y2, f1, f2);
+    };
+#endif
+}
+
+template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK4<T, SD, JD, OdeType, SP, Derived>::set_interp_data() const{
     if (!interp_data_set){
-        this->rhs(K.data()+this->nsys(), this->t_new(), this->vector_new().data());
+        this->rhs(K_[Nstages], this->t_new(), this->vector_new());
         interp_data_set = true;
     }
 }
