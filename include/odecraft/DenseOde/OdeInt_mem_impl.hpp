@@ -1,6 +1,4 @@
-#ifndef ODECRAFT_ODE_INT_MEM_IMPL_HPP
-#define ODECRAFT_ODE_INT_MEM_IMPL_HPP
-
+#pragma once
 #include "OdeInt.hpp"
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/Events/Events.hpp>
@@ -16,5 +14,3 @@ ODE<T, N>::ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_ODE_INT_MEM_IMPL_HPP

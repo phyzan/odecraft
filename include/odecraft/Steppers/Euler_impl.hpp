@@ -1,6 +1,6 @@
-#ifndef ODECRAFT_EULER_IMPL_HPP
-#define ODECRAFT_EULER_IMPL_HPP
+#pragma once
 
+#include "odecraft/Toolkit/Tools.hpp"
 #include <odecraft/Steppers/Euler.hpp>
 
 namespace ode{
@@ -15,11 +15,6 @@ Euler<T, SD, JD, OdeType, SP, Derived>::Euler(OdeType ode, T t0, State q0, RealS
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 Stepper Euler<T, SD, JD, OdeType, SP, Derived>::method() const{
     return Stepper::Euler;
-}
-
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void Euler<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& result, const T& t) const{
-    return lin_interp<T, SD>(result, t, this->t_old(), this->t_new(), this->vector_old(), this->vector_new());
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
@@ -40,18 +35,11 @@ StepResult Euler<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto Euler<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
-    return
-        [t1=this->t_old(),
-            t2=this->t_new(),
-            y1=this->vector_old(),
-            y2=this->vector_new()]
-            (State& out, const T& t){
-                lin_interp<T, SD>(out, t, t1, t2, y1, y2);
-            };
+auto Euler<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
+    return make_light_functor([](State& out, const T& t, const auto& t1, const auto& t2, const auto& y1, const auto& y2){
+        return lin_interp<T, SD>(out, t, t1, t2, y1, y2);
+    }, this->t_old(), this->t_new(), this->vector_old(), this->vector_new());
 }
 
 
 } // namespace ode
-
-#endif // ODECRAFT_EULER_IMPL_HPP

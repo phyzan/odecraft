@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_ND_INTERPOLATORS_HPP
-#define ODECRAFT_COMPILED_ND_INTERPOLATORS_HPP
+#pragma once
 
 /**
  * @file Compiled/NdInterpolators.hpp
@@ -161,4 +160,3 @@ ODECRAFT_ND_INTERPOLATOR_SET(extern template)
 ODECRAFT_ND_REGULAR_FIELD_SET(extern template)
 ODECRAFT_ND_SCATTERED_FIELD_SET(extern template)
 
-#endif // ODECRAFT_COMPILED_ND_INTERPOLATORS_HPP

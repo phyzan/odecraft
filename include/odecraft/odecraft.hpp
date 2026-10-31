@@ -1,5 +1,5 @@
-#ifndef ODECRAFT_HPP
-#define ODECRAFT_HPP
+#pragma once
+
 
 #include <polybox/polybox.hpp>
 #include <odecraft/Toolkit/Tools.hpp>
@@ -40,5 +40,3 @@
  *       functionalities.
  * @note Compile with -DODECRAFT_NO_WARN to turn off unnecessary warnings that the solvers may throw on the console
  */
-
-#endif // ODECRAFT_HPP

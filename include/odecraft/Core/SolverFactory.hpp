@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_SOLVER_FACTORY_HPP
-#define ODECRAFT_SOLVER_FACTORY_HPP
+#pragma once
 
 #include <cstdint>
 #include <stdexcept>
@@ -197,5 +196,3 @@ inline BoxedSolver<T, SD, UtilPolicy::RichVirtual> make_rich_vsolver(Stepper met
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_SOLVER_FACTORY_HPP

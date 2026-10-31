@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_BDF_HPP
-#define ODECRAFT_BDF_HPP
+#pragma once
 
 #include <odecraft/Core/RichSolver/RichBase.hpp>
 
@@ -75,7 +74,10 @@ void bdf_interp(state_t<T, SD>& result, const T& t, const T& t2, const T& h, con
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
 
+    ODECRAFT_DECLARE_STEPPER;
+    
     using Base = detail::BaseDispatcher<GetDerived<BDF<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
+    
 
 public:
     using State = state_t<T, SD>;
@@ -97,8 +99,7 @@ public:
 protected:
 
     StepResult      adapt_impl(T& t_out, T& habs_out, State& q_out, const T& t, const T& stepsize, const State& q_in);
-    void            interp_impl(State& result, const T& t) const;
-    auto            local_interp() const;
+    auto            local_interp_impl() const;
     void            ReAdjust(const State& new_vector);
     bool            validate_ics_impl(const T& t0, const State& q0) const;
 
@@ -150,5 +151,3 @@ struct SolverTypeGetter<Stepper::BDF, SP, T, SD, JD, OdeType, Derived>{
 
 
 } // namespace ode
-
-#endif // ODECRAFT_BDF_HPP

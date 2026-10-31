@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_REGULAR_GRID_INTERPOLATOR_IMPL_HPP
-#define ODECRAFT_REGULAR_GRID_INTERPOLATOR_IMPL_HPP
+#pragma once
 
 #include <odecraft/Interpolation/Regular/RegularGridInterpolator.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
@@ -443,6 +442,3 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
 }
 
 } // namespace ode::interp::rgi
-
-
-#endif // ODECRAFT_REGULAR_GRID_INTERPOLATOR_IMPL_HPP

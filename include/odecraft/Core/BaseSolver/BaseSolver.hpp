@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_BASESOLVER_HPP
-#define ODECRAFT_BASESOLVER_HPP
+#pragma once
 
 /**
  * @file BaseSolver.hpp
@@ -17,39 +16,17 @@
  * output interpolation, and event detection.
  */
 
-#include "odecraft/Toolkit/Tools.hpp"
+#include "odecraft/Toolkit/Toolkit.hpp"
 #include <odecraft/Core/VirtualTraits.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
+#include <ostream>
 
 
 
-// For non-template member functions: use pointer-to-member (standard-compliant)
-#define ODECRAFT_ACCESSOR(NAME) \
-    template<typename... Args> \
-    static auto call_##NAME(Derived& self, Args&&... args){ \
-        constexpr auto fn = &Accessor::NAME; \
-        return (self.*fn)(std::forward<Args>(args)...); \
-    } \
-    template<typename... Args> \
-    static auto call_##NAME(const Derived& self, Args&&... args){ \
-        constexpr auto fn = &Accessor::NAME; \
-        return (self.*fn)(std::forward<Args>(args)...); \
-    } \
+#define ODECRAFT_DECLARE_STEPPER \
+    template<typename, typename, typename, typename, typename, SolverPolicy> friend class BaseSolver; \
+    template<typename, typename, typename, typename, typename, SolverPolicy> friend class RichSolver
 
-// For template member functions: use pointer-to-member with explicit template args
-#define ODECRAFT_ACCESSOR_TEMPLATE(NAME) \
-    template<typename... Args> \
-    static auto call_##NAME(Derived& self, Args&&... args){ \
-        auto fn = &Accessor::template NAME<Args...>; \
-        return (self.*fn)(std::forward<Args>(args)...); \
-    } \
-    template<typename... Args> \
-    static auto call_##NAME(const Derived& self, Args&&... args){ \
-        auto fn = &Accessor::template NAME<Args...>; \
-        return (self.*fn)(std::forward<Args>(args)...); \
-    } \
-
-#define ODECRAFT_CALL_DERIVED(NAME, ...) Accessor::call_##NAME(*THIS, __VA_ARGS__)
 
 
 namespace ode{
@@ -100,7 +77,7 @@ using StepperFactors = std::conditional_t<
  * @tparam Derived The derived solver class (CRTP pattern). Must define:
  *                 - static constexpr bool IS_IMPLICIT
  *                 - static constexpr int ERR_EST_ORDER
- *                 - adapt_impl(), interp_impl(), local_interp()
+ *                 - adapt_impl(), local_interp_impl()
  * @tparam T       Scalar type for computations (e.g., double, float).
  * @tparam N       System size at compile time. Use 0 for runtime-sized systems.
  * @tparam SP      Solver policy controlling behavior (see SolverPolicy enum).
@@ -234,7 +211,7 @@ public:
      * @brief Print the current solver state to stdout.
      * @param prec Number of decimal places for floating-point output.
      */
-    void                show_state(int prec=8) const;
+    void                show_state(std::ostream& out, int prec=8) const;
 
     /**
      * @brief Validate proposed initial conditions.
@@ -245,14 +222,6 @@ public:
     bool                validate_ics(const T& t0, const State& q0) const;
 
     bool                has_valid_ics() const;
-
-    /**
-     * @brief Interpolate the solution at a time within the last step interval.
-     * @param[out] out Output array for interpolated state (size Nsys).
-     * @param[in]  t      Time to interpolate at (must be in [t_old, t_new]).
-     * @throws std::out_of_range if `t` is outside the last step interval.
-    */
-    void                interp(State& out, const T& t) const;
 
     /**
      * @brief Get the number of RHS function evaluations performed so far.
@@ -369,12 +338,18 @@ public:
     /// @brief Reset implementation hook. Derived should call base first.
     void                Reset();
 
+    /// @brief Non-owning interpolator for the closed interval [t_old, t_new]. Valid while the solver is not advanced or goes out of scope
+    auto light_interp() const;
+
+    /// @brief Interpolator for the closed interval [t_old, t_new], detached from the Solver. Can be expensive to construct
+    auto heavy_interp() const;
+
     /**
      * @brief Create an interpolator for dense output between two boundaries.
      * @param bdr1 First boundary index.
      * @param bdr2 Second boundary index.
-     * @return Unique pointer to an interpolator object.
-     * @note Must be implemented by derived class.
+     * @return Unique pointer to an interpolator object, which owns its data (it is detached from the solver).
+     * @note Built from the derived class's local_interp_impl().
      */
     BoxedInterp<T, SD> state_interpolator(int bdr1, int bdr2) const;
 
@@ -404,7 +379,7 @@ public:
     bool                get_validate_ics(const T& t0, const State& q0) const { return validate_ics(t0, q0); }
     bool                get_has_valid_ics() const { return has_valid_ics(); }
     Stepper             get_method() const { return method(); }
-    void                get_interp(State& result, const T& t) const { interp(result, t); }
+    // void                get_interp(State& result, const T& t) const { interp(result, t); }
     size_t              get_rhs_eval_count() const { return rhs_eval_count_; }
     size_t              get_jac_eval_count() const { return jac_eval_count_; }
     BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
@@ -469,16 +444,15 @@ protected:
      *       must not read vector_old() or interpolate. noexcept unless ODECRAFT_RHS_THROWS is defined.
      */
     StepResult          adapt_impl(T& t_new, T& habs_new, State& y_new, const T& t, const T& habs, const State& q) noexcept(!detail::rhs_may_throw);
-
+    
     /**
-     * @brief Interpolate solution at time t using method-specific interpolation.
-     * @param[out] result Output array for interpolated state (size Nsys).
-     * @param[in]  t      Time to interpolate at, in the open interval between two states
-     * @note Must be implemented by derived class.
-     */
-    void                interp_impl(State& result, const T& t) const;
-
-    auto                local_interp() const;
+     * @brief Lightweight non-owning interpolator in the open-interval (t_old, t_new).
+     Only guaranteed to be valid while the solver remains unchanged.
+     Call local_interp_impl().detach() for an owning, independent interpolator for that interval
+     which constructs a full copy of the required data members
+     @return LightFunctor, callable with (State& out, const T& t),  t_old < t < t_new
+    */
+    auto                local_interp_impl() const;
 
     void                fill_current_vector_impl(State& out) const;
 
@@ -513,18 +487,6 @@ protected:
     bool    validate_ics_impl(const T& t0, const State& q0) const;
 
     // ================================================================================
-
-    struct Accessor : Derived {
-        ODECRAFT_ACCESSOR(adapt_impl)
-        ODECRAFT_ACCESSOR(interp_impl)
-        ODECRAFT_ACCESSOR(local_interp)
-        ODECRAFT_ACCESSOR_TEMPLATE(Adv_Impl)  // Template member function
-        ODECRAFT_ACCESSOR(RequestTimeFloor)
-        ODECRAFT_ACCESSOR(ReAdjust)
-        ODECRAFT_ACCESSOR(fill_current_vector_impl)
-        ODECRAFT_ACCESSOR(validate_ics_impl)
-    };
-
 
     // =========================== HELPER METHODS =====================================
 
@@ -595,7 +557,6 @@ protected:
     worker_t<State>         scratch_0;
     worker_t<State>         scratch_1;
     worker_t<State>         scratch_2;
-    worker_t<State>         scratch_3;
     worker_t<RealState>     real_scratch;
     worker_t<DualState<1>>  dual_scratch;
     worker_t<SeedState<1>>  seed_scratch;
@@ -660,5 +621,3 @@ using GetDerived = std::conditional_t<(std::is_same_v<derived, void>), cls, deri
 
 
 } // namespace ode
-
-#endif // ODECRAFT_BASESOLVER_HPP

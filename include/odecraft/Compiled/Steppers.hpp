@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_STEPPERS_HPP
-#define ODECRAFT_COMPILED_STEPPERS_HPP
+#pragma once
 
 /**
  * @file Compiled/Steppers.hpp
@@ -64,5 +63,3 @@ ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_EXTERN_SOLVER_FACTORY)
 #undef ODECRAFT_EXTERN_SOLVER_FACTORY
 
 } // namespace ode::crafted
-
-#endif // ODECRAFT_COMPILED_STEPPERS_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_EVENTS_MEM_IMPL_HPP
-#define ODECRAFT_EVENTS_MEM_IMPL_HPP
+#pragma once
 
 #include "Events.hpp"
 
@@ -172,12 +171,16 @@ bool EventCollection<T, State>::detect_all_between(
         size_t masked_idx = detection_order[first_masked];
         T t_mask = event_times[masked_idx];
 
-        // Interpolate state at mask time
-        decltype(auto) worker = this->worker_.get();
-        f(worker, t_mask);
-
         // Apply the mask transformation
-        events[masked_idx]->apply_mask(masked_data.masked_vector, t_mask, worker);
+        if (t_mask == t_new){
+            events[masked_idx]->apply_mask(masked_data.masked_vector, t_mask, q_new);
+        } else {
+            // Interpolate state at mask time
+            decltype(auto) worker = this->worker_.get();
+            f(worker, t_mask);
+            events[masked_idx]->apply_mask(masked_data.masked_vector, t_mask, worker);
+        }
+                
         masked_data.time = t_mask;
         masked_data.idx = masked_idx;
         has_masked_state = true;
@@ -196,5 +199,3 @@ bool EventCollection<T, State>::detect_all_between(
 
 
 } // namespace ode
-
-#endif // ODECRAFT_EVENTS_MEM_IMPL_HPP

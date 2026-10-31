@@ -1,7 +1,7 @@
-#ifndef ODECRAFT_STATE_INTERP_HPP
-#define ODECRAFT_STATE_INTERP_HPP
+#pragma once
 
 #include <odecraft/Toolkit/Tools.hpp>
+#include <stdexcept>
 
 namespace ode::interp::uni {
 
@@ -100,7 +100,7 @@ public:
 
     virtual bool                can_link_with(const Interpolator& other) const = 0;
 
-    void                        call(State& result, const T& t) const;
+    virtual void                call(State& result, const T& t) const = 0;
 
     virtual std::unique_ptr<Interpolator> clone() const = 0;
 
@@ -122,12 +122,10 @@ public:
 
 protected:
 
+    void throw_domain_error(const T& t) const;
+
     DEFAULT_RULE_OF_FOUR(Interpolator)
 
-private:
-
-    virtual void _call_impl(State& result, const T& t) const = 0;
-    
 };
 
 template<typename T, typename SD>
@@ -135,9 +133,6 @@ using BoxedInterp = pbox::Box<Interpolator<T, SD>>;
 
 template<typename T, typename SD>
 class LocalInterpolator : public Interpolator<T, SD>{
-    //The purpose of this class is to provide a continuous output between the naturally adapted states
-    //of an OdeSolver.
-
 public:
 
     using Base = Interpolator<T, SD>;
@@ -153,11 +148,13 @@ public:
 
     //ACCESSORS
 
+    void call(State& out, const T& t) const final;
+
     const Interval<T>&          interval() const override;
 
-    const State&        q_start() const override;
+    const State&                q_start() const override;
 
-    const State&        q_end() const override;
+    const State&                q_end() const override;
 
     virtual size_t              order() const;
 
@@ -201,7 +198,8 @@ protected:
 
 private:
 
-    void _call_impl(State& result, const T& t) const override;
+    // only called strictly inside the step (_tmin, _tmax); defaults to linear interpolation
+    virtual void open_interval_call_impl(State& result, const T& t) const;
 
     Interval<T> _interval;
     T _tmin;
@@ -227,27 +225,13 @@ public:
     
     std::unique_ptr<Interpolator<T, SD>> clone() const override;
 
-    void _call_impl(State& result, const T& t) const override;
+    void open_interval_call_impl(State& result, const T& t) const override;
 
 private:
 
     Callable _callable;
 
 };
-
-template<typename T, typename SD, typename Callable>
-template<typename U>
-CustomLocalInterpolator<T, SD, Callable>::CustomLocalInterpolator(U&& callable, T t1, T t2, State y1, State y2, int left_bdr, int right_bdr) : Base(std::move(t1), std::move(t2), std::move(y1), std::move(y2), left_bdr, right_bdr), _callable(std::forward<U>(callable)) {}
-
-template<typename T, typename SD, typename Callable>
-std::unique_ptr<Interpolator<T, SD>> CustomLocalInterpolator<T, SD, Callable>::clone() const{
-    return std::make_unique<CustomLocalInterpolator<T, SD, Callable>>(*this);
-}
-
-template<typename T, typename State, typename Callable>
-void CustomLocalInterpolator<T, State, Callable>::_call_impl(State& result, const T& t) const{
-    _callable(result, t);
-}
 
 
 template<typename T, typename SD>
@@ -267,6 +251,8 @@ public:
     DEFAULT_RULE_OF_FOUR(LinkedInterpolator)
 
     //ACCESSORS
+
+    void                    call(State& result, const T& t) const final;
 
     const Interval<T>&      interval() const override;
 
@@ -321,8 +307,6 @@ private:
 
     bool                _can_replace_last_with(const interpolator_t& other) const;
 
-    void                _call_impl(State& result, const T& t) const override;
-
     interpolator_t&       _get(size_t i);
 
     const interpolator_t& _get(size_t i) const;
@@ -356,5 +340,3 @@ template<typename T, typename SD>
 using InterpObj = pbox::owner<Interpolator<T, SD>>;
 
 } // namespace ode::interp::uni
-
-#endif // ODECRAFT_STATE_INTERP_HPP

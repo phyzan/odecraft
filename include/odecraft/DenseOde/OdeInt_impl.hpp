@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_ODE_INT_IMPL_HPP
-#define ODECRAFT_ODE_INT_IMPL_HPP
+#pragma once
 
 #include <algorithm>
 #include <sstream>
@@ -468,5 +467,3 @@ void ODE<T, N>::init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_s
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_ODE_INT_IMPL_HPP

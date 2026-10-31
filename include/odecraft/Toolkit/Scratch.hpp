@@ -1,5 +1,5 @@
-#ifndef ODECRAFT_SCRATCH_HPP
-#define ODECRAFT_SCRATCH_HPP
+#pragma once
+
 
 #include <tuple>
 #include <type_traits>
@@ -69,6 +69,45 @@ template<typename... S, typename... U>
     });
 }
 
-} // namespace ode
 
-#endif // ODECRAFT_SCRATCH_HPP
+
+template<typename State>
+class worker_t{
+    static constexpr bool is_trivial = std::is_trivially_copyable_v<State>;
+public:
+    worker_t() = default;
+    worker_t(const State& /*proto*/) requires is_trivial {}
+    worker_t(State proto) requires (!is_trivial) : state_(std::move(proto)) {}
+
+    worker_t(const worker_t&) = default;
+    worker_t(worker_t&&) noexcept = default;
+    worker_t& operator=(const worker_t&) = default;
+    worker_t& operator=(worker_t&&) = default;
+    ~worker_t() = default;
+
+    worker_t& operator=(const State& state){
+        if constexpr (!is_trivial){
+            state_ = state;
+        }
+        return *this;
+    }
+
+    decltype(auto) get() const{
+        if constexpr (is_trivial){
+            return State();
+        } else {
+            return static_cast<State&>(state_);
+        }
+    }
+
+private:
+
+    struct empty_t{};
+    using storage_t = std::conditional_t<
+        is_trivial,
+        empty_t,
+        State>;
+    [[no_unique_address]] mutable storage_t state_;
+};
+
+} // namespace ode

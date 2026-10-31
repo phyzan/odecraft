@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_ND_INTERPOLATOR_IMPL_HPP
-#define ODECRAFT_ND_INTERPOLATOR_IMPL_HPP
+#pragma once
 
 
 #include <odecraft/Interpolation/NdInterpolator.hpp>
@@ -79,6 +78,3 @@ bool NdInterpolator<Derived, T, NDIM, AS_VIRTUAL>::contains(const T* coords) con
 
 
 } // namespace ode::interp
-
-
-#endif // ODECRAFT_ND_INTERPOLATOR_IMPL_HPP

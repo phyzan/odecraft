@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_RK23_DOPRI_HPP
-#define ODECRAFT_RK23_DOPRI_HPP
+#pragma once
 
 /**
  * @file RK23_DOPRI.hpp
@@ -8,6 +7,7 @@
  * Builds on the shared adaptive Runge-Kutta machinery in DOPRI.hpp.
  */
 
+#include "odecraft/Toolkit/Tools.hpp"
 #include <odecraft/Steppers/DOPRI.hpp>
 
 
@@ -28,6 +28,8 @@ T rk23_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T> t, cache_t<T> h, co
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class RK23 : public detail::BaseDispatcher<GetDerived<RK23<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
+
+    ODECRAFT_DECLARE_STEPPER;
 
     using Base = detail::BaseDispatcher<GetDerived<RK23<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
 
@@ -53,8 +55,7 @@ protected:
 
     void        ReAdjust(const State& new_vector);
     StepResult  adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q);
-    void        interp_impl(State& result, const T& t) const;
-    auto        local_interp() const;
+    auto        local_interp_impl() const;
 
 private:
 
@@ -72,7 +73,7 @@ private:
 
     T           step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q);
 
-    void        set_coef_matrix() const;
+    void        cache_coef_matrix() const;
 
     detail::CoefTable<T, &Amatrix> A;
     detail::CoefTable<T, &Bmatrix> B;
@@ -83,12 +84,11 @@ private:
     // the stages of the last step: K_[0] the derivative at its start, K_[Nstages] at its end (FSAL)
     mutable std::array<State, Nstages+1>    K_;
     mutable std::array<State, INTERP_ORDER> coef_mat;
+    mutable bool                            coef_mat_is_cached_ = false;
 
     // the stage input and the scaled errors of a sweep
     worker_t<State>                         r_scratch_;
     worker_t<RealState>                     real_scratch;
-
-    mutable bool                            mat_is_set = false;
 
     T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1); // Boost uses -1/(error_order+1) for both increase and decrease
     T INC_EXP = T(-1)/T(Norder);
@@ -147,5 +147,3 @@ struct SolverTypeGetter<Stepper::RK23, SP, T, SD, JD, OdeType, Derived>{
 } // namespace ode::detail
 
 } // namespace ode
-
-#endif // ODECRAFT_RK23_DOPRI_HPP

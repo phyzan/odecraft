@@ -1,6 +1,6 @@
-#ifndef ODECRAFT_DOP853_IMPL_HPP
-#define ODECRAFT_DOP853_IMPL_HPP
+#pragma once
 
+#include "odecraft/Toolkit/Tools.hpp"
 #include <odecraft/Steppers/DOPRI_impl.hpp>
 #include <odecraft/Steppers/DOP853.hpp>
 
@@ -375,24 +375,22 @@ Stepper DOP853<T, SD, JD, OdeType, SP, Derived>::method() const{
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 void DOP853<T, SD, JD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    mat_is_set_ = false;
     this->rhs(K_[N_STAGES], this->t_new(), this->vector_new());
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 void DOP853<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
-    this->set_coef_matrix();
+    // the first stage of the next step (FSAL)
     this->rhs(K_[N_STAGES], this->t(), new_vector);
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void DOP853<T, SD, JD, OdeType, SP, Derived>::set_coef_matrix() const{
-    if (mat_is_set_){
+void DOP853<T, SD, JD, OdeType, SP, Derived>::cache_coef_matrix() const{
+    using S = value_t<T, SD>;
+    if (coef_mat_is_cached_){
         return;
     }
-    mat_is_set_ = true;
-    using S = value_t<T, SD>;
 
     // The step size that was actually used, not stepsize(): that returns the newest step's habs,
     // which rk_adapt_step has already grown/shrunk into the *next* step's proposed size, and it
@@ -422,6 +420,7 @@ void DOP853<T, SD, JD, OdeType, SP, Derived>::set_coef_matrix() const{
     for (size_t i = 0; i < INTERP_ORDER - 3; i++){
         detail::rk_dot<SD>(coef_mat_[3 + i], h, K_, D, i, detail::stages<0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>);
     }
+    coef_mat_is_cached_ = true;
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
@@ -447,7 +446,7 @@ T DOP853<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, con
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 StepResult DOP853<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
-    mat_is_set_ = false;
+    coef_mat_is_cached_ = false; // K_ is about to change
     // FSAL: the previous step's last stage becomes this step's first
     copy_state<SD>(K_[0], K_[N_STAGES]);
     return detail::rk_adapt_step<T, SD>(
@@ -469,19 +468,11 @@ StepResult DOP853<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void DOP853<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& result, const T& t) const{
-    this->set_coef_matrix();
-    detail::coef_mat_interp_dop853<T, SD>(result, t, this->t_old(), this->t_new(), this->vector_old(), coef_mat_);
-}
-
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto DOP853<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
-    this->set_coef_matrix();
-    return [cm=this->coef_mat_, t1=this->t_old(), t2=this->t_new(), y1=this->vector_old()](State& out, const T& t){
-        detail::coef_mat_interp_dop853<T, SD>(out, t, t1, t2, y1, cm);
-    };
+auto DOP853<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
+    this->cache_coef_matrix();
+    return make_light_functor([](State& out, const T& t, const auto& t1, const auto& t2, const auto& y1, const auto& cm){
+        return detail::coef_mat_interp_dop853<T, SD>(out, t, t1, t2, y1, cm);
+    }, this->t_old(), this->t_new(), this->vector_old(), this->coef_mat_);
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_DOP853_IMPL_HPP

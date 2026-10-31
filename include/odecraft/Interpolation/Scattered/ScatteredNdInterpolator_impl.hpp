@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_SCATTERED_ND_INTERPOLATOR_IMPL_HPP
-#define ODECRAFT_SCATTERED_ND_INTERPOLATOR_IMPL_HPP
+#pragma once
 
 
 #include <odecraft/Interpolation/Scattered/ScatteredNdInterpolator.hpp>
@@ -78,5 +77,3 @@ bool ScatteredVectorField<NDIM, AS_VIRTUAL>::contains(const double* coords) cons
 }
 
 } // namespace ode::interp::sci
-
-#endif // ODECRAFT_SCATTERED_ND_INTERPOLATOR_IMPL_HPP

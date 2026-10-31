@@ -1,6 +1,5 @@
-#ifndef ODECRAFT_TESTS_OBJECTIVE_SOLVER_HPP
-#define ODECRAFT_TESTS_OBJECTIVE_SOLVER_HPP
+#pragma once
+
 
 void test_objective_solver();
 
-#endif // ODECRAFT_TESTS_OBJECTIVE_SOLVER_HPP

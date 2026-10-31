@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_VARIATIONAL_SOLVERS_HPP
-#define ODECRAFT_VARIATIONAL_SOLVERS_HPP
+#pragma once
 
 #include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/Events/Events.hpp>
@@ -338,6 +337,3 @@ struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, N, SolverPo
 };
 
 } // namespace ode::traits
-
-
-#endif // ODECRAFT_VARIATIONAL_SOLVERS_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_ODE_INT_HPP
-#define ODECRAFT_ODE_INT_HPP
+#pragma once
 
 #include <odecraft/OdeResult/OdeResult.hpp>
 #include <odecraft/Core/BaseSolver/BaseSolver.hpp>
@@ -162,5 +161,3 @@ private:
 };
 
 } // namespace ode
-
-#endif // ODECRAFT_ODE_INT_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_RICH_BASE_HPP
-#define ODECRAFT_RICH_BASE_HPP
+#pragma once
 
 /**
  * @file RichBase.hpp
@@ -47,6 +46,8 @@ namespace ode{
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 class RichSolver : public BaseSolver<Derived, T, SD, JD, OdeType, SP>{
 
+    friend class BaseSolver<Derived, T, SD, JD, OdeType, SP>;
+
     using Base = BaseSolver<Derived, T, SD, JD, OdeType, SP>;
 
 public:
@@ -90,7 +91,7 @@ public:
      *
      * @param prec Number of decimal places for floating-point output.
      */
-    void                        show_state(int prec=8) const;
+    void                        show_state(std::ostream& out, int prec=8) const;
 
     // MODIFIERS
     /// @brief Resets the solver to its initial state, clearing any event detections.
@@ -150,8 +151,6 @@ protected:
 
     /// @brief Re-adjustment hook for state changes at events.
     void ReAdjust(const State& new_state);
-
-    struct Accessor : Base::Accessor {};
     
     //================= STATIC OVERRIDES ======================
     
@@ -202,6 +201,3 @@ using BaseDispatcher = std::conditional_t<(SP == SolverPolicy::RichStatic || SP 
 } // namespace ode::detail
 
 } // namespace ode
-
-
-#endif // ODECRAFT_RICH_BASE_HPP

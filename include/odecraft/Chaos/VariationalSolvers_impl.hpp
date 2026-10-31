@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_VARIATIONAL_SOLVERS_IMPL_HPP
-#define ODECRAFT_VARIATIONAL_SOLVERS_IMPL_HPP
+#pragma once
 
 #include <odecraft/Chaos/VariationalSolvers.hpp>
 #include <odecraft/Toolkit/Tools.hpp>
@@ -700,5 +699,3 @@ bool VariationalSolver<S, T, N, SP, OdeType, Derived>::Adv_Impl(Args&&... args) 
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_VARIATIONAL_SOLVERS_IMPL_HPP

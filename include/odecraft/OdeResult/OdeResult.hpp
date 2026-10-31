@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_ODE_RESULT_HPP
-#define ODECRAFT_ODE_RESULT_HPP
+#pragma once
 
 #include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/Toolkit/Tools.hpp>
@@ -148,5 +147,3 @@ private:
 };
 
 } // namespace ode
-
-#endif // ODECRAFT_ODE_RESULT_HPP

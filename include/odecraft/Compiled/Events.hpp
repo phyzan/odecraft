@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_EVENTS_HPP
-#define ODECRAFT_COMPILED_EVENTS_HPP
+#pragma once
 
 /**
  * @file Compiled/Events.hpp
@@ -104,5 +103,3 @@ ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_EXTERN_EVENT_MAKERS)
 #undef ODECRAFT_EXTERN_EVENT_MAKERS
 
 } // namespace ode::crafted
-
-#endif // ODECRAFT_COMPILED_EVENTS_HPP

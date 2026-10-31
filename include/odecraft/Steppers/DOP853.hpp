@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_DOP853_HPP
-#define ODECRAFT_DOP853_HPP
+#pragma once
 
 #include <odecraft/Core/RichSolver/RichBase.hpp>
 #include <odecraft/Steppers/DOPRI.hpp>
@@ -68,6 +67,8 @@ void coef_mat_interp_dop853(state_t<T, SD>& result, const T& t, const T& t1, con
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class DOP853 : public detail::BaseDispatcher<GetDerived<DOP853<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
 
+    ODECRAFT_DECLARE_STEPPER;
+
     using Base = detail::BaseDispatcher<GetDerived<DOP853<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
     using Coefs = DOP_COEFS<T>;
 
@@ -94,14 +95,13 @@ protected:
 
     void        ReAdjust(const State& new_vector);
     StepResult  adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q);
-    void        interp_impl(State& result, const T& t) const;
-    auto        local_interp() const;
+    auto        local_interp_impl() const;
 
 private:
 
     T           step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q);
 
-    void        set_coef_matrix() const;
+    void        cache_coef_matrix() const;
 
     // ndspan cannot constant-evaluate these tables (they are built with fill() and indexed writes),
     // so, regardless of T, they are plain (computed-once-at-construction) instance members. A is
@@ -115,8 +115,8 @@ private:
     T                                           h_last_ = 0; // step size actually used by the last sweep
     mutable std::array<State, N_STAGES_EXT>     K_;          // the stages of the last step
     mutable std::array<State, INTERP_ORDER>     coef_mat_;
+    mutable bool                                coef_mat_is_cached_ = false;
     worker_t<State>                             r_scratch_;  // the stage input of a sweep
-    mutable bool                                mat_is_set_ = false;
 
     T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1);
     T INC_EXP = T(-1)/T(Norder);
@@ -134,5 +134,3 @@ struct SolverTypeGetter<Stepper::DOP853, SP, T, SD, JD, OdeType, Derived>{
 
 
 } // namespace ode
-
-#endif // ODECRAFT_DOP853_HPP

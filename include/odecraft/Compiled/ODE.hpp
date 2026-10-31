@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_ODE_HPP
-#define ODECRAFT_COMPILED_ODE_HPP
+#pragma once
 
 /**
  * @file Compiled/ODE.hpp
@@ -88,4 +87,3 @@ ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_EXTERN_ODE)
 
 } // namespace ode
 
-#endif // ODECRAFT_COMPILED_ODE_HPP

@@ -1,6 +1,5 @@
-#ifndef ODECRAFT_TESTS_OSCILLATOR_SOLVER_HPP
-#define ODECRAFT_TESTS_OSCILLATOR_SOLVER_HPP
+#pragma once
+
 
 void test_oscillator_solver();
 
-#endif // ODECRAFT_TESTS_OSCILLATOR_SOLVER_HPP

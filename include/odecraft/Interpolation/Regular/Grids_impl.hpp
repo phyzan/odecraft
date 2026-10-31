@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_GRIDS_IMPL_HPP
-#define ODECRAFT_GRIDS_IMPL_HPP
+#pragma once
 
 #include <odecraft/Interpolation/Regular/Grids.hpp>
 
@@ -81,5 +80,3 @@ int RegularGrid<T, NDIM>::find_left_idx(const T& x, int axis) const {
 
  
 } // namespace ode::interp::rgi
-
-#endif // ODECRAFT_GRIDS_IMPL_HPP

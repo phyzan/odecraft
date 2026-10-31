@@ -1,11 +1,11 @@
-#ifndef ODECRAFT_TOOLS_HPP
-#define ODECRAFT_TOOLS_HPP
+#pragma once
 
 
 #include <chrono>
 #include <functional>
 #include <cmath>
 #include <type_traits>
+#include <utility>
 #include <xdiff/xdiff.hpp>
 #include <polybox/polybox.hpp>
 #include <ndspan/ndspan.hpp>
@@ -65,45 +65,6 @@ using jacmat_t = SD::template jacobian_matrix<value_t<T, SD>>;
 template<typename T, typename SD, typename JD, int Order>
 using dual_jacmat_t = SD::template jacobian_matrix<dual_t<T, SD, Order>>;
 
-
-template<typename State>
-class worker_t{
-    static constexpr bool is_trivial = std::is_trivially_copyable_v<State>;
-public:
-    worker_t() = default;
-    worker_t(const State& /*proto*/) requires is_trivial {}
-    worker_t(State proto) requires (!is_trivial) : state_(std::move(proto)) {}
-
-    worker_t(const worker_t&) = default;
-    worker_t(worker_t&&) noexcept = default;
-    worker_t& operator=(const worker_t&) = default;
-    worker_t& operator=(worker_t&&) = default;
-    ~worker_t() = default;
-
-    worker_t& operator=(const State& state){
-        if constexpr (!is_trivial){
-            state_ = state;
-        }
-        return *this;
-    }
-
-    decltype(auto) get() const{
-        if constexpr (is_trivial){
-            return State();
-        } else {
-            return static_cast<State&>(state_);
-        }
-    }
-
-private:
-
-    struct empty_t{};
-    using storage_t = std::conditional_t<
-        is_trivial,
-        empty_t,
-        State>;
-    [[no_unique_address]] mutable storage_t state_;
-};
 
 namespace detail{
 
@@ -242,183 +203,6 @@ using interp_t = std::function<void(State&, const T&)>;
 template<typename T, typename State>
 using observer_t = std::function<bool(const T&, const State&, const T*)>;
 
-enum class RootPolicy : std::uint8_t { Left, Middle, Right};
-
-template<typename SD, typename U>
-void copy_state(typename SD::template state_type<U>& dst, const typename SD::template state_type<U>& src){
-    SD::for_each([](U& xi, const U& si){
-        xi = si;
-    }, dst, src);
-}
-
-template<typename F>
-double timeit_ms(F&& action) {
-    const auto t_start = std::chrono::steady_clock::now();
-
-    std::forward<F>(action)();
-
-    const auto t_end = std::chrono::steady_clock::now();
-
-    return std::chrono::duration<double, std::milli>(
-        t_end - t_start
-    ).count();
-}
-
-template<typename T>
-inline int sgn(const T& x){
-    return ( x > 0) ? 1 : ( (x < 0) ? -1 : 0);
-}
-
-template<typename T>
-inline int sgn(const T& t1, const T& t2){
-    //same as sgn(t2-t1), but avoids roundoff error
-    return (t1 < t2 ? 1 : (t1 > t2 ? -1 : 0));
-}
-
-template<typename T, typename A, typename B>
-NDSPAN_INLINE void set_min(T& out, const A& a, const B& b){
-    (a < b) ? (out = a) : (out = b);
-}
-
-template<typename T, typename A, typename B>
-NDSPAN_INLINE void set_max(T& out, const A& a, const B& b){
-    (a > b) ? (out = a) : (out = b);
-}
-
-template<typename T>
-NDSPAN_INLINE const T& max_ref(const T& a, const T& b){
-    return (a > b) ? a : b;
-}
-
-template<typename T>
-NDSPAN_INLINE const T& min_ref(const T& a, const T& b){
-    return (a < b) ? a : b;
-}
-
-// Returned after a bisection algorithm
-enum class RootStatus : uint8_t {
-    Success,      // Converged within the iteration budget
-    MaxIter,      // Root detected within an interval but ran out of iterations
-    NotBracketed, // No root found (for bisection algorithms)
-    Failure,      // Did not find a root (general)
-};
-
-/**
- * @brief Find an equation root using the bisection method
- *
- * @tparam T : Scalar type
- * @tparam Callable f(x)
- * @param out On success, the converged right bracket of the solution
- * @param f_out On success, f(out)
- * @param f The function to find the root of
- * @param a lower root bound
- * @param b upper root bound
- * @param fa f(a)
- * @param fb f(b)
- * @param ftol convergence tolerance: Find x such that |f(x)| <= ftol
- * @return RootStatus::Success, or RootStatus::NotBracketed if f(a) * f(b) > 0
- */
-template<typename T, typename Callable>
-RootStatus bisect_root(T& out, T* f_out, Callable&& f, T a, T b, T fa, T fb, const T& ftol){
-    // It is important that `out` is not affected unless
-    // the loop converged to a solution.
-    // f(a) and f(b) are passed in, so the endpoints are never re-evaluated.
-    T m = a;
-    T fm;
-
-    if (fa * fb > 0){
-        return RootStatus::NotBracketed;
-    }
-    
-    while (abs(fb) > ftol){
-        m = (a + b) / 2;
-        if (m == a || m == b){
-            // reached machine precision limit, return the best guess so far
-            break;
-        } else {
-            fm = f(m);
-        }
-
-        if (fa * fm  > 0){
-            a = m;
-            fa = fm;
-        } else {
-            b = m;
-            fb = fm;
-        }
-    }
-
-    out = b;
-    if (f_out != nullptr){
-        *f_out = fb;
-    }
-    return RootStatus::Success;
-}
-
-/**
- * @brief Find an equation root using the bisection method.
- * Same as above, but evaluates f(a) and f(b) itself.
- */
-template<typename T, typename Callable>
-RootStatus bisect_root(T& out, T* f_out, Callable&& f, T a, T b, const T& ftol){
-    T fa = f(a);
-    T fb = f(b);
-    return bisect_root(
-        out,
-        f_out,
-        std::forward<Callable>(f),
-        std::move(a), std::move(b),
-        std::move(fa), std::move(fb),
-        ftol
-    );
-}
-
-
-
-
-template<typename T, typename SD>
-struct SolverState{
-    using State = state_t<T, SD>;
-    State state;
-    T time;
-    T stepsize;
-    size_t nt;
-    std::string msg;
-
-    SolverState(State q, T t, T habs, size_t updates, std::string message) : state(std::move(q)), time(std::move(t)), stepsize(std::move(habs)), nt(updates), msg(std::move(message)){}
-
-    void show(int precision = 15) const {
-        std::cout << "\n" << std::setprecision(precision) << 
-        "OdeSolver current state:\n---------------------------\n"
-        "\ttime       : " << time << "\n" <<
-        "\tq          : ";
-        
-        SD::console(std::cout, state) << "\n" <<
-        "\tstepsize   : " << stepsize << "\n" <<
-        "\tUpdates    : " << nt << "\n" <<
-        "\tStatus     : " << msg << std::endl;
-    }
-
-};
-
-
-template<typename T, typename SD>
-struct SolverRichState : public SolverState<T, SD>{
-
-    using Base = SolverState<T, SD>;
-    using State = Base::State;
-
-    std::string event_name;
-
-    SolverRichState(State q, T t, T habs, size_t Nt, std::string status, std::string event) : Base(std::move(q), std::move(t), std::move(habs), Nt, std::move(status)), event_name(std::move(event)) {}
-    
-    void show(int precision = 15) const {
-        Base::show(precision);
-        std::cout << "\tEvent     : " << event_name << "\n" << std::endl;
-    }
-
-};
-
 
 template<typename RHS, typename JAC = std::nullptr_t>
 struct OdeData {
@@ -508,6 +292,50 @@ enum class StepResult : std::uint8_t {
     MaxStepError, // Step size reached maximum set by user
     SingularMatrixError, // The linear system of an implicit step is singular
 };
+
+
+template<typename Callable, typename... F>
+class LightFunctor{
+
+    // The data is referenced, so it must outlive the functor. A temporary cannot, so it is copied.
+    template<typename U>
+    using held_t = std::conditional_t<std::is_lvalue_reference_v<U>, const std::remove_reference_t<U>&, std::remove_cvref_t<U>>;
+
+public:
+    LightFunctor(Callable func, F&&... data) : f_(std::move(func)), data_{std::forward<F>(data)...} {}
+
+    template<typename... Args>
+    decltype(auto) operator()(Args&&... args) const {
+        return this->apply_impl(std::make_index_sequence<sizeof...(F)>(), std::forward<Args>(args)...);
+    }
+
+    auto detach() const {
+        return this->detach_impl(std::make_index_sequence<sizeof...(F)>());
+    }
+
+private:
+
+    template<size_t... I, typename... Args>
+    decltype(auto) apply_impl(std::index_sequence<I...> /**/, Args&&... args) const {
+        return f_(std::forward<Args>(args)..., std::get<I>(data_)...);
+    }
+
+    template<size_t... I>
+    auto detach_impl(std::index_sequence<I...> /**/) const {
+        return [func=this->f_, ...data = std::remove_cvref_t<F>(std::get<I>(data_))]<typename... Args>(Args&&... args){
+            return func(std::forward<Args>(args)..., data...);
+        };
+    }
+
+    Callable f_;
+    std::tuple<held_t<F>...> data_;
+};
+
+template<typename Callable, typename... F>
+LightFunctor<Callable, F...> make_light_functor(Callable func, F&&... data){
+    return LightFunctor<Callable, F...>(std::move(func), std::forward<F>(data)...);
+}
+
 
 template <typename T>
 inline T inf() {
@@ -600,6 +428,56 @@ std::string GetStr(Args&&... args) {
     return out.str();
 }
 
-} // namespace ode
 
-#endif // ODECRAFT_TOOLS_HPP
+template<typename SD, typename U>
+void copy_state(typename SD::template state_type<U>& dst, const typename SD::template state_type<U>& src){
+    SD::for_each([](U& xi, const U& si){
+        xi = si;
+    }, dst, src);
+}
+
+template<typename F>
+double timeit_ms(F&& action) {
+    const auto t_start = std::chrono::steady_clock::now();
+
+    std::forward<F>(action)();
+
+    const auto t_end = std::chrono::steady_clock::now();
+
+    return std::chrono::duration<double, std::milli>(
+        t_end - t_start
+    ).count();
+}
+
+template<typename T>
+inline int sgn(const T& x){
+    return ( x > 0) ? 1 : ( (x < 0) ? -1 : 0);
+}
+
+template<typename T>
+inline int sgn(const T& t1, const T& t2){
+    //same as sgn(t2-t1), but avoids roundoff error
+    return (t1 < t2 ? 1 : (t1 > t2 ? -1 : 0));
+}
+
+template<typename T, typename A, typename B>
+NDSPAN_INLINE void set_min(T& out, const A& a, const B& b){
+    (a < b) ? (out = a) : (out = b);
+}
+
+template<typename T, typename A, typename B>
+NDSPAN_INLINE void set_max(T& out, const A& a, const B& b){
+    (a > b) ? (out = a) : (out = b);
+}
+
+template<typename T>
+NDSPAN_INLINE const T& max_ref(const T& a, const T& b){
+    return (a > b) ? a : b;
+}
+
+template<typename T>
+NDSPAN_INLINE const T& min_ref(const T& a, const T& b){
+    return (a < b) ? a : b;
+}
+
+} // namespace ode

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_VECTOR_FIELDS_HPP
-#define ODECRAFT_VECTOR_FIELDS_HPP
+#pragma once
 
 
 #include <odecraft/DenseOde/OdeInt.hpp>
@@ -123,5 +122,3 @@ protected:
 }; // class VectorField
 
 } // namespace ode::interp
-
-#endif // ODECRAFT_VECTOR_FIELDS_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_DOPRI_HPP
-#define ODECRAFT_DOPRI_HPP
+#pragma once
 
 /**
  * @file DOPRI.hpp
@@ -87,7 +86,3 @@ StepResult rk_adapt_step(
     int direction, StepFn&& step_fn);
 
 } // namespace ode::detail
-
-
-
-#endif // ODECRAFT_DOPRI_HPP
