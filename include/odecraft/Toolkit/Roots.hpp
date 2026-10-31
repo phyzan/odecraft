@@ -1,9 +1,9 @@
 #pragma once
 
 
-#include <cstdint>
-#include <utility>
+#include "Tools.hpp"
 
+namespace ode{
 
 enum class RootPolicy : std::uint8_t { Left, Middle, Right};
 
@@ -84,3 +84,5 @@ RootStatus bisect_root(T& out, T* f_out, Callable&& f, T a, T b, const T& ftol){
         ftol
     );
 }
+
+} // namespace ode
