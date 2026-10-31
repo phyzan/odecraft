@@ -1,10 +1,8 @@
-#ifndef ODECRAFT_BDF_IMPL_HPP
-#define ODECRAFT_BDF_IMPL_HPP
+#pragma once
 
 
 #include "BDF.hpp"
-#include "odecraft/Toolkit/Scratch.hpp"
-#include "odecraft/Toolkit/linalg.hpp"
+#include "odecraft/Toolkit/Tools.hpp"
 
 
 namespace ode{
@@ -505,27 +503,11 @@ StepResult BDF<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_out, T& habs_ou
 
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto BDF<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
-    return [D = D_[idx_D_],
-            order = order_,
-            t2 = this->t_new(),
-            h = this->stepsize()*this->direction()]
-            (State& out, const T& t){
-                detail::bdf_interp<T, SD>(out, t, t2, h, D, order);
-            };
-}
-
-
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void BDF<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& result, const T& t) const{
-    detail::bdf_interp<T, SD>(
-        result,
-        t,
-        this->t_new(),
-        this->stepsize()*this->direction(),
-        D_[idx_D_],
-        order_
-    );
+auto BDF<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
+    return make_light_functor([](State& out, const T& t, const std::array<state_t<T, SD>, BDF_MAX_ORDER + 3>& D, const T& t2, const T& habs, int d, size_t order){
+        return detail::bdf_interp<T, SD>(out, t, t2, habs*d, D, order);
+    },
+    D_[idx_D_], this->t_new(), this->stepsize(), this->direction(), this->order_);
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
@@ -654,5 +636,3 @@ void BDF<T, SD, JD, OdeType, SP, Derived>::set_psi(State& psi) const{
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_BDF_IMPL_HPP

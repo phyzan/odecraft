@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_RK4_HPP
-#define ODECRAFT_RK4_HPP
+#pragma once
 
 
 #include <odecraft/Core/RichSolver/RichBase.hpp>
@@ -28,6 +27,8 @@ void rk4_interp(state_t<T, SD>& out, const T& t, const T& t1, const T& t2, const
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class RK4 : public detail::BaseDispatcher<GetDerived<RK4<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
 
+    ODECRAFT_DECLARE_STEPPER;
+
     using Base = detail::BaseDispatcher<GetDerived<RK4<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
 
 public:
@@ -45,22 +46,19 @@ public:
 
     Stepper method() const;
 
-    void        Reset();
-
 protected:
 
-    void        ReAdjust(const State& new_vector);
     StepResult  adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q);
-    void        interp_impl(State& out, const T& t) const;
-    auto        local_interp() const;
+    auto        local_interp_impl() const;
 
 private:
 
-    void        set_interp_data() const;
+    void        cache_interp_data() const;
 
     // the stages of the last step: K_[0] the derivative at its start, and K_[Nstages] the
-    // derivative at its end, set by set_interp_data
+    // derivative at its end, cached by cache_interp_data
     mutable std::array<State, Nstages+1>        K_;
+    mutable bool interp_data_is_cached_ = false;
 
     // the stage input of a step
     worker_t<State>                             r_scratch_;
@@ -69,8 +67,6 @@ private:
     // the stages of an interpolating step
     worker_t<std::array<State, Nstages+1>>      K_scratch_;
 #endif
-
-    mutable bool                                interp_data_set = false;
 
 };
 
@@ -86,6 +82,3 @@ struct SolverTypeGetter<Stepper::RK4, SP, T, SD, JD, OdeType, Derived>{
 
 
 } // namespace ode
-
-
-#endif // ODECRAFT_RK4_HPP

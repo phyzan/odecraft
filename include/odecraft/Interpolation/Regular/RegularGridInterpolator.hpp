@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_REGULAR_GRID_INTERPOLATOR_HPP
-#define ODECRAFT_REGULAR_GRID_INTERPOLATOR_HPP
+#pragma once
 
 #include <odecraft/Interpolation/Regular/Grids.hpp>
 #include <odecraft/Interpolation/NdInterpolator.hpp>
@@ -100,4 +99,3 @@ inline int get_point_count(const AxisViewContainer& grid){
 
 } // namespace ode::interp::rgi
 
-#endif // ODECRAFT_REGULAR_GRID_INTERPOLATOR_HPP

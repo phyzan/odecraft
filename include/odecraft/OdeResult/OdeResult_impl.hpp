@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_ODE_RESULT_IMPL_HPP
-#define ODECRAFT_ODE_RESULT_IMPL_HPP
+#pragma once
 
 #include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/OdeResult/OdeResult.hpp>
@@ -262,9 +261,4 @@ Array1D<T, N> OdeSolution<T, N>::operator()(const T& t) const{
 template<typename T, size_t N>
 std::unique_ptr<OdeResult<T, N>> OdeSolution<T, N>::clone() const{ return std::make_unique<OdeSolution<T, N>>(*this);}
 
-
-
-
-}
-
-#endif // ODECRAFT_ODE_RESULT_IMPL_HPP
+} // namespace ode

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_DELAUNAY_HPP
-#define ODECRAFT_DELAUNAY_HPP
+#pragma once
 
 #include <memory>
 #include <ndspan/ndspan.hpp>
@@ -95,6 +94,3 @@ template<size_t NDIM>
 using TriPtr = std::shared_ptr<DelaunayTri<NDIM>>;
 
 } // namespace ode::interp::sci
-
-
-#endif // ODECRAFT_DELAUNAY_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_DELAUNAY_IMPL_HPP
-#define ODECRAFT_DELAUNAY_IMPL_HPP
+#pragma once
 
 
 #include <odecraft/Interpolation/Scattered/Delaunay.hpp>
@@ -485,6 +484,3 @@ void DelaunayTri<NDIM>::set_state(const View2D<double, 0, NDIM>& points, const V
 
 
 } // namespace ode::interp::sci
-
-
-#endif // ODECRAFT_DELAUNAY_IMPL_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_RK4_IMPL_HPP
-#define ODECRAFT_RK4_IMPL_HPP
+#pragma once
 
 #include "RK4.hpp" // IWYU pragma: keep
 
@@ -74,23 +73,10 @@ Stepper RK4<T, SD, JD, OdeType, SP, Derived>::method() const{
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK4<T, SD, JD, OdeType, SP, Derived>::Reset(){
-    Base::Reset();
-    interp_data_set = false;
-}
-
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK4<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
-    Base::ReAdjust(new_vector);
-    set_interp_data();
-}
-
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 StepResult RK4<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     // standard Runge-Kutta-4 with fixed step size
 
-    // the derivative at the end of the step being replaced is no longer valid
-    interp_data_set = false;
+    interp_data_is_cached_ = false; // K_ is about to change
 
     const T h = habs * this->direction();
 
@@ -112,51 +98,32 @@ StepResult RK4<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_ne
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK4<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& out, const T& t) const{
+auto RK4<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
 #ifdef ODECRAFT_RK4_DENSE
-    // a step straight from the start of the interval to t, which starts from the same derivative K_[0]
-    decltype(auto) stage_scratch = K_scratch_.get();
-    decltype(auto) rhs_scratch   = r_scratch_.get();
-    copy_state<SD>(stage_scratch[0], K_[0]);
-    detail::rk4_step<T, SD>(out, this->t_old(), t - this->t_old(), this->vector_old(), stage_scratch, rhs_scratch, [this](State& out_, const T& t_, const State& y_){
-        this->rhs(out_, t_, y_);
-    });
-#else
-    set_interp_data();
-    detail::rk4_interp<T, SD>(out, t, this->t_old(), this->t_new(), this->vector_old(), this->vector_new(), K_[0], K_[Nstages]);
-#endif
-}
-
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto RK4<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
-#ifdef ODECRAFT_RK4_DENSE
-    /*
-    TODO : This is expensive. If we could guarantee that the RK4 object does not go out of scope,
-    we can just reference the solver without copying the ode and the stages
-    in the lambda below
-    */
-    return [ode = this->ode(), t1 = this->t_old(), y1 = this->vector_old(), K = K_, r = K_[0]](State& out, const T& t) mutable {
-        // K[0] is the derivative at t1, which the steps from t1 only read
+    // a step straight from the start of the interval to t, which starts from the same derivative f1
+    return make_light_functor([](State& out, const T& t, const auto& ode, const auto& t1, const auto& y1, const auto& f1, const auto& K_scratch, const auto& r_scratch){
+        decltype(auto) K = K_scratch.get();
+        decltype(auto) r = r_scratch.get();
+        copy_state<SD>(K[0], f1);
         detail::rk4_step<T, SD>(out, t1, t - t1, y1, K, r, [&ode](State& out_, const T& t_, const State& y_){
             ode.Rhs(out_, t_, y_);
         });
-    };
+    }, this->ode(), this->t_old(), this->vector_old(), K_[0], K_scratch_, r_scratch_);
 #else
-    set_interp_data();
-    return [t1 = this->t_old(), t2 = this->t_new(), y1 = this->vector_old(), y2 = this->vector_new(), f1 = K_[0], f2 = K_[Nstages]](State& out, const T& t){
-        detail::rk4_interp<T, SD>(out, t, t1, t2, y1, y2, f1, f2);
-    };
+    this->cache_interp_data();
+    return make_light_functor([](State& out, const T& t, const auto& t1, const auto& t2, const auto& y1, const auto& y2, const auto& f1, const auto& f2){
+        return detail::rk4_interp<T, SD>(out, t, t1, t2, y1, y2, f1, f2);
+    }, this->t_old(), this->t_new(), this->vector_old(), this->vector_new(), K_[0], K_[Nstages]);
 #endif
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK4<T, SD, JD, OdeType, SP, Derived>::set_interp_data() const{
-    if (!interp_data_set){
-        this->rhs(K_[Nstages], this->t_new(), this->vector_new());
-        interp_data_set = true;
+void RK4<T, SD, JD, OdeType, SP, Derived>::cache_interp_data() const{
+    if (interp_data_is_cached_){
+        return;
     }
+    this->rhs(K_[Nstages], this->t_new(), this->vector_new());
+    interp_data_is_cached_ = true;
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_RK4_IMPL_HPP

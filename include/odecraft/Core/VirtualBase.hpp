@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_VIRTUAL_BASE_HPP
-#define ODECRAFT_VIRTUAL_BASE_HPP
+#pragma once
 
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
 #include <odecraft/Events/Events.hpp>
@@ -110,5 +109,3 @@ protected:
 
 
 } // namespace ode
-
-#endif // ODECRAFT_VIRTUAL_BASE_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_EULER_HPP
-#define ODECRAFT_EULER_HPP
+#pragma once
 
 #include <odecraft/Core/RichSolver/RichBase.hpp>
 
@@ -8,6 +7,8 @@ namespace ode{
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class Euler : public detail::BaseDispatcher<GetDerived<Euler<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
 
+    ODECRAFT_DECLARE_STEPPER;
+    
     using Base = detail::BaseDispatcher<GetDerived<Euler<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
 
 public:
@@ -28,8 +29,7 @@ public:
 protected:
 
     StepResult  adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State&);
-    void        interp_impl(State& result, const T& t) const;
-    auto        local_interp() const;
+    auto        local_interp_impl() const;
 
 };
 
@@ -45,5 +45,3 @@ struct SolverTypeGetter<Stepper::Euler, SP, T, SD, JD, OdeType, Derived>{
 
 
 } // namespace ode
-
-#endif // ODECRAFT_EULER_HPP

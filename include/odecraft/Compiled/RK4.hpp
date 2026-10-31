@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_RK4_HPP
-#define ODECRAFT_COMPILED_RK4_HPP
+#pragma once
 
 /**
  * @file Compiled/RK4.hpp
@@ -25,5 +24,3 @@ using RK4 = ::ode::RK4<T, 0, ::ode::SolverPolicy::RichVirtual, ode_t<T>>;
 // Explicit instantiations live at global scope: an explicit instantiation must appear in a
 // namespace enclosing its template's, and ODECRAFT_STEPPER_SET spells every name out fully.
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_DECLARE_STEPPER, RK4)
-
-#endif // ODECRAFT_COMPILED_RK4_HPP

@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_VIRTUAL_TRAITS_HPP
-#define ODECRAFT_VIRTUAL_TRAITS_HPP
+#pragma once
 
 #include <odecraft/Core/SolverFactory.hpp> // IWYU pragma: keep
 
@@ -38,5 +37,3 @@ struct SolverVirtualTypeTraits {
 } // namespace ode::traits
 
 } // namespace ode
-
-#endif // ODECRAFT_VIRTUAL_TRAITS_HPP

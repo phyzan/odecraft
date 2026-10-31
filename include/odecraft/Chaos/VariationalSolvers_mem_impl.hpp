@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_VARIATIONAL_SOLVERS_MEM_IMPL_HPP
-#define ODECRAFT_VARIATIONAL_SOLVERS_MEM_IMPL_HPP
+#pragma once
 
 #include <odecraft/Chaos/VariationalSolvers.hpp>
 #include <odecraft/DenseOde/OdeInt_mem_impl.hpp>
@@ -26,5 +25,3 @@ VariationalODE<T, N>::VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<
 
 
 } // namespace ode::chaos
-
-#endif // ODECRAFT_VARIATIONAL_SOLVERS_MEM_IMPL_HPP

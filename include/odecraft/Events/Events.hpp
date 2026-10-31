@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_EVENTS_HPP
-#define ODECRAFT_EVENTS_HPP
+#pragma once
 
 /**
  * @file events.hpp
@@ -19,8 +18,7 @@
  * - EventView<T>: View into detected events at a time point
  */
 
-#include <odecraft/Toolkit/Tools.hpp>
-#include <odecraft/Toolkit/Vector.hpp>
+#include <odecraft/Toolkit/Toolkit.hpp>
 
 namespace ode {
 
@@ -256,7 +254,7 @@ protected:
      * @param[in]  t_new  Time at interval end.
      * @param[in]  q_old  State vector at t_old.
      * @param[in]  q_new  State vector at t_new.
-     * @param[in]  f Interpolation function (T* out, const T& t) -> void to compute state at intermediate times (for masked events).
+     * @param[in]  f Interpolation function (State& out, const T& t) -> void to compute state at intermediate times (for masked events).
      * @return True if event was found in interval.
      */
     template<isStateInterp<T, State> Callable>
@@ -589,5 +587,3 @@ inline EventList<T, State> make_event_list(BoxedEvent<U, V>... events){
 
 
 } // namespace ode
-
-#endif // ODECRAFT_EVENTS_HPP

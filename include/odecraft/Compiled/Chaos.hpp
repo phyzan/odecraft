@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_CHAOS_HPP
-#define ODECRAFT_COMPILED_CHAOS_HPP
+#pragma once
 
 /**
  * @file Compiled/Chaos.hpp
@@ -174,5 +173,3 @@ ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_EXTERN_VARIATIONAL_ODE)
 #undef ODECRAFT_EXTERN_VARIATIONAL_ODE
 
 } // namespace ode::chaos
-
-#endif // ODECRAFT_COMPILED_CHAOS_HPP

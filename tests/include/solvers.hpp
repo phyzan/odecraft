@@ -1,6 +1,4 @@
-#ifndef ODECRAFT_TESTS_SOLVERS_HPP
-#define ODECRAFT_TESTS_SOLVERS_HPP
+#pragma once
+
 
 void test_solvers();
-
-#endif // ODECRAFT_TESTS_SOLVERS_HPP

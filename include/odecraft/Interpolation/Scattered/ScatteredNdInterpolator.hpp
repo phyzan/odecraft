@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_SCATTERED_ND_INTERPOLATOR_HPP
-#define ODECRAFT_SCATTERED_ND_INTERPOLATOR_HPP
+#pragma once
 
 
 #include <odecraft/Interpolation/Scattered/Delaunay.hpp>
@@ -66,5 +65,3 @@ public:
 };
 
 } // namespace ode::interp::sci
-
-#endif // ODECRAFT_SCATTERED_ND_INTERPOLATOR_HPP

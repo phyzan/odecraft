@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_SOLVER_BASE_HPP
-#define ODECRAFT_COMPILED_SOLVER_BASE_HPP
+#pragma once
 
 /**
  * @file Compiled/SolverBase.hpp
@@ -68,5 +67,3 @@ template<typename T>
 using BoxedInterp = ::ode::BoxedInterp<T, 0>;
 
 } // namespace ode::crafted
-
-#endif // ODECRAFT_COMPILED_SOLVER_BASE_HPP

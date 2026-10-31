@@ -1,8 +1,6 @@
-#ifndef ODECRAFT_DOPRI_IMPL_HPP
-#define ODECRAFT_DOPRI_IMPL_HPP
+#pragma once
 
-#include "odecraft/Toolkit/Scratch.hpp"
-#include "odecraft/Toolkit/Tools.hpp"
+
 #include <odecraft/Steppers/DOPRI.hpp>
 
 
@@ -101,7 +99,3 @@ StepResult rk_adapt_step(
 }
 
 } // namespace ode::detail
-
-
-
-#endif // ODECRAFT_DOPRI_IMPL_HPP

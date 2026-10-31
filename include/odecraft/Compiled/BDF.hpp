@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_BDF_HPP
-#define ODECRAFT_COMPILED_BDF_HPP
+#pragma once
 
 /**
  * @file Compiled/BDF.hpp
@@ -27,5 +26,3 @@ using BDF = ::ode::BDF<T, 0, ::ode::SolverPolicy::RichVirtual, ode_t<T>>;
 // Explicit instantiations live at global scope: an explicit instantiation must appear in a
 // namespace enclosing its template's, and ODECRAFT_STEPPER_SET spells every name out fully.
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_DECLARE_STEPPER, BDF)
-
-#endif // ODECRAFT_COMPILED_BDF_HPP

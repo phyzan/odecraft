@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_DOP853_HPP
-#define ODECRAFT_COMPILED_DOP853_HPP
+#pragma once
 
 /**
  * @file Compiled/DOP853.hpp
@@ -22,5 +21,3 @@ using DOP853 = ::ode::DOP853<T, 0, ::ode::SolverPolicy::RichVirtual, ode_t<T>>;
 // Explicit instantiations live at global scope: an explicit instantiation must appear in a
 // namespace enclosing its template's, and ODECRAFT_STEPPER_SET spells every name out fully.
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_DECLARE_STEPPER, DOP853)
-
-#endif // ODECRAFT_COMPILED_DOP853_HPP

@@ -1,7 +1,8 @@
-#ifndef ODECRAFT_STATE_INTERP_IMPL_HPP
-#define ODECRAFT_STATE_INTERP_IMPL_HPP
+#pragma once
 
+#include "odecraft/Toolkit/Tools.hpp"
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
+#include <stdexcept>
 
 
 namespace ode::interp::uni {
@@ -59,8 +60,7 @@ template<typename T>
 void Interval<T>::open_end(){
     if (_is_point){
         throw std::runtime_error("Cannot open end boundary on a point interval");
-    }
-    else{
+    } else {
         _right = -1;
     }
 }
@@ -81,8 +81,7 @@ void Interval<T>::adjust_start(const T& new_start){
     if (sgn(new_start, _b) == _dir){
         _a = new_start;
         _h = _b - _a;
-    }
-    else{
+    } else {
         throw std::runtime_error("Cannot resize interval");
     }
 }
@@ -92,8 +91,7 @@ void Interval<T>::adjust_end(const T& new_end){
     if (sgn(_a, new_end) == _dir){
         _b = new_end;
         _h = _b - _a;
-    }
-    else{
+    } else {
         throw std::runtime_error("Cannot resize interval");
     }
 }
@@ -114,8 +112,7 @@ void Interval<T>::link_with(Interval<T>& other){
 
     if (_right == 0){
         _right = -other._left;
-    }
-    else if (other._left == 0){
+    } else if (other._left == 0){
         other._left = -_right;
     }
 }
@@ -135,13 +132,10 @@ std::string Interval<T>::signature(int prec) const{
 
 
 template<typename T, typename SD>
-void Interpolator<T, SD>::call(State& result, const T& t) const{
-    if (this->is_out_of_bounds(t)){
-        std::ostringstream oss;
-        oss << std::setprecision(8) << "Scalar " << t << " is out of bounds in LinkedInterpolator with range " << interval().signature(8);
-        throw std::runtime_error(oss.str());
-    }
-    this->_call_impl(result, t);
+void Interpolator<T, SD>::throw_domain_error(const T &t) const {
+    std::ostringstream oss;
+    oss << std::setprecision(8) << "Scalar " << t << " is out of bounds in interpolator with range " << interval().signature(8);
+    throw std::runtime_error(oss.str());
 }
 
 
@@ -284,18 +278,37 @@ const T& LocalInterpolator<T, SD>::_t_max() const{
 }
 
 template<typename T, typename SD>
-void LocalInterpolator<T, SD>::_call_impl(State& result, const T& t) const{
-    if (t == _interval.start()){
-        SD::for_each([](value_t<T, SD>& x, const value_t<T, SD>& y){
-            x = y;
-        }, result, _q_old);
-    } else if (t == _interval.end()) {
-        SD::for_each([](value_t<T, SD>& x, const value_t<T, SD>& y){
-            x = y;
-        }, result, _q);
+void LocalInterpolator<T, SD>::call(State& out, const T& t) const{
+    // The interval might have been adjusted, but always lies within the step [_tmin, _tmax]:
+    // the stored states are only exact at the step's own ends, anywhere else it interpolates.
+    if (!_interval.contains(t)){
+        this->throw_domain_error(t);
+    } else if (t == _tmin){
+        copy_state<SD>(out, _q_old);
+    } else if (t == _tmax){
+        copy_state<SD>(out, _q);
     } else {
-        return lin_interp<T, SD>(result, t, _interval.start(), _interval.end(), _q_old, _q);
+        this->open_interval_call_impl(out, t);
     }
+}
+
+template<typename T, typename SD>
+void LocalInterpolator<T, SD>::open_interval_call_impl(State& result, const T& t) const{
+    lin_interp<T, SD>(result, t, _tmin, _tmax, _q_old, _q);
+}
+
+template<typename T, typename SD, typename Callable>
+template<typename U>
+CustomLocalInterpolator<T, SD, Callable>::CustomLocalInterpolator(U&& callable, T t1, T t2, State y1, State y2, int left_bdr, int right_bdr) : Base(std::move(t1), std::move(t2), std::move(y1), std::move(y2), left_bdr, right_bdr), _callable(std::forward<U>(callable)) {}
+
+template<typename T, typename SD, typename Callable>
+std::unique_ptr<Interpolator<T, SD>> CustomLocalInterpolator<T, SD, Callable>::clone() const{
+    return std::make_unique<CustomLocalInterpolator<T, SD, Callable>>(*this);
+}
+
+template<typename T, typename SD, typename Callable>
+void CustomLocalInterpolator<T, SD, Callable>::open_interval_call_impl(State& result, const T& t) const{
+    _callable(result, t);
 }
 
 template<typename T, typename SD>
@@ -500,7 +513,7 @@ bool LinkedInterpolator<T, SD>::_can_replace_last_with(const Interpolator<T, SD>
 }
 
 template<typename T, typename SD>
-void LinkedInterpolator<T, SD>::_call_impl(State& result, const T& t) const{
+void LinkedInterpolator<T, SD>::call(State& result, const T& t) const{
     size_t ind = _search_index(t);
     _get(ind).call(result, t);
 }
@@ -557,11 +570,11 @@ void lin_interp(state_t<T, SD>& result, const T& t, const T& t1, const T& t2, co
 
 template<typename T, typename SD>
 void coef_mat_interp(state_t<T, SD>& result, const T& t, const T& t1, const T& t2, const state_t<T, SD>& y1, const state_t<T, SD>& /*y2*/, const state_t<T, SD>* coef_mat, size_t order){
-    //coef_mat dimensions: size x order
+    
     assert( (t != t1 && t != t2) && "coef_mat_interp must only be called on the open interval");
 
-    auto h = t2-t1;
-    auto x = (t-t1)/h;
+    const auto h = t2-t1;
+    const auto x = (t-t1)/h;
 
     using S = value_t<T, SD>;
 
@@ -569,14 +582,13 @@ void coef_mat_interp(state_t<T, SD>& result, const T& t, const T& t1, const T& t
         r_i = y1_i;
     }, result, y1);
 
+    T x_power = x;
     for (size_t j=0; j<order; ++j){
-        const T x_pow = pow(x, j+1);
-        SD::for_each([&h, &x_pow](S& r_i, const S& c_i){
-            r_i += h*c_i * x_pow;
+        SD::for_each([&h, &x_power](S& r_i, const S& c_i){
+            r_i += h * c_i * x_power;
         }, result, coef_mat[j]);
+        x_power *= x;
     }
 }
 
 } // namespace ode::interp::uni
-
-#endif // ODECRAFT_STATE_INTERP_IMPL_HPP

@@ -1,6 +1,5 @@
-#ifndef ODECRAFT_TESTS_VARIATIONAL_TEST_HPP
-#define ODECRAFT_TESTS_VARIATIONAL_TEST_HPP
+#pragma once
+
 
 void test_variational_solver();
 
-#endif // ODECRAFT_TESTS_VARIATIONAL_TEST_HPP

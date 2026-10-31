@@ -1,6 +1,5 @@
-#ifndef ODECRAFT_TESTS_COMPILED_INTERFACE_HPP
-#define ODECRAFT_TESTS_COMPILED_INTERFACE_HPP
+#pragma once
+
 
 void test_compiled_interface();
 
-#endif // ODECRAFT_TESTS_COMPILED_INTERFACE_HPP

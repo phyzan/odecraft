@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_BASESOLVER_IMPL_HPP
-#define ODECRAFT_BASESOLVER_IMPL_HPP
+#pragma once
 
 
 #include <odecraft/Toolkit/FinDiff.hpp>
@@ -170,10 +169,19 @@ std::string_view BaseSolver<Derived, T, SD, JD, OdeType, SP>::message() const{
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::show_state(int prec) const{
+void BaseSolver<Derived, T, SD, JD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
     decltype(auto) worker = scratch_0.get();
     this->fill_current_vector(worker);
-    SolverState<T, SD>(worker, this->t(), this->stepsize(), this->step_count(), this->message().data()).show(prec);
+
+    out << std::setprecision(prec) << "\n" << 
+    "OdeSolver current state:\n---------------------------\n"
+    "\ttime       : " << this->t() << "\n" <<
+    "\tq          : ";
+    
+    SD::console(out, worker) << "\n" <<
+    "\tstepsize   : " << this->stepsize() << "\n" <<
+    "\tUpdates    : " << this->step_count() << "\n" <<
+    "\tStatus     : " << this->message() << std::endl;
 }
 
 
@@ -187,18 +195,6 @@ const BaseSolver<Derived, T, SD, JD, OdeType, SP>::State& BaseSolver<Derived, T,
     return this->q_ics_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::interp(State& out, const T& t) const{
-    if (t == this->t_old()) {
-        copy_state<SD>(out, q_old_);
-    } else if (t == this->t_new()){
-        copy_state<SD>(out, q_new_);
-    } else if (lt(t_old(), t) && lt(t, t_new())){
-        return interp_impl(out, t);
-    } else {
-        throw std::out_of_range("Out of bounds interpolation requested");
-    }
-}
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 size_t BaseSolver<Derived, T, SD, JD, OdeType, SP>::rhs_eval_count() const{
@@ -273,7 +269,7 @@ std::unique_ptr<typename BaseSolver<Derived, T, SD, JD, OdeType, SP>::CloneType>
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance(){
     if (this->is_running()){
-        return Accessor::call_Adv_Impl(*THIS);
+        return THIS->Adv_Impl();
     } else {
         this->warn_dead();
         return false;
@@ -349,24 +345,63 @@ BoxedInterp<T, SD> BaseSolver<Derived, T, SD, JD, OdeType, SP>::state_interpolat
     if (this->t_old() == this->t_new()){
         return pbox::make_box<LocalInterpolator<T, SD>>(this->t(), q_new_);
     } else {
-        auto interp = this->local_interp();
+        // detached: the segment outlives the step (and the solver itself)
+        auto interp = this->local_interp_impl().detach();
         return pbox::make_box<CustomLocalInterpolator<T, SD, decltype(interp)>>(std::move(interp), t_old_, t_new_, q_old_, q_new_, bdr1, bdr2);
     }
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 StepResult BaseSolver<Derived, T, SD, JD, OdeType, SP>::adapt_impl(T& t_new, T& habs_new, State& y_new, const T& t, const T& habs, const State& q) noexcept(!detail::rhs_may_throw){
-    return ODECRAFT_CALL_DERIVED(adapt_impl, t_new, habs_new, y_new, t, habs, q);
+    return THIS->adapt_impl(t_new, habs_new, y_new, t, habs, q);
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::interp_impl(State& result, const T& t) const{
-    ODECRAFT_CALL_DERIVED(interp_impl, result, t);
+auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::local_interp_impl() const{
+    return THIS->local_interp_impl();
 }
 
+/// @brief Non-owning interpolator for the closed interval [t_old, t_new]. Valid while the solver is not advanced or goes out of scope
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::local_interp() const{
-    return Accessor::call_local_interp(*THIS);
+auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::light_interp() const {
+    return [f = this->local_interp_impl(), this](State& out, const T& t){
+        if (t == this->t_old()) {
+            copy_state<SD>(out, q_old_);
+        } else if (t == this->t_new()){
+            copy_state<SD>(out, q_new_);
+        } else if (lt(t_old(), t) && lt(t, t_new())){
+            return f(out, t);
+        } else {
+            throw std::domain_error("Out of bounds interpolation requested");
+        }
+    };
+}
+
+/// @brief Interpolator for the closed interval [t_old, t_new], detached from the Solver. Can be expensive to construct
+template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::heavy_interp() const {
+    return [
+        f = this->local_interp_impl().detach(),
+        d = this->direction(),
+        t1 = this->t_old(),
+        q1 = this->vector_old(),
+        t2 = this->t_new(),
+        q2 = this->vector_new()
+    ](State& out, const T& t){
+        if (t == t1) {
+            copy_state<SD>(out, q1);
+        } else if (t == t2){
+            copy_state<SD>(out, q2);
+        } else {
+            if (d == 1 && t1 < t && t < t2){
+                return f(out, t);
+            } else if (d == -1 && t2 < t && t < t1){
+                return f(out, t);
+            } else {
+                throw std::domain_error("Out of bounds interpolation requested");
+            }
+        }
+    };
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
@@ -374,7 +409,7 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::fill_current_vector_impl(State
     if (this->is_at_new_state()){
         copy_state<SD>(out, q_new_);
     } else {
-        this->interp_impl(out, this->t());
+        this->local_interp_impl()(out, this->t());
     }
 }
 
@@ -416,7 +451,7 @@ const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::t_old() const{
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 void BaseSolver<Derived, T, SD, JD, OdeType, SP>::fill_current_vector(State& out) const{
-    return ODECRAFT_CALL_DERIVED(fill_current_vector_impl, out);
+    return THIS->fill_current_vector_impl(out);
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
@@ -443,7 +478,7 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::ReAdjust(const State& new_stat
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::validate_ics(const T& t0, const State& q0) const {
-    return ODECRAFT_CALL_DERIVED(validate_ics_impl, t0, q0);
+    return THIS->validate_ics_impl(t0, q0);
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
@@ -485,7 +520,7 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::cerr(const std::string& messag
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
 BaseSolver<Derived, T, SD, JD, OdeType, SP>::BaseSolver(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events) :
-    scratch_0(q0), scratch_1(q0), scratch_2(q0), scratch_3(q0), real_scratch(rtol),
+    scratch_0(q0), scratch_1(q0), scratch_2(q0), real_scratch(rtol),
     ode_(std::move(ode)),
     t_ics_(t0), habs_ics_(0), t_old_(t0), t_new_(t0), t_true_(t0), habs_new_(0),
     min_step_(min_step), max_step_(max_step == 0 ? inf<T>() : max_step),
@@ -654,7 +689,7 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::Adv_Impl(Args&&... args){
         } else if (this->is_at_new_state()){
             T scratch_time, scratch_habs;
             if (this->take_step(scratch_time, scratch_habs)){
-                if (ODECRAFT_CALL_DERIVED(RequestTimeFloor, scratch_time)){
+                if (THIS->RequestTimeFloor(scratch_time)){
                     assert((scratch_time*d > t_old()*d && scratch_time*d <= t_new()*d) && "Invalid floor requested, with additional requests");
                     time_floor = nearest_time(scratch_time, time_floor);
                 }
@@ -676,7 +711,7 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::Adv_Impl(Args&&... args){
     } else if (this->is_at_new_state()){
         T scratch_time, scratch_habs;
         if (this->take_step(scratch_time, scratch_habs)){
-            if (ODECRAFT_CALL_DERIVED(RequestTimeFloor, scratch_time) && lt(scratch_time, t_new())){
+            if (THIS->RequestTimeFloor(scratch_time) && lt(scratch_time, t_new())){
                 assert((scratch_time*d > t_old()*d && scratch_time*d <= t_new()*d) && "Invalid floor requested without additional requests.");
                 this->move_state(scratch_time);
             }
@@ -728,5 +763,3 @@ const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::nearest_of(const A& t_a, c
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_BASESOLVER_IMPL_HPP

@@ -1,5 +1,5 @@
-#ifndef ODECRAFT_STATE_HPP
-#define ODECRAFT_STATE_HPP
+#pragma once
+
 
 
 /*
@@ -185,5 +185,3 @@ on the spot.
 3) zip (rename for_each) must run over const-only states too. must make safe for runtime size, with the method proposed. For LazType, maybe update the workers when an operation with a different size is invoked. lazex should provide an API for that. 
 
 */
-
-#endif // ODECRAFT_STATE_HPP

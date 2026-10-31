@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_OBJECTIVE_SOLVER_IMPL_HPP
-#define ODECRAFT_OBJECTIVE_SOLVER_IMPL_HPP
+#pragma once
 
 #include <odecraft/Objectives/StaticEventStepper.hpp>
 
@@ -101,8 +100,8 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
                 RootStatus rs = bisect_root(
                     values[I],
                     (T*)nullptr,
-                    [&](const T& t){
-                        this->interp_impl(worker.data(), t);
+                    [f_open = this->local_interp_impl(), &](const T& t){
+                        f_open(worker.data(), t);
                         return std::get<I>(obj).func(t, worker.data());
                     },
                     t_old,
@@ -167,4 +166,3 @@ auto getEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Ar
 
 } // namespace ode
 
-#endif // ODECRAFT_OBJECTIVE_SOLVER_IMPL_HPP

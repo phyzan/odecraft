@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_TOOLKIT_HPP
-#define ODECRAFT_COMPILED_TOOLKIT_HPP
+#pragma once
 
 /**
  * @file Compiled/Toolkit.hpp
@@ -99,5 +98,3 @@ using ::ode::Vector,
       ::ode::make_vector;
 
 } // namespace ode::crafted
-
-#endif // ODECRAFT_COMPILED_TOOLKIT_HPP

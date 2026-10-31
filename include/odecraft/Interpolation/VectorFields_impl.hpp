@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_VECTOR_FIELDS_IMPL_HPP
-#define ODECRAFT_VECTOR_FIELDS_IMPL_HPP
+#pragma once
 
 
 #include <odecraft/Interpolation/VectorFields.hpp>
@@ -133,5 +132,3 @@ pbox::Box<ODE<double, NDIM>> VectorField<Derived, NDIM, AS_VIRTUAL>::get_streaml
 }
 
 } // namespace ode::interp
-
-#endif // ODECRAFT_VECTOR_FIELDS_IMPL_HPP

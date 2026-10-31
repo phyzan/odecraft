@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_BASESOLVER_MEM_IMPL_HPP
-#define ODECRAFT_BASESOLVER_MEM_IMPL_HPP
+#pragma once
 
 #include "BaseSolver.hpp"
 
@@ -76,7 +75,7 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::generic_advance_until(
     auto evolve = [&](State& worker) NDSPAN_LAMBDA_INLINE -> bool {
         bool res;
         while (
-            (res = (this->is_running() && Accessor::call_Adv_Impl(*THIS, time)))
+            (res = (this->is_running() && THIS->Adv_Impl(time)))
             && (time != this->t())
         ){
             bool obs_res;
@@ -207,5 +206,3 @@ BoxedInterp<T, SD> BaseSolver<Derived, T, SD, JD, OdeType, SP>::generic_interpol
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_BASESOLVER_MEM_IMPL_HPP

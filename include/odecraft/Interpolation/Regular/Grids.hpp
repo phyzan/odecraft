@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_GRIDS_HPP
-#define ODECRAFT_GRIDS_HPP
+#pragma once
 
 #include <ndspan/ndspan.hpp>
 
@@ -47,5 +46,3 @@ private:
 };
 
 } // namespace ode::interp::rgi
-
-#endif // ODECRAFT_GRIDS_HPP

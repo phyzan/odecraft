@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_COMPILED_ODECRAFT_HPP
-#define ODECRAFT_COMPILED_ODECRAFT_HPP
+#pragma once
 
 /**
  * @file Compiled/odecraft.hpp
@@ -21,5 +20,3 @@
 #include <odecraft/Compiled/ODE.hpp>            // IWYU pragma: export
 #include <odecraft/Compiled/NdInterpolators.hpp> // IWYU pragma: export
 #include <odecraft/Compiled/Chaos.hpp>          // IWYU pragma: export
-
-#endif // ODECRAFT_COMPILED_ODECRAFT_HPP

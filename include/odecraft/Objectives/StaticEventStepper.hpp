@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_OBJECTIVE_SOLVER_HPP
-#define ODECRAFT_OBJECTIVE_SOLVER_HPP
+#pragma once
 
 #include <odecraft/Core/BaseSolver/BaseSolver.hpp>
 #include <odecraft/Toolkit/Tools.hpp>
@@ -90,4 +89,3 @@ auto getEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Ar
 
 }; // namespace ode
 
-#endif // ODECRAFT_OBJECTIVE_SOLVER_HPP

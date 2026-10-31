@@ -1,7 +1,7 @@
-#ifndef ODECRAFT_RICH_BASE_IMPL_HPP
-#define ODECRAFT_RICH_BASE_IMPL_HPP
+#pragma once
 
 #include "RichBase.hpp"
+#include <string_view>
 
 namespace ode{
 
@@ -42,10 +42,10 @@ std::vector<size_t> RichSolver<Derived, T, SD, JD, OdeType, SP>::toEventIdx(cons
 }
 
 template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void RichSolver<Derived, T, SD, JD, OdeType, SP>::show_state(int prec) const{
-    decltype(auto) worker = this->scratch_0.get();
-    this->fill_current_vector(worker);
-    SolverRichState<T, SD>(worker, this->t(), this->stepsize(), this->step_count(), this->message().data(), this->current_event().event ? this->current_event().event->name() : "").show(prec);
+void RichSolver<Derived, T, SD, JD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
+    Base::show_state(out, prec);
+    std::string_view event_name = this->current_event().event ? this->current_event().event->name().c_str() : "";
+    out << "\tEvent     : " << event_name << "\n";
 }
 
 // PUBLIC MODIFIERS
@@ -156,12 +156,19 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::RequestTimeFloor(T& out) {
     detection_idx = -1; // reset detection index at the start of a new detection round
     // do not also set is_at_event to false, as the Adv_Impl might fail and the step should remain in the same state.
     if ((is_event_waiting = evt_col.detect_all_between(
+        /*
+        Passing a lambda that calls this->local_interp_impl() at every evaluation,
+        bacause it is cheaper than passing this->local_interp_impl() itself.
+        Constructing it once can require RHS evaluations depending on the derived class,
+        and if no events are detected there is no reason for that, while constructing at every
+        evaluation might cost a lot only in the first call.
+        */
         this->t_old(),
         this->t_new(),
         this->vector_old(),
         this->vector_new(),
-        [this](State& q_out, const T& t){
-            this->interp(q_out, t);
+        [this](State& state_out, const T& t){
+            return this->local_interp_impl()(state_out, t);
         }
     ))){
         // is_event_waiting has been set to true, preparing the push_event_queue for the first event
@@ -220,7 +227,7 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::Adv_Impl(Args&&... args){
         const MaskedState<T, State>* ms = evt_col.masked_state();
         assert(ms != nullptr && "Solver is at a canon event but has no masked state");
         // Both mask kinds land here now; see push_event_queue for why it is deferred.
-        ODECRAFT_CALL_DERIVED(ReAdjust, ms->masked_vector);
+        THIS->ReAdjust(ms->masked_vector);
     }
     
     if (this->is_at_new_state()){
@@ -251,6 +258,3 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::Adv_Impl(Args&&... args){
 }
 
 } // namespace ode
-
-
-#endif // ODECRAFT_RICH_BASE_IMPL_HPP

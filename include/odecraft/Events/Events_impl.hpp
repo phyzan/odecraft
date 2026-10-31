@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_EVENTS_IMPL_HPP
-#define ODECRAFT_EVENTS_IMPL_HPP
+#pragma once
 
 #include "Events_mem_impl.hpp" // IWYU pragma: keep
 
@@ -326,5 +325,3 @@ std::vector<EventOptions> EventCollection<T, State>::validate_events(const std::
 
 
 } // namespace ode
-
-#endif // ODECRAFT_EVENTS_IMPL_HPP

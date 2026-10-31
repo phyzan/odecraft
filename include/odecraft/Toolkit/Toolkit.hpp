@@ -1,9 +1,8 @@
-#ifndef ODECRAFT_TOOLKIT_HPP
-#define ODECRAFT_TOOLKIT_HPP
+#pragma once
+
 
 #include "Vector.hpp" // IWYU pragma: keep
 #include "FinDiff.hpp" // IWYU pragma: keep
-#include "linalg.hpp" // IWYU pragma: keep
-
-
-#endif // ODECRAFT_TOOLKIT_HPP
+#include "Linalg.hpp" // IWYU pragma: keep
+#include "Scratch.hpp" // IWYU pragma: keep
+#include "Roots.hpp" // IWYU pragma: keep

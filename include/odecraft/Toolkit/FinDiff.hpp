@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_FINDIFF_HPP
-#define ODECRAFT_FINDIFF_HPP
+#pragma once
 
 #include "Tools.hpp"
 
@@ -83,6 +82,3 @@ constexpr void jac_approx_explicit(Callable&& func, jacmat_t<T, SD>& out, state_
 }
 
 }; // namespace ode
-
-
-#endif // ODECRAFT_FINDIFF_HPP

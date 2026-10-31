@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_RK45_DOPRI_IMPL_HPP
-#define ODECRAFT_RK45_DOPRI_IMPL_HPP
+#pragma once
 
 #include <odecraft/Steppers/DOPRI_impl.hpp>
 #include <odecraft/Steppers/RK45_DOPRI.hpp>
@@ -61,25 +60,24 @@ Stepper RK45<T, SD, JD, OdeType, SP, Derived>::method() const{
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 void RK45<T, SD, JD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    mat_is_set = false;
     this->rhs(K_[Nstages], this->t_new(), this->vector_new());
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 void RK45<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
-    // freeze the interpolation coefficients (from t_old to t) before the last stage is overwritten
-    this->set_coef_matrix();
+    // the first stage of the next step (FSAL)
     this->rhs(K_[Nstages], this->t(), new_vector);
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK45<T, SD, JD, OdeType, SP, Derived>::set_coef_matrix() const{
-    if (!mat_is_set){
-        // K_ still holds the stages of the step just taken. The row of P for K_[1] is zero.
-        detail::rk_interp_matrix<T, SD, Nstages, INTERP_ORDER>(coef_mat, K_, P.table, detail::stages<0, Nstages, 2, 3, 4, 5>);
-        mat_is_set = true;
+void RK45<T, SD, JD, OdeType, SP, Derived>::cache_coef_matrix() const{
+    if (coef_mat_is_cached_){
+        return;
     }
+    // K_ still holds the stages of the step just taken. The row of P for K_[1] is zero.
+    detail::rk_interp_matrix<T, SD, Nstages, INTERP_ORDER>(coef_mat, K_, P.table, detail::stages<0, Nstages, 2, 3, 4, 5>);
+    coef_mat_is_cached_ = true;
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
@@ -106,7 +104,7 @@ T RK45<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
 StepResult RK45<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
-    mat_is_set = false;
+    coef_mat_is_cached_ = false; // K_ is about to change
     // FSAL: the previous step's last stage becomes this step's first
     copy_state<SD>(K_[0], K_[Nstages]);
     return detail::rk_adapt_step<T, SD>(
@@ -128,19 +126,11 @@ StepResult RK45<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_n
 }
 
 template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK45<T, SD, JD, OdeType, SP, Derived>::interp_impl(State& result, const T& t) const{
-    this->set_coef_matrix();
-    coef_mat_interp<T, SD>(result, t, this->t_old(), this->t_new(), this->vector_old(), this->vector_new(), coef_mat.data(), INTERP_ORDER);
-}
-
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto RK45<T, SD, JD, OdeType, SP, Derived>::local_interp() const{
-    this->set_coef_matrix();
-    return [cm=this->coef_mat, t1=this->t_old(), t2=this->t_new(), y1=this->vector_old(), y2=this->vector_new()](State& out, const T& t){
-        coef_mat_interp<T, SD>(out, t, t1, t2, y1, y2, cm.data(), INTERP_ORDER);
-    };
+auto RK45<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
+    this->cache_coef_matrix();
+    return make_light_functor([](State& out, const T& t, const auto& t1, const auto& t2, const auto& y1, const auto& y2, const auto& cm){
+        return coef_mat_interp<T, SD>(out, t, t1, t2, y1, y2, cm.data(), INTERP_ORDER);
+    }, this->t_old(), this->t_new(), this->vector_old(), this->vector_new(), this->coef_mat);
 }
 
 } // namespace ode
-
-#endif // ODECRAFT_RK45_DOPRI_IMPL_HPP

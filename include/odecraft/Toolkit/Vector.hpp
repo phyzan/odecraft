@@ -1,5 +1,5 @@
-#ifndef ODECRAFT_VECTOR_HPP
-#define ODECRAFT_VECTOR_HPP
+#pragma once
+
 
 #include <cstdlib>
 #include <utility>
@@ -228,5 +228,3 @@ inline Vector<T> make_vector(U&&... items){
 
 
 } // namespace ode
-
-#endif // ODECRAFT_VECTOR_HPP

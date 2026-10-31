@@ -1,5 +1,4 @@
-#ifndef ODECRAFT_LINALG_HPP
-#define ODECRAFT_LINALG_HPP
+#pragma once
 
 
 #include "Tools.hpp"
@@ -152,6 +151,3 @@ T detLU_row_major(T* mat, size_t N) {
 
     
 } // namespace ode
-
-
-#endif // ODECRAFT_LINALG_HPP

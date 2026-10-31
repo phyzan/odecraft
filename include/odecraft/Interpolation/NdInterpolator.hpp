@@ -1,6 +1,4 @@
-#ifndef ODECRAFT_ND_INTERPOLATOR_HPP
-#define ODECRAFT_ND_INTERPOLATOR_HPP
-
+#pragma once
 
 #include <odecraft/Toolkit/Tools.hpp>
 
@@ -64,6 +62,3 @@ private:
 };
 
 } // namespace ode::interp
-
-
-#endif // ODECRAFT_ND_INTERPOLATOR_HPP
