@@ -4,33 +4,33 @@
 
 namespace ode{
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
 template<typename... Args>
-StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::StaticEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args) : Base(std::move(ode), std::forward<Args>(args)...), obj(std::move(funcs)){
+StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::StaticEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, T t0, State q0, Args&&... args) : Base(std::move(ode), std::move(t0), q0, std::forward<Args>(args)...), worker(q0), obj(std::move(funcs)){
     this->cache_current_signs();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-void StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::Reset(){
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+void StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::Reset(){
     Base::Reset();
     cache_current_signs();
     detected.fill(false);
     current_idx = -1;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::is_at_objective() const {
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+bool StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::is_at_objective() const {
     return current_idx != -1;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-int StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::current_objective() const {
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+int StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::current_objective() const {
     return current_idx;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
 template<typename... Args>
-bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::Adv_Impl(Args&&... args){
+bool StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::Adv_Impl(Args&&... args){
     T nearest_floor;
     size_t idx;
     current_idx = -1;
@@ -39,7 +39,11 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::Adv_Impl(Args&&... arg
         if (success && this->get_nearest_floor(nearest_floor, idx)){
             if (this->t() == nearest_floor){
                 detected[idx] = false;
-                cached_sign[idx] = 0;
+                // RequestTimeFloor already cached the sign at t_new. Only a root at t_new itself
+                // must not count as the start of a crossing in the next step.
+                if (nearest_floor == this->t_new()){
+                    cached_sign[idx] = 0;
+                }
                 current_idx = int(idx);
             }
             return true;
@@ -50,7 +54,9 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::Adv_Impl(Args&&... arg
         if (Base::Adv_Impl(nearest_floor, std::forward<Args>(args)...)){
             if (this->t() == nearest_floor){
                 detected[idx] = false; //turn off for next step, since the goal was achieved
-                cached_sign[idx] = 0;
+                if (nearest_floor == this->t_new()){
+                    cached_sign[idx] = 0; // see above
+                }
                 current_idx = int(idx);
             }
             return true;
@@ -62,22 +68,22 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::Adv_Impl(Args&&... arg
     }
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-void StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::ReAdjust(const T* new_vector){
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+void StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
     cache_current_signs();
     detected.fill(false);
     current_idx = -1;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& out){
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+bool StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::RequestTimeFloor(T& out){
     bool base_floor = Base::RequestTimeFloor(out);
     const int d = this->direction();
     T my_floor = this->t_new();
     NDSPAN_FOR_LOOP(I, NOBJ,
         const int old_sgn = cached_sign[I];
-        const T f_new = std::get<I>(obj).func(this->t_new(), this->vector_new().data());
+        const T f_new = std::get<I>(obj).func(this->t_new(), this->vector_new());
         const int new_sign = sgn(f_new);
         cached_sign[I] = new_sign;
         detected[I] = false;
@@ -95,14 +101,15 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
 
             if (crossed){
                 const T& t_old = this->t_old();
-                const T* q_old = this->vector_old().data();
+                const State& q_old = this->vector_old();
                 T f_old = std::get<I>(obj).func(t_old, q_old);
+                decltype(auto) w_state = worker.get();
                 RootStatus rs = bisect_root(
                     values[I],
-                    (T*)nullptr,
-                    [f_open = this->local_interp_impl(), &](const T& t){
-                        f_open(worker.data(), t);
-                        return std::get<I>(obj).func(t, worker.data());
+                    static_cast<T*>(nullptr),
+                    [&, f_open = this->local_interp_impl()](const T& t){
+                        f_open(w_state, t);
+                        return std::get<I>(obj).func(t, w_state);
                     },
                     t_old,
                     this->t_new(),
@@ -125,8 +132,8 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::RequestTimeFloor(T& ou
     return true;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::get_nearest_floor(T& out, size_t& idx) const{
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+bool StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::get_nearest_floor(T& out, size_t& idx) const{
     bool found = false;
     NDSPAN_FOR_LOOP(I, NOBJ,
         if (detected[I]){
@@ -143,25 +150,25 @@ bool StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::get_nearest_floor(T& o
     return found;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun>
-void StaticEventStepper<S, T, N, SP, OdeType, ObjFun...>::cache_current_signs(){
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+void StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>::cache_current_signs(){
     NDSPAN_FOR_LOOP(I, NOBJ,
-        cached_sign[I] = sgn(std::get<I>(obj).func(this->t(), this->vector_new().data()));
+        cached_sign[I] = sgn(std::get<I>(obj).func(this->t(), this->vector_new()));
     );
 }
 
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename ObjFun>
 template<typename... Args>
-SingleStaticEventStepper<S, T, N, SP, OdeType, ObjFun>::SingleStaticEventStepper(ObjFunData<T, ObjFun> data, OdeType ode, Args&&... args) : Base(std::tuple{data}, std::move(ode), std::forward<Args>(args)...) {}
+SingleStaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun>::SingleStaticEventStepper(ObjFunData<T, ObjFun> data, OdeType ode, Args&&... args) : Base(std::tuple{data}, std::move(ode), std::forward<Args>(args)...) {}
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, isObjFun<T> ObjFun>
+template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename ObjFun>
 template<typename... Args>
-SingleStaticEventStepper<S, T, N, SP, OdeType, ObjFun>::SingleStaticEventStepper(ObjFun obj_fun, OdeType ode, Args&&... args) : Base(std::tuple{ObjFunData{std::move(obj_fun), T{0.0}, 1}}, std::move(ode), std::forward<Args>(args)...) {}
+SingleStaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun>::SingleStaticEventStepper(ObjFun obj_fun, OdeType ode, T t0, State q0, Args&&... args) : Base(std::tuple{ObjFunData{std::move(obj_fun), T{0.0}, 1}}, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...) {}
 
-template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, isObjFun<T>... ObjFun, typename... Args>
+template<Stepper S, SolverPolicy SP, typename T, typename SD, typename JD, typename OdeType, typename... ObjFun, typename... Args>
 auto getEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args){
-    return StaticEventStepper<S, T, N, SolverPolicy::Static, OdeType, ObjFun...>(std::move(funcs), std::move(ode), std::forward<Args>(args)...);
+    return StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>(std::move(funcs), std::move(ode), std::forward<Args>(args)...);
 }
 
 } // namespace ode

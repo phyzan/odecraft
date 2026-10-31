@@ -9,7 +9,7 @@
 #include <odecraft/Core/BaseSolver/BaseSolver_impl.hpp>
 #include <odecraft/Core/RichSolver/RichBase_impl.hpp>
 #include <odecraft/Events/Events_impl.hpp>
-// #include <odecraft/Objectives/StaticEventStepper_impl.hpp>
+#include <odecraft/Objectives/StaticEventStepper_impl.hpp>
 
 // #include <odecraft/OdeResult/OdeResult_impl.hpp>
 
