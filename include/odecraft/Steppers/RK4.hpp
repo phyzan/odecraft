@@ -24,16 +24,16 @@ void rk4_interp(state_t<T, SD>& out, const T& t, const T& t1, const T& t2, const
 } // namespace ode::detail
 
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
-class RK4 : public detail::BaseDispatcher<GetDerived<RK4<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
+class RK4 : public detail::BaseDispatcher<GetDerived<RK4<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>{
 
     ODECRAFT_DECLARE_STEPPER;
 
-    using Base = detail::BaseDispatcher<GetDerived<RK4<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
+    using Base = detail::BaseDispatcher<GetDerived<RK4<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>;
 
 public:
     using State = state_t<T, SD>;
-    using RealState = Base::RealState;
+    using RealState = real_state_t<T, SD>;
 
     static constexpr size_t         Nstages = 4;
     static constexpr int            ERR_EST_ORDER = 4;
@@ -73,9 +73,9 @@ private:
 
 namespace detail{
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-struct SolverTypeGetter<Stepper::RK4, SP, T, SD, JD, OdeType, Derived>{
-    using type = RK4<T, SD, JD, OdeType, SP, Derived>;
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+struct SolverTypeGetter<Stepper::RK4, SP, T, SD, OdeType, Derived>{
+    using type = RK4<T, SD, OdeType, SP, Derived>;
 };
 
 } // namespace ode::detail

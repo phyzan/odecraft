@@ -4,6 +4,7 @@
 #include <odecraft/Toolkit/FinDiff.hpp>
 #include <odecraft/Toolkit/Toolkit.hpp>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include "BaseSolver_mem_impl.hpp"
 #include "odecraft/Toolkit/Tools.hpp"
@@ -15,20 +16,14 @@ namespace ode{
 
 // ODE PROPERTIES
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::Rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::Rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
     return ode_.Rhs(out, t, q);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
-    this->Rhs(out, t, q);
-    this->rhs_eval_count_++;
-}
 
-
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::Jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::Jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
     
     if constexpr (JP == JacPolicy::Approx){
         return this->JacApprox(out, t, q);
@@ -40,13 +35,12 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::Jac(JacMat& out, const T& t, c
 
         ode_.Rhs(out_duals, t, dual_seeds);
 
-        SD::for_each([&out, i = size_t{0}](const dual_t<T, SD, 1>& fi) mutable {
-            SD::for_each([&out, &i, j = size_t{0}](const T& dfi_dqj) mutable {
-                out(i, j) = dfi_dqj;
-                ++j;
-            }, fi.grad());
-            ++i;
-        }, out_duals);
+        // Row i of the Jacobian is the gradient of f_i
+        SD::JD::linalg::for_each_row([](value_t<T, SD>& out_ij, const value_t<T, SD>& dfi_dxj){
+            out_ij = dfi_dxj;
+        }, [](const dual_t<T, SD, 1>& fi){
+            return std::tie(fi.grad());
+        }, std::tie(out), out_duals);
     } else if constexpr (JP == JacPolicy::Nullable){
         // The Jacobian was declared but may be null at runtime, in which case we fall
         // back to a numerical approximation (see the note in getJacPolicy).
@@ -57,92 +51,86 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::Jac(JacMat& out, const T& t, c
         }
     } else {
         ode_.Jac(out, t, q);
-    }
+    } 
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::Jac(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::Jac(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
     this->JacApprox(out, t, q, dq);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
-    this->Jac(out, t, q);
-    this->jac_eval_count_++;
-}
-
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::JacApprox(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::JacApprox(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
     // jac_approx works on 3 state vectors: the shifted point and the two evaluations around it
     decltype(auto) w_x = scratch_0.get();
     decltype(auto) w_y1 = scratch_1.get();
     decltype(auto) w_y2 = scratch_2.get();
 
     ode::jac_approx_autostep<T, SD>([this](State& out_, const T& t_, const State& q_){
-        this->Rhs(out_, t_, q_);
+        THIS->Rhs(out_, t_, q_);
     }, out, w_x, w_y1, w_y2, t, q, this->atol());
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::JacApprox(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::JacApprox(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
     decltype(auto) w_x = scratch_0.get();
     decltype(auto) w_y1 = scratch_1.get();
     decltype(auto) w_y2 = scratch_2.get();
 
     ode::jac_approx_explicit<T, SD>([this](State& out_, const T& t_, const State& q_){
-        this->Rhs(out_, t_, q_);
+        THIS->Rhs(out_, t_, q_);
     }, out, w_x, w_y1, w_y2, t, q, dq);
 }
 
 // PUBLIC ACCESSORS
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::t() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::t() const{
     return t_true_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, JD, OdeType, SP>::State& BaseSolver<Derived, T, SD, JD, OdeType, SP>::vector_new() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_new() const{
     return this->q_new_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, JD, OdeType, SP>::State& BaseSolver<Derived, T, SD, JD, OdeType, SP>::vector_old() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_old() const{
     return this->q_old_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::stepsize() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::stepsize() const{
     return habs_new_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-int BaseSolver<Derived, T, SD, JD, OdeType, SP>::direction() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+int BaseSolver<Derived, T, SD, OdeType, SP>::direction() const{
     return direction_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, JD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, JD, OdeType, SP>::rtol() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const BaseSolver<Derived, T, SD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, OdeType, SP>::rtol() const{
     return rtol_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, JD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, JD, OdeType, SP>::atol() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const BaseSolver<Derived, T, SD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, OdeType, SP>::atol() const{
     return atol_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::min_step() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::min_step() const{
     return min_step_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::max_step() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::max_step() const{
     return max_step_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::is_running() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::is_running() const{
     switch (this->status_){
         case StepperStatus::NewStep:
         case StepperStatus::BetweenSteps:
@@ -153,23 +141,23 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::is_running() const{
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-size_t BaseSolver<Derived, T, SD, JD, OdeType, SP>::step_count() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+size_t BaseSolver<Derived, T, SD, OdeType, SP>::step_count() const{
     return step_count_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-StepperStatus BaseSolver<Derived, T, SD, JD, OdeType, SP>::status() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+StepperStatus BaseSolver<Derived, T, SD, OdeType, SP>::status() const{
     return status_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-std::string_view BaseSolver<Derived, T, SD, JD, OdeType, SP>::message() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+std::string_view BaseSolver<Derived, T, SD, OdeType, SP>::message() const{
     return status_message(this->status_);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
     decltype(auto) worker = scratch_0.get();
     this->fill_current_vector(worker);
 
@@ -185,29 +173,18 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::show_state(std::ostream& out, 
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::t_ics() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::t_ics() const{
     return t_ics_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, JD, OdeType, SP>::State& BaseSolver<Derived, T, SD, JD, OdeType, SP>::vector_ics() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_ics() const{
     return this->q_ics_;
 }
 
-
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-size_t BaseSolver<Derived, T, SD, JD, OdeType, SP>::rhs_eval_count() const{
-    return rhs_eval_count_;
-}
-
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-size_t BaseSolver<Derived, T, SD, JD, OdeType, SP>::jac_eval_count() const{
-    return jac_eval_count_;
-}
-
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-T BaseSolver<Derived, T, SD, JD, OdeType, SP>::auto_step(const T& t, const State& q) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step(const T& t, const State& q) const{
     //returns absolute value of emperically determined first step.
 
     const int dir = this->direction();
@@ -226,7 +203,7 @@ T BaseSolver<Derived, T, SD, JD, OdeType, SP>::auto_step(const T& t, const State
         s_i = atol_i + rtol_i * abs(q_i);
     }, scale, this->rtol(), this->atol(), q);
 
-    this->rhs(f0, t, q);
+    THIS->Rhs(f0, t, q);
     T d0 = rms_norm<SD, T>(q, scale);
     T d1 = rms_norm<SD, T>(f0, scale);
     if (d0 * 1e5 < 1 || d1 * 1e5 < 1){
@@ -238,7 +215,7 @@ T BaseSolver<Derived, T, SD, JD, OdeType, SP>::auto_step(const T& t, const State
         y1_i = q_i + h0 * dir * f0_i;
     }, y1, q, f0);
 
-    this->rhs(f1, t+h0*dir, y1);
+    THIS->Rhs(f1, t+h0*dir, y1);
 
     State& tmp = y1;//y1 can be recycled, its not used anymore below
     SD::for_each([](value_t<T, SD>& tmp_i, const value_t<T, SD>& f0_i, const value_t<T, SD>& f1_i){
@@ -254,20 +231,20 @@ T BaseSolver<Derived, T, SD, JD, OdeType, SP>::auto_step(const T& t, const State
     return ndspan::max<T>(ndspan::min_of_pack<T>(T(100*h0), h1, this->max_step()), this->min_step());
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-T BaseSolver<Derived, T, SD, JD, OdeType, SP>::auto_step() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step() const{
     return auto_step(this->t_new(), this->vector_new());
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-std::unique_ptr<typename BaseSolver<Derived, T, SD, JD, OdeType, SP>::CloneType> BaseSolver<Derived, T, SD, JD, OdeType, SP>::clone() const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+std::unique_ptr<typename BaseSolver<Derived, T, SD, OdeType, SP>::CloneType> BaseSolver<Derived, T, SD, OdeType, SP>::clone() const {
     return std::make_unique<Derived>(*THIS);
 }
 
 // PUBLIC MODIFIERS
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance(){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::advance(){
     if (this->is_running()){
         return THIS->Adv_Impl();
     } else {
@@ -277,20 +254,20 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance(){
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance_until(const T& time){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::advance_until(const T& time){
     return this->generic_advance_until(time, nullptr, nullptr);
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-BoxedInterp<T, SD> BaseSolver<Derived, T, SD, JD, OdeType, SP>::interpolate_until(const T& time){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::interpolate_until(const T& time){
     return this->generic_interpolate_until(time, nullptr);
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance_by(T interval){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::advance_by(T interval){
     if (interval < 0){
         throw std::logic_error("Interval must be non-negative in advance_by. Its sign is determined by the solver's direction of integration.");
     }
@@ -298,8 +275,8 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance_by(T interval){
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::set_ics(T t0, const State& y0, T stepsize, int direction){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::set_ics(T t0, const State& y0, T stepsize, int direction){
     
     if (direction != 1 && direction != -1 && direction != 0){
         throw std::domain_error("Integration direction must be 1, -1, or 0");
@@ -331,8 +308,8 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::set_ics(T t0, const State& y0,
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::kill(){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::kill(){
     if (this->is_running()){
         this->status_ = StepperStatus::Killed;
     }
@@ -340,8 +317,8 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::kill(){
 
 //====================== STATIC OVERRIDES =====================================
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-BoxedInterp<T, SD> BaseSolver<Derived, T, SD, JD, OdeType, SP>::state_interpolator(int bdr1, int bdr2) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::state_interpolator(int bdr1, int bdr2) const{
     if (this->t_old() == this->t_new()){
         return pbox::make_box<LocalInterpolator<T, SD>>(this->t(), q_new_);
     } else {
@@ -351,19 +328,19 @@ BoxedInterp<T, SD> BaseSolver<Derived, T, SD, JD, OdeType, SP>::state_interpolat
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-StepResult BaseSolver<Derived, T, SD, JD, OdeType, SP>::adapt_impl(T& t_new, T& habs_new, State& y_new, const T& t, const T& habs, const State& q) noexcept(!detail::rhs_may_throw){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+StepResult BaseSolver<Derived, T, SD, OdeType, SP>::adapt_impl(T& t_new, T& habs_new, State& y_new, const T& t, const T& habs, const State& q) noexcept(!detail::rhs_may_throw){
     return THIS->adapt_impl(t_new, habs_new, y_new, t, habs, q);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::local_interp_impl() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+auto BaseSolver<Derived, T, SD, OdeType, SP>::local_interp_impl() const{
     return THIS->local_interp_impl();
 }
 
 /// @brief Non-owning interpolator for the closed interval [t_old, t_new]. Valid while the solver is not advanced or goes out of scope
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::light_interp() const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+auto BaseSolver<Derived, T, SD, OdeType, SP>::light_interp() const {
     return [f = this->local_interp_impl(), this](State& out, const T& t){
         if (t == this->t_old()) {
             copy_state<SD>(out, q_old_);
@@ -378,8 +355,8 @@ auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::light_interp() const {
 }
 
 /// @brief Interpolator for the closed interval [t_old, t_new], detached from the Solver. Can be expensive to construct
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::heavy_interp() const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+auto BaseSolver<Derived, T, SD, OdeType, SP>::heavy_interp() const {
     return [
         f = this->local_interp_impl().detach(),
         d = this->direction(),
@@ -404,8 +381,8 @@ auto BaseSolver<Derived, T, SD, JD, OdeType, SP>::heavy_interp() const {
     };
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::fill_current_vector_impl(State& out) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::fill_current_vector_impl(State& out) const{
     if (this->is_at_new_state()){
         copy_state<SD>(out, q_new_);
     } else {
@@ -413,13 +390,11 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::fill_current_vector_impl(State
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::Reset(){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::Reset(){
     if (this->has_valid_ics()){
         status_ = StepperStatus::NewStep;
         step_count_ = 0;
-        rhs_eval_count_ = 0;
-        jac_eval_count_ = 0;
         t_old_ = t_new_ = t_true_ = t_ics_;
         q_old_ = q_new_ = q_ics_;
         habs_new_ = habs_ics_;
@@ -434,35 +409,35 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::Reset(){
 // HELPER METHODS
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::set_status(StepperStatus new_status){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::set_status(StepperStatus new_status){
     this->status_ = new_status;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::t_new() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::t_new() const{
     return this->t_new_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::t_old() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::t_old() const{
     return this->t_old_;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::fill_current_vector(State& out) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::fill_current_vector(State& out) const{
     return THIS->fill_current_vector_impl(out);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::warn_dead() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::warn_dead() const{
 #ifndef ODECRAFT_NO_WARN
     this->cerr("\nIntegrator has permanently stopped");
 #endif
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::ReAdjust(const State& new_state){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::ReAdjust(const State& new_state){
     t_new_ = this->t();
     habs_new_ = this->stepsize();
     copy_state<SD>(q_new_, new_state);
@@ -476,13 +451,13 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::ReAdjust(const State& new_stat
     // that are valid for [old_state, new_state] pair before re-adjusting
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::validate_ics(const T& t0, const State& q0) const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::validate_ics(const T& t0, const State& q0) const {
     return THIS->validate_ics_impl(t0, q0);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::has_valid_ics() const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::has_valid_ics() const {
     switch (status_){
         case StepperStatus::BadICS:
         case StepperStatus::Uninitialized:
@@ -492,25 +467,25 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::has_valid_ics() const {
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::validate_ics_impl(const T& t0, const State& q0) const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::validate_ics_impl(const T& t0, const State& q0) const {
     if (!all_are_finite<T, SD>(q0) || !isfinite(t0)){
         return false;
     }
     decltype(auto) worker = this->scratch_0.get();
     
-    this->Rhs(worker, t0, q0);
+    THIS->Rhs(worker, t0, q0);
 
     return all_are_finite<T, SD>(worker);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::is_at_new_state() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::is_at_new_state() const{
     return status_ == StepperStatus::NewStep;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::cerr(const std::string& message) const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::cerr(const std::string& message) const {
     // One write, so that messages from concurrent solvers never interleave. It starts by clearing
     // the console line, in case a progress line (drawn with \r and no newline) is on it.
     std::cerr << ("\033[2K\r" + message + "\n");
@@ -518,8 +493,8 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::cerr(const std::string& messag
 
 // PROTECTED CONSTRUCTOR
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-BaseSolver<Derived, T, SD, JD, OdeType, SP>::BaseSolver(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events) :
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+BaseSolver<Derived, T, SD, OdeType, SP>::BaseSolver(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events) :
     scratch_0(q0), scratch_1(q0), scratch_2(q0), real_scratch(rtol),
     ode_(std::move(ode)),
     t_ics_(t0), habs_ics_(0), t_old_(t0), t_new_(t0), t_true_(t0), habs_new_(0),
@@ -552,8 +527,8 @@ BaseSolver<Derived, T, SD, JD, OdeType, SP>::BaseSolver(OdeType ode, T t0, State
 
 // PRIVATE METHODS
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::validate_it(StepResult result, const T& new_time){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::validate_it(StepResult result, const T& new_time){
     bool success = true;
     switch (result){
         case StepResult::Success:
@@ -597,8 +572,8 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::validate_it(StepResult result,
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, JD, OdeType, SP>::move_state(const T& time){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void BaseSolver<Derived, T, SD, OdeType, SP>::move_state(const T& time){
     assert( (this->le(time, this->t_new())) && "Out of bounds time requested in move_state");
 
     if (time != this->t_new()) {
@@ -611,8 +586,8 @@ void BaseSolver<Derived, T, SD, JD, OdeType, SP>::move_state(const T& time){
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::lt(const T& t_a, const T& t_b) const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::lt(const T& t_a, const T& t_b) const {
     if (direction_ == 1){
         return t_a < t_b;
     } else {
@@ -620,8 +595,8 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::lt(const T& t_a, const T& t_b)
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::le(const T& t_a, const T& t_b) const {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::le(const T& t_a, const T& t_b) const {
     if (direction_ == 1){
         return t_a <= t_b;
     } else {
@@ -629,8 +604,8 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::le(const T& t_a, const T& t_b)
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-StepResult BaseSolver<Derived, T, SD, JD, OdeType, SP>::adapt_it(State& q_out, T& t_out, T& habs_out){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+StepResult BaseSolver<Derived, T, SD, OdeType, SP>::adapt_it(State& q_out, T& t_out, T& habs_out){
     if constexpr (detail::rhs_may_throw){
         // A callback that throws abandons the step midway: q_old_ may hold part of it (see
         // take_step), and the stepper's caches may too. So the solver ends up as after a failed
@@ -663,8 +638,8 @@ StepResult BaseSolver<Derived, T, SD, JD, OdeType, SP>::adapt_it(State& q_out, T
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::take_step(T& t_out, T& habs_out){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool BaseSolver<Derived, T, SD, OdeType, SP>::take_step(T& t_out, T& habs_out){
     StepResult result = adapt_it(q_old_, t_out, habs_out);
     if (!validate_it(result, t_out)){
         return false;
@@ -678,9 +653,9 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::take_step(T& t_out, T& habs_ou
     return true;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename... Args>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::Adv_Impl(Args&&... args){
+bool BaseSolver<Derived, T, SD, OdeType, SP>::Adv_Impl(Args&&... args){
     const int d = this->direction();
     if constexpr (sizeof...(Args) > 0){
         T time_floor = nearest_time(args...);
@@ -725,16 +700,16 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::Adv_Impl(Args&&... args){
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename... U>
-T BaseSolver<Derived, T, SD, JD, OdeType, SP>::nearest_time(const U&... t) const{
+T BaseSolver<Derived, T, SD, OdeType, SP>::nearest_time(const U&... t) const{
     static_assert(sizeof...(U) > 0, "BaseSolver::nearest_time requires at least one argument");
     return nearest_time_priv(t...);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename A, typename... Rest>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::nearest_time_priv(const A& t_a, const Rest&... t_rest) const{
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::nearest_time_priv(const A& t_a, const Rest&... t_rest) const{
     if constexpr (sizeof...(Rest) > 0){
         return nearest_time_helper(t_a, t_rest...);
     } else {
@@ -742,9 +717,9 @@ const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::nearest_time_priv(const A&
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename A, typename B, typename... Rest>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::nearest_time_helper(const A& t_a, const B& t_b, const Rest&... t_rest) const{
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::nearest_time_helper(const A& t_a, const B& t_b, const Rest&... t_rest) const{
     if constexpr (sizeof...(Rest) > 0){
         return nearest_time_helper(nearest_of(t_a, t_b), t_rest...);
     }else{
@@ -752,9 +727,9 @@ const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::nearest_time_helper(const 
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename A, typename B>
-const T& BaseSolver<Derived, T, SD, JD, OdeType, SP>::nearest_of(const A& t_a, const B& t_b) const{
+const T& BaseSolver<Derived, T, SD, OdeType, SP>::nearest_of(const A& t_a, const B& t_b) const{
     if (this->direction() == 1){
         return (t_a < t_b ? t_a : t_b);
     }else{

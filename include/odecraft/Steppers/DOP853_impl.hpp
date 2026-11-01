@@ -357,36 +357,36 @@ XDIFF_FORCEINLINE T dop853_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T>
 // DOP853
 // ============================================================================
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-DOP853<T, SD, JD, OdeType, SP, Derived>::DOP853(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events)
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+DOP853<T, SD, OdeType, SP, Derived>::DOP853(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events)
     : Base(std::move(ode), t0, q0, std::move(rtol), std::move(atol), min_step, max_step, stepsize, direction, std::move(events)),
       r_scratch_(q0) {
     // the arrays of states take the shape of q0 too
     K_.fill(q0);
     coef_mat_.fill(q0);
-    this->rhs(K_[N_STAGES], t0, q0);
+    THIS->Rhs(K_[N_STAGES], t0, q0);
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper DOP853<T, SD, JD, OdeType, SP, Derived>::method() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+Stepper DOP853<T, SD, OdeType, SP, Derived>::method() const{
     return Stepper::DOP853;
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void DOP853<T, SD, JD, OdeType, SP, Derived>::Reset(){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void DOP853<T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    this->rhs(K_[N_STAGES], this->t_new(), this->vector_new());
+    THIS->Rhs(K_[N_STAGES], this->t_new(), this->vector_new());
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void DOP853<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void DOP853<T, SD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
     // the first stage of the next step (FSAL)
-    this->rhs(K_[N_STAGES], this->t(), new_vector);
+    THIS->Rhs(K_[N_STAGES], this->t(), new_vector);
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void DOP853<T, SD, JD, OdeType, SP, Derived>::cache_coef_matrix() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void DOP853<T, SD, OdeType, SP, Derived>::cache_coef_matrix() const{
     using S = value_t<T, SD>;
     if (coef_mat_is_cached_){
         return;
@@ -403,11 +403,11 @@ void DOP853<T, SD, JD, OdeType, SP, Derived>::cache_coef_matrix() const{
 
     // Three extra stages, evaluated only for dense-output interpolation.
     detail::rk_stage<SD>(r, y_old, h, K_, A, 13, detail::stages<0, 6, 7, 8, 9, 10, 11, 12>);
-    this->rhs(K_[13], t_old + C[13]*h, r);
+    THIS->Rhs(K_[13], t_old + C[13]*h, r);
     detail::rk_stage<SD>(r, y_old, h, K_, A, 14, detail::stages<0, 5, 6, 7, 10, 11, 12, 13>);
-    this->rhs(K_[14], t_old + C[14]*h, r);
+    THIS->Rhs(K_[14], t_old + C[14]*h, r);
     detail::rk_stage<SD>(r, y_old, h, K_, A, 15, detail::stages<0, 5, 6, 7, 8, 12, 13, 14>);
-    this->rhs(K_[15], t_old + C[15]*h, r);
+    THIS->Rhs(K_[15], t_old + C[15]*h, r);
 
     // F[0..2], from the end points of the step and the derivatives there: K[0] and K[12]
     SD::for_each([&h](S& F0, S& F1, S& F2, const S& y_old_i, const S& y_new_i, const S& f_old_i, const S& f_new_i){
@@ -423,8 +423,8 @@ void DOP853<T, SD, JD, OdeType, SP, Derived>::cache_coef_matrix() const{
     coef_mat_is_cached_ = true;
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-T DOP853<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T DOP853<T, SD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q){
     decltype(auto) rhs_scratch = r_scratch_.get();
     h_last_ = h; // remembered for the dense-output coefficients
     return detail::dop853_step_impl<T, SD>(
@@ -439,13 +439,13 @@ T DOP853<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, con
         this->atol(),
         A, C, E3, E5,
         [this](State& out, const T& time, const State& y){
-            this->rhs(out, time, y);
+            THIS->Rhs(out, time, y);
         }
     );
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-StepResult DOP853<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+StepResult DOP853<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     coef_mat_is_cached_ = false; // K_ is about to change
     // FSAL: the previous step's last stage becomes this step's first
     copy_state<SD>(K_[0], K_[N_STAGES]);
@@ -467,8 +467,8 @@ StepResult DOP853<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs
     );
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto DOP853<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+auto DOP853<T, SD, OdeType, SP, Derived>::local_interp_impl() const{
     this->cache_coef_matrix();
     return make_light_functor([](State& out, const T& t, const auto& t1, const auto& t2, const auto& y1, const auto& cm){
         return detail::coef_mat_interp_dop853<T, SD>(out, t, t1, t2, y1, cm);

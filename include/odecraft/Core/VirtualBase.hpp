@@ -16,7 +16,7 @@ class OdeSolver{
 
 public:
     using State = state_t<T, SD>;
-    using JacMat = SD::template jacobian_matrix<value_t<T, SD>>;
+    using JacMat = jacmat_t<T, SD>;
     using RealState = SD::template state_type<T>;
 
     // ODE PROPERTIES
@@ -46,9 +46,6 @@ public:
     virtual bool                get_validate_ics(const T& t0, const State& q0) const = 0;
     virtual bool                get_has_valid_ics() const = 0;
     virtual Stepper             get_method() const = 0;
-    virtual void                get_interp(State& result, const T& t) const = 0;
-    virtual size_t              get_rhs_eval_count() const = 0;
-    virtual size_t              get_jac_eval_count() const = 0;
     virtual BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const = 0;
     virtual T                   get_auto_step(const T& t, const State& q) const = 0;
     virtual T                   get_auto_step() const = 0;
@@ -83,7 +80,7 @@ template<typename T, typename SD>
 class OdeRichSolver : public OdeSolver<T, SD>{
     using Base = OdeSolver<T, SD>;
 public:
-    using State = Base::State;
+    using State = state_t<T, SD>;
     // ACCESSORS
     virtual const EventCollection<T, State>&    get_event_col() const = 0;
     virtual int                                 get_event_idx(const std::string& name) const = 0;

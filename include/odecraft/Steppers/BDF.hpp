@@ -12,35 +12,6 @@ constexpr size_t BDF_MAX_ORDER = 5;
 
 namespace detail{
 
-/// @brief LU factorization, with partial pivoting, of I - c*J for a Jacobian J, and solutions of
-/// the linear systems with it. The matrix is only accessed as M(i, j), and the states through
-/// SD::for_each, whose passes also count the rows and columns: J must be as large as the states.
-template<typename T, typename SD>
-class ShiftedLU{
-
-public:
-
-    using S = value_t<T, SD>;
-    using State = state_t<T, SD>;
-    using JacMat = jacmat_t<T, SD>;
-
-    /// @param J A Jacobian of the system, that gives the factorization its shape
-    /// @param q A state of the system
-    ShiftedLU(const JacMat& J, const State& q);
-
-    /// @brief Factorizes I - c*J. Returns false if it is (nearly) singular.
-    bool factor(const JacMat& J, const T& c);
-
-    /// @brief x = (I - c*J)^-1 b with the last factorization. x may be b itself.
-    void solve(State& x, const State& b) const;
-
-private:
-
-    JacMat                              lu_;
-    SD::template state_type<size_t>     piv_;  // step k of the elimination swapped row k with row piv_[k] >= k
-    worker_t<State>                     work_; // y of L*y = P*b, solved in place into x of U*x = y
-};
-
 template<typename T>
 struct BDFCONSTS{
     std::array<T, BDF_MAX_ORDER+1> KAPPA;
@@ -59,7 +30,7 @@ struct NewtConv{
 
 // The matrices of change_D, at their largest size: an order uses their leading (order+1) x (order+1) block
 template<typename T>
-using BDFMatrix = CArray2D<T, BDF_MAX_ORDER+1, BDF_MAX_ORDER+1>;
+using BDFMatrix = FArray2D<T, BDF_MAX_ORDER+1, BDF_MAX_ORDER+1>;
 
 template<typename T>
 void compute_R(BDFMatrix<T>& R, size_t order, const T& factor);
@@ -71,18 +42,18 @@ void bdf_interp(state_t<T, SD>& result, const T& t, const T& t2, const T& h, con
 } // namespace ode::detail
 
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
-class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
+class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>{
 
     ODECRAFT_DECLARE_STEPPER;
     
-    using Base = detail::BaseDispatcher<GetDerived<BDF<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
+    using Base = detail::BaseDispatcher<GetDerived<BDF<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>;
     
 
 public:
     using State = state_t<T, SD>;
-    using RealState = Base::RealState;
-    using JacMat = Base::JacMat;
+    using RealState = real_state_t<T, SD>;
+    using JacMat = jacmat_t<T, SD>;
 
     static constexpr int ERR_EST_ORDER = 1;
     static constexpr bool IS_IMPLICIT = true;
@@ -118,10 +89,9 @@ private:
 
     void    set_psi(State& psi) const;
 
-    static JacMat jacobian_like(const State& q);
-
     JacMat                      J_;
-    detail::ShiftedLU<T, SD>    LU_;
+    JacMat                      A_;   // I - c*J, then its LU factors
+    SD::JD::linalg::pivots_type piv_; // the row pivots of the factors in A_
     std::array<Differences, 2>  D_;  // change_D writes into the one that is not current
     detail::BDFMatrix<T>        R_, U_, RU_;
     detail::BDFCONSTS<T>        coefs_;
@@ -129,6 +99,7 @@ private:
     size_t                      order_ = 1;
     size_t                      n_eq_steps_ = 0;
     size_t                      idx_D_ = 0;
+    size_t                      U_order_ = 0; // the order U_ was computed for, 0 for none
     bool                        valid_LU_ = false;
 
     // the predicted solution, psi, the accumulated correction and a working state of a step, and its error scale
@@ -138,13 +109,16 @@ private:
     worker_t<State>             work_scratch_;
     worker_t<RealState>         scale_scratch_;
 
+    // the Jacobian at the initial conditions that validate_ics_impl checks
+    worker_t<JacMat>            jac_scratch_;
+
 };
 
 namespace detail{
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-struct SolverTypeGetter<Stepper::BDF, SP, T, SD, JD, OdeType, Derived>{
-    using type = BDF<T, SD, JD, OdeType, SP, Derived>;
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+struct SolverTypeGetter<Stepper::BDF, SP, T, SD, OdeType, Derived>{
+    using type = BDF<T, SD, OdeType, SP, Derived>;
 };
 
 } // namespace ode::detail

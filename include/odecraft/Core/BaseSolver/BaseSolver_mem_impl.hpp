@@ -5,15 +5,15 @@
 
 namespace ode{
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<isObserver<T, state_t<T, SD>> Callable>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance_until(const T& time, Callable&& observer){
+bool BaseSolver<Derived, T, SD, OdeType, SP>::advance_until(const T& time, Callable&& observer){
     return this->generic_advance_until(time, std::forward<Callable>(observer), nullptr);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<isObserver<T, state_t<T, SD>> Callable, isArray<T> ArrayType>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance_until(const T& time, Callable&& observer, ArrayType&& checkpoints){
+bool BaseSolver<Derived, T, SD, OdeType, SP>::advance_until(const T& time, Callable&& observer, ArrayType&& checkpoints){
     return this->generic_advance_until(
         time,
         std::forward<Callable>(observer),
@@ -22,16 +22,16 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::advance_until(const T& time, C
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<isObserver<T, state_t<T, SD>> Callable>
-BoxedInterp<T, SD> BaseSolver<Derived, T, SD, JD, OdeType, SP>::interpolate_until(const T& time, Callable&& observer){
+BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::interpolate_until(const T& time, Callable&& observer){
     return this->generic_interpolate_until(time, std::forward<Callable>(observer));
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename Callable, typename ArrayLike>
-bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::generic_advance_until(
+bool BaseSolver<Derived, T, SD, OdeType, SP>::generic_advance_until(
     const T& time,
     Callable&& observer,
     ArrayLike&& checkpoints){
@@ -143,9 +143,9 @@ bool BaseSolver<Derived, T, SD, JD, OdeType, SP>::generic_advance_until(
 
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename Callable>
-BoxedInterp<T, SD> BaseSolver<Derived, T, SD, JD, OdeType, SP>::generic_interpolate_until(const T& time, Callable&& observer){
+BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::generic_interpolate_until(const T& time, Callable&& observer){
 
     // The chain grows as alternating point / open-interval / point entries, and always ends
     // on a point at the last time reached. Each callback bridges from that point to wherever

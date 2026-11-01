@@ -21,12 +21,12 @@ and as a result it is the most derived class in the CRTP hierarchy.
 That means that any class deriving from StaticEventStepper that overrides functions like `Adv_Impl` will not have those overrides called by the base solver class,.
 For virtual inheritance this might not be the case, so it is best not to override any of the base solver functions, but only extend the functionality.
 */
-template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename... ObjFun>
-class StaticEventStepper : public detail::SolverTypeGetter<S, SP, T, SD, JD, OdeType, StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>>::type{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename... ObjFun>
+class StaticEventStepper : public detail::SolverTypeGetter<S, SP, T, SD, OdeType, StaticEventStepper<S, T, SD, OdeType, SP, ObjFun...>>::type{
 
     ODECRAFT_DECLARE_STEPPER;
 
-    using Base = detail::SolverTypeGetter<S, SP, T, SD, JD, OdeType, StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun...>>::type;
+    using Base = detail::SolverTypeGetter<S, SP, T, SD, OdeType, StaticEventStepper<S, T, SD, OdeType, SP, ObjFun...>>::type;
     using State = state_t<T, SD>;
 
     static_assert((isObjFun<ObjFun, T, State> && ...), "At least one invalid objective function");
@@ -72,10 +72,10 @@ private:
     int current_idx = -1;
 };
 
-template<Stepper S, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename ObjFun>
-class SingleStaticEventStepper : public StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun>{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename ObjFun>
+class SingleStaticEventStepper : public StaticEventStepper<S, T, SD, OdeType, SP, ObjFun>{
 
-    using Base = StaticEventStepper<S, T, SD, JD, OdeType, SP, ObjFun>;
+    using Base = StaticEventStepper<S, T, SD, OdeType, SP, ObjFun>;
     using State = state_t<T, SD>;
 public:
 
@@ -87,7 +87,7 @@ public:
 
 };
 
-template<Stepper S, SolverPolicy SP, typename T, typename SD, typename JD, typename OdeType, typename... ObjFun, typename... Args>
+template<Stepper S, SolverPolicy SP, typename T, typename SD, typename OdeType, typename... ObjFun, typename... Args>
 auto getEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args);
 
 

@@ -25,16 +25,16 @@ T rk45_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T> t, cache_t<T> h, co
 
 } // namespace ode::detail
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived = void>
-class RK45 : public detail::BaseDispatcher<GetDerived<RK45<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
+class RK45 : public detail::BaseDispatcher<GetDerived<RK45<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>{
 
     ODECRAFT_DECLARE_STEPPER;
 
-    using Base = detail::BaseDispatcher<GetDerived<RK45<T, SD, JD, OdeType, SP, Derived>, Derived>, T, SD, JD, OdeType, SP>;
+    using Base = detail::BaseDispatcher<GetDerived<RK45<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>;
 
 public:
     using State = state_t<T, SD>;
-    using RealState = Base::RealState;
+    using RealState = real_state_t<T, SD>;
 
     static constexpr size_t Nstages       = 6;
     static constexpr size_t Norder        = 5;
@@ -99,8 +99,8 @@ private:
 // static constexpr members, so the class cannot be completed without them.
 // ============================================================================
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Atype RK45<T, SD, JD, OdeType, SP, Derived>::Amatrix() {
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+constexpr RK45<T, SD, OdeType, SP, Derived>::Atype RK45<T, SD, OdeType, SP, Derived>::Amatrix() {
     return {T(0),        T(0),        T(0),        T(0),        T(0), T(0),
             T(1)/T(5),  T(0),        T(0),        T(0),        T(0), T(0),
             T(3)/T(40), T(9)/T(40), T(0),        T(0),        T(0), T(0),
@@ -109,8 +109,8 @@ constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Atype RK45<T, SD, JD, OdeType, 
             T(9017)/T(3168), T(-355)/T(33), T(46732)/T(5247), T(49)/T(176), T(-5103)/T(18656), T(0),};
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Btype RK45<T, SD, JD, OdeType, SP, Derived>::Bmatrix(){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+constexpr RK45<T, SD, OdeType, SP, Derived>::Btype RK45<T, SD, OdeType, SP, Derived>::Bmatrix(){
     return {T(35)/T(384),
             T(0),
             T(500)/T(1113),
@@ -119,8 +119,8 @@ constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Btype RK45<T, SD, JD, OdeType, 
             T(11)/T(84),};
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Ctype RK45<T, SD, JD, OdeType, SP, Derived>::Cmatrix(){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+constexpr RK45<T, SD, OdeType, SP, Derived>::Ctype RK45<T, SD, OdeType, SP, Derived>::Cmatrix(){
     return {T(0),
             T(1)/T(5),
             T(3)/T(10),
@@ -129,8 +129,8 @@ constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Ctype RK45<T, SD, JD, OdeType, 
             T(1),};
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Etype RK45<T, SD, JD, OdeType, SP, Derived>::Ematrix() {
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+constexpr RK45<T, SD, OdeType, SP, Derived>::Etype RK45<T, SD, OdeType, SP, Derived>::Ematrix() {
     return {T(-71)/T(57600),
             T(0),
             T(71)/T(16695),
@@ -140,8 +140,8 @@ constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Etype RK45<T, SD, JD, OdeType, 
             T(1)/T(40),};
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Ptype RK45<T, SD, JD, OdeType, SP, Derived>::Pmatrix() {
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+constexpr RK45<T, SD, OdeType, SP, Derived>::Ptype RK45<T, SD, OdeType, SP, Derived>::Pmatrix() {
     return {T(1),   -T(8048581381)/T(2820520608),   T(8663915743)/T(2820520608),   -T(12715105075)/T(11282082432),
             T(0),    T(0),                          T(0),                          T(0),
             T(0),    T(131558114200)/T(32700410799), -T(68118460800)/T(10900136933), T(87487479700)/T(32700410799),
@@ -154,9 +154,9 @@ constexpr RK45<T, SD, JD, OdeType, SP, Derived>::Ptype RK45<T, SD, JD, OdeType, 
 namespace detail{
 
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-struct SolverTypeGetter<Stepper::RK45, SP, T, SD, JD, OdeType, Derived>{
-    using type = RK45<T, SD, JD, OdeType, SP, Derived>;
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+struct SolverTypeGetter<Stepper::RK45, SP, T, SD, OdeType, Derived>{
+    using type = RK45<T, SD, OdeType, SP, Derived>;
 };
 
 } // namespace ode::detail

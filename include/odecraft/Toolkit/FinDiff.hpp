@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Tools.hpp"
+#include <tuple>
 
 
 namespace ode{
@@ -15,7 +16,7 @@ namespace detail{
  * @tparam SD The State Descriptor.
  * @tparam Callable The type of the callable object representing the function.
  * @param f The callable object representing the function.
- * @param out The output (F-storage) array for the Jacobian matrix, of size (n x n)
+ * @param out The Jacobian, written one column at a time with SD::JD::linalg::for_each_column
  * @param x, y1, y2 Three temporary scratch states for intermediate computations
  * @param t The current time.
  * @param q The current state vector (size n).
@@ -28,27 +29,27 @@ constexpr void jac_approx_impl(Callable&& func, StepCaller&& step_elem, jacmat_t
 
     copy_state<SD>(x, q);
 
-    SD::for_each([&, i = size_t{0}](S& xi, const S& qi, const U& arg) mutable {
+    // Column j of the Jacobian, by central differences around q_j, into y2
+    SD::JD::linalg::for_each_column([](S& J_ij, const S& df_i){
+        J_ij = df_i;
+    }, [&](S& xj, const S& qj, const U& arg){
 
-        decltype(auto) vi = step_elem(arg, abs(qi));
+        decltype(auto) vj = step_elem(arg, abs(qj));
 
-        xi = qi - vi; //vi could be T or Scalar. The operation should work regardless
+        xj = qj - vj; //vj could be T or Scalar. The operation should work regardless
         func(y1, t, x);
 
-        xi = qi + vi;
+        xj = qj + vj;
         func(y2, t, x);
 
-        xi = qi; // restore it for the next iteration
+        xj = qj; // restore it for the next column
 
-        // Compute Jacobian element using central differences
-        auto two_h = 2 * vi;
-        SD::for_each([&, j = size_t{0}](const S& y1_j, const S& y2_j) mutable {
-            out(j, i) = (y2_j - y1_j) / two_h;
-            ++j;
-        }, y1, y2);
-
-        ++i;
-    }, x, q, args);
+        auto two_h = 2 * vj;
+        SD::for_each([&two_h](S& y2_i, const S& y1_i){
+            y2_i = (y2_i - y1_i) / two_h;
+        }, y2, y1);
+        return std::tie(y2);
+    }, std::tie(out), x, q, args);
 }
 
 } // namespace ode::detail

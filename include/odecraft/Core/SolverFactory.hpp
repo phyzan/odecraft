@@ -96,7 +96,7 @@ struct SolverBoxSelector<T, SD, UtilPolicy::Virtual>{
     using type = pbox::Box<OdeSolver<T, SD>>;
 };
 
-template<Stepper S, SolverPolicy SP, typename T, typename SD, typename JD, typename OdeType, typename Derived = void>
+template<Stepper S, SolverPolicy SP, typename T, typename SD, typename OdeType, typename Derived = void>
 struct SolverTypeGetter{
     using type = void;
 };
@@ -168,31 +168,31 @@ inline ReturnType choose_integrator_case(Stepper method, Callable&& callable, Ar
     }
 }
 
-template<Stepper S, SolverPolicy SP, typename T, typename SD, typename JD, typename OdeType>
+template<Stepper S, SolverPolicy SP, typename T, typename SD, typename OdeType>
 inline auto getSolver(OdeType ode, T t0, state_t<T, SD> q0, real_state_t<T, SD> rtol, real_state_t<T, SD> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, state_t<T, SD>> events = {}){
-    return typename detail::SolverTypeGetter<S, SP, T, SD, JD, OdeType, void>::type(std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
+    return typename detail::SolverTypeGetter<S, SP, T, SD, OdeType, void>::type(std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
 }
 
 
-template<UtilPolicy UP, typename T, typename SD, typename JD, typename OdeType, typename... Args>
+template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
 inline BoxedSolver<T, SD, UP> make_solver(Stepper method, OdeType ode, T t0, state_t<T, SD> q0, Args&&... args){
     constexpr SolverPolicy SP = UP == UtilPolicy::RichVirtual ? SolverPolicy::RichVirtual : SolverPolicy::Virtual;
     return choose_integrator_case<BoxedSolver<T, SD, UP>>(method,
         [&]<Stepper S>(){
-            using Solver = detail::SolverTypeGetter<S, SP, T, SD, JD, OdeType>::type;
+            using Solver = detail::SolverTypeGetter<S, SP, T, SD, OdeType>::type;
             return pbox::make_box<Solver>(std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
         }
     );
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, typename... Args>
+template<typename T, typename SD, typename OdeType, typename... Args>
 inline BoxedSolver<T, SD, UtilPolicy::Virtual> make_vsolver(Stepper method, OdeType ode, T t0, state_t<T, SD> q0, Args&&... args){
-    return make_solver<UtilPolicy::Virtual, T, SD, JD>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
+    return make_solver<UtilPolicy::Virtual, T, SD>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, typename... Args>
+template<typename T, typename SD, typename OdeType, typename... Args>
 inline BoxedSolver<T, SD, UtilPolicy::RichVirtual> make_rich_vsolver(Stepper method, OdeType ode, T t0, state_t<T, SD> q0, Args&&... args){
-    return make_solver<UtilPolicy::RichVirtual, T, SD, JD>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
+    return make_solver<UtilPolicy::RichVirtual, T, SD>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
 }
 
 } // namespace ode

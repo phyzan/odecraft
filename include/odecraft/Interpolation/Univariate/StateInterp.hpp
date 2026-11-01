@@ -136,7 +136,7 @@ class LocalInterpolator : public Interpolator<T, SD>{
 public:
 
     using Base = Interpolator<T, SD>;
-    using State = Base::State;
+    using State = state_t<T, SD>;
 
     LocalInterpolator() = delete;
 
@@ -215,7 +215,7 @@ template<typename T, typename SD, typename Callable>
 class CustomLocalInterpolator : public LocalInterpolator<T, SD>{
     using Base = LocalInterpolator<T, SD>;
 public:
-    using State = Base::State;
+    using State = state_t<T, SD>;
     CustomLocalInterpolator() = delete;
 
     template<typename U>
@@ -240,7 +240,7 @@ class LinkedInterpolator : public Interpolator<T, SD>{
 public:
 
     using interpolator_t = Base;
-    using State = Base::State;
+    using State = state_t<T, SD>;
 
     LinkedInterpolator() = delete;
 
