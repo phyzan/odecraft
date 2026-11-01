@@ -43,16 +43,16 @@ namespace ode{
  * @note This class uses static polymorphism (CRTP).
  *       The solver policy must be RichStatic or RichVirtual for this class to be used.
  */
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-class RichSolver : public BaseSolver<Derived, T, SD, JD, OdeType, SP>{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+class RichSolver : public BaseSolver<Derived, T, SD, OdeType, SP>{
 
-    friend class BaseSolver<Derived, T, SD, JD, OdeType, SP>;
+    friend class BaseSolver<Derived, T, SD, OdeType, SP>;
 
-    using Base = BaseSolver<Derived, T, SD, JD, OdeType, SP>;
+    using Base = BaseSolver<Derived, T, SD, OdeType, SP>;
 
 public:
-    using State = Base::State;
-    using RealState = Base::RealState;
+    using State = state_t<T, SD>;
+    using RealState = real_state_t<T, SD>;
     // ACCESSORS
     /**
      * @brief Get a reference to the event collection.
@@ -195,8 +195,8 @@ namespace detail{
  * @tparam RhsType Type of the right-hand side function.
  * @tparam JacPolicy Type of the Jacobian function.
  */
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-using BaseDispatcher = std::conditional_t<(SP == SolverPolicy::RichStatic || SP == SolverPolicy::RichVirtual), RichSolver<Derived, T, SD, JD, OdeType, SP>, BaseSolver<Derived, T, SD, JD, OdeType, SP>>;
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+using BaseDispatcher = std::conditional_t<(SP == SolverPolicy::RichStatic || SP == SolverPolicy::RichVirtual), RichSolver<Derived, T, SD, OdeType, SP>, BaseSolver<Derived, T, SD, OdeType, SP>>;
 
 } // namespace ode::detail
 

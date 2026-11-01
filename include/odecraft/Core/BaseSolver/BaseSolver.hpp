@@ -16,7 +16,7 @@
  * output interpolation, and event detection.
  */
 
-#include "odecraft/Toolkit/Toolkit.hpp"
+#include "odecraft/Toolkit/Toolkit.hpp" // IWYU pragma: keep
 #include <odecraft/Core/VirtualTraits.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
 #include <ostream>
@@ -24,8 +24,8 @@
 
 
 #define ODECRAFT_DECLARE_STEPPER \
-    template<typename, typename, typename, typename, typename, SolverPolicy> friend class BaseSolver; \
-    template<typename, typename, typename, typename, typename, SolverPolicy> friend class RichSolver
+    template<typename, typename, typename, typename, SolverPolicy> friend class BaseSolver; \
+    template<typename, typename, typename, typename, SolverPolicy> friend class RichSolver
 
 
 
@@ -87,7 +87,7 @@ using StepperFactors = std::conditional_t<
  *       first template parameter.
  */
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type {
 
     static_assert(hasRhsFunc<OdeType, T, state_t<T, SD>>, "Invalid OdeType::Rhs signature");
@@ -99,7 +99,7 @@ public:
     using value_type = T;
     using ode_type = OdeType;
     using State = state_t<T, SD>;
-    using JacMat = SD::template jacobian_matrix<value_t<T, SD>>;
+    using JacMat = jacmat_t<T, SD>;
     using RealState = SD::template state_type<T>;
 
     template<int Order>
@@ -222,19 +222,7 @@ public:
     bool                validate_ics(const T& t0, const State& q0) const;
 
     bool                has_valid_ics() const;
-
-    /**
-     * @brief Get the number of RHS function evaluations performed so far.
-     * @return Total count of RHS evaluations. User calls to Rhs() do NOT increment this counter.
-    */
-    size_t              rhs_eval_count() const;
-
-    /**
-     * @brief Get the number of Jacobian evaluations performed so far.
-     * @return Total count of Jacobian evaluations. User calls to Jac() do NOT increment this counter.
-    */
-    size_t              jac_eval_count() const;
-
+    
     /**
      * @brief Compute an appropriate initial step size.
      * @param t Initial time.
@@ -379,9 +367,6 @@ public:
     bool                get_validate_ics(const T& t0, const State& q0) const { return validate_ics(t0, q0); }
     bool                get_has_valid_ics() const { return has_valid_ics(); }
     Stepper             get_method() const { return method(); }
-    // void                get_interp(State& result, const T& t) const { interp(result, t); }
-    size_t              get_rhs_eval_count() const { return rhs_eval_count_; }
-    size_t              get_jac_eval_count() const { return jac_eval_count_; }
     BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
     T                   get_auto_step(const T& t, const State& q) const { return auto_step(t, q); }
     T                   get_auto_step() const { return auto_step(); }
@@ -492,12 +477,6 @@ protected:
 
     inline const OdeType& ode() const {return ode_;}
 
-    /// @brief Same as this->Rhs, but increments the RHS evaluation counter.
-    void        rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
-
-    /// @brief Same as this->Jac, but increments the Jacobian evaluation counter.
-    void        jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
-
     void        set_status(StepperStatus new_status);
 
     /// @brief Print a warning that the solver is dead.
@@ -605,8 +584,6 @@ private:
     RealState       rtol_, atol_;
     detail::StepperFactors<T> factors_;
     size_t          step_count_ = 0;
-    mutable size_t  rhs_eval_count_ = 0;
-    mutable size_t  jac_eval_count_ = 0;
     int             direction_ = 1;
     StepperStatus   status_ = StepperStatus::NewStep;
 };

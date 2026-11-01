@@ -7,13 +7,13 @@ namespace ode{
 
 // PUBLIC ACCESSORS
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-const EventCollection<T, typename RichSolver<Derived, T, SD, JD, OdeType, SP>::State>& RichSolver<Derived, T, SD, JD, OdeType, SP>::event_col() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+const EventCollection<T, typename RichSolver<Derived, T, SD, OdeType, SP>::State>& RichSolver<Derived, T, SD, OdeType, SP>::event_col() const{
     return evt_col;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::at_event(int event_idx) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::at_event(int event_idx) const{
     if (event_idx == -1){
         return is_at_event;
     } else if (EventState<T, State> es = this->current_event()){
@@ -23,13 +23,13 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::at_event(int event_idx) const{
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-int RichSolver<Derived, T, SD, JD, OdeType, SP>::event_idx(const std::string& name) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+int RichSolver<Derived, T, SD, OdeType, SP>::event_idx(const std::string& name) const{
     return evt_col.event_idx(name);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-std::vector<size_t> RichSolver<Derived, T, SD, JD, OdeType, SP>::toEventIdx(const std::vector<std::string>& event_names) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+std::vector<size_t> RichSolver<Derived, T, SD, OdeType, SP>::toEventIdx(const std::vector<std::string>& event_names) const{
     std::vector<size_t> event_idx(event_names.size());
     for (size_t i = 0; i < event_names.size(); ++i){
         int idx = this->event_idx(event_names[i]);
@@ -41,8 +41,8 @@ std::vector<size_t> RichSolver<Derived, T, SD, JD, OdeType, SP>::toEventIdx(cons
     return event_idx;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void RichSolver<Derived, T, SD, JD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void RichSolver<Derived, T, SD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
     Base::show_state(out, prec);
     std::string_view event_name = this->current_event().event ? this->current_event().event->name().c_str() : "";
     out << "\tEvent     : " << event_name << "\n";
@@ -50,13 +50,13 @@ void RichSolver<Derived, T, SD, JD, OdeType, SP>::show_state(std::ostream& out, 
 
 // PUBLIC MODIFIERS
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-RichSolver<Derived, T, SD, JD, OdeType, SP>::RichSolver(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> evs) : Base(std::move(ode), t0, std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir), evt_col(std::move(evs)) {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+RichSolver<Derived, T, SD, OdeType, SP>::RichSolver(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> evs) : Base(std::move(ode), t0, std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir), evt_col(std::move(evs)) {
     this->evt_col.setup(t0, this->vector_new(), this->direction());
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::advance_to_event(const std::vector<size_t>& event_idx){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::advance_to_event(const std::vector<size_t>& event_idx){
     for (size_t idx : event_idx){
         if (idx >= evt_col.size()){
             throw std::out_of_range("Invalid event index passed to advance_to_event: " + std::to_string(idx));
@@ -78,8 +78,8 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::advance_to_event(const std::ve
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::advance_to_event(const T& tmax, const std::vector<size_t>& event_idx){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::advance_to_event(const T& tmax, const std::vector<size_t>& event_idx){
     for (size_t idx : event_idx){
         if (idx >= evt_col.size()){
             throw std::out_of_range("Invalid event index passed to advance_to_event: " + std::to_string(idx));
@@ -104,21 +104,21 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::advance_to_event(const T& tmax
     return success;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::advance_to_event(const std::vector<std::string>& event_names){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::advance_to_event(const std::vector<std::string>& event_names){
     std::vector<size_t> event_idx = this->toEventIdx(event_names);
     return this->advance_to_event(event_idx);
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::advance_to_event(const T& tmax, const std::vector<std::string>& event_names){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::advance_to_event(const T& tmax, const std::vector<std::string>& event_names){
     std::vector<size_t> event_idx = this->toEventIdx(event_names);
     return this->advance_to_event(tmax, event_idx);
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void RichSolver<Derived, T, SD, JD, OdeType, SP>::Reset(){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void RichSolver<Derived, T, SD, OdeType, SP>::Reset(){
     Base::Reset();
     evt_col.reset(this->direction());
     current_idx = 0;
@@ -127,8 +127,8 @@ void RichSolver<Derived, T, SD, JD, OdeType, SP>::Reset(){
     is_at_canon_event = false;
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void RichSolver<Derived, T, SD, JD, OdeType, SP>::fill_current_vector_impl(State& out) const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void RichSolver<Derived, T, SD, OdeType, SP>::fill_current_vector_impl(State& out) const{
     if (is_at_canon_event && !evt_col.event(current_idx).mask_delayed()){
         // Immediate mask, ReAdjust still pending: the masked state is the current one, but
         // it has not been written into the new state yet. A delayed mask deliberately falls
@@ -141,8 +141,8 @@ void RichSolver<Derived, T, SD, JD, OdeType, SP>::fill_current_vector_impl(State
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-void RichSolver<Derived, T, SD, JD, OdeType, SP>::ReAdjust(const State& new_state){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+void RichSolver<Derived, T, SD, OdeType, SP>::ReAdjust(const State& new_state){
     Base::ReAdjust(new_state);
     is_at_canon_event = false;
     is_at_event = false;
@@ -150,8 +150,8 @@ void RichSolver<Derived, T, SD, JD, OdeType, SP>::ReAdjust(const State& new_stat
 }
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::RequestTimeFloor(T& out) {
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::RequestTimeFloor(T& out) {
     // no need to call Base::RequestTimeFloor, the Base class does not request it.
     detection_idx = -1; // reset detection index at the start of a new detection round
     // do not also set is_at_event to false, as the Adv_Impl might fail and the step should remain in the same state.
@@ -183,8 +183,8 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::RequestTimeFloor(T& out) {
     }
 }
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::push_event_queue(){
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::push_event_queue(){
     if (is_event_waiting && evt_col.get_time(size_t(detection_idx+1)) == this->t()){
         current_idx = evt_col.get_event_idx(size_t(++detection_idx));
         // determine if this one is a canon event. The ReAdjust that applies the mask is
@@ -208,8 +208,8 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::push_event_queue(){
 // PRIVATE METHODS
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::at_canon_event() const{
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
+bool RichSolver<Derived, T, SD, OdeType, SP>::at_canon_event() const{
     return is_at_canon_event;
 }
 
@@ -217,9 +217,9 @@ bool RichSolver<Derived, T, SD, JD, OdeType, SP>::at_canon_event() const{
 // ============================================================================
 
 
-template<typename Derived, typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP>
+template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename... Args>
-bool RichSolver<Derived, T, SD, JD, OdeType, SP>::Adv_Impl(Args&&... args){
+bool RichSolver<Derived, T, SD, OdeType, SP>::Adv_Impl(Args&&... args){
     
     if (evt_col.size() == 0){
         return Base::Adv_Impl(std::forward<Args>(args)...);

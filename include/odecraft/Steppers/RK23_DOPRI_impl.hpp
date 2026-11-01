@@ -38,36 +38,36 @@ XDIFF_FORCEINLINE T rk23_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T> t
 } // namespace ode::detail
 
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-RK23<T, SD, JD, OdeType, SP, Derived>::RK23(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events)
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+RK23<T, SD, OdeType, SP, Derived>::RK23(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int direction, EventList<T, State> events)
     : Base(std::move(ode), t0, q0, rtol, std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), direction, std::move(events)),
       r_scratch_(q0), real_scratch(std::move(rtol)) {
     // the arrays of states take the shape of q0 too
     K_.fill(q0);
     coef_mat.fill(q0);
-    this->rhs(K_[Nstages], t0, q0);
+    THIS->Rhs(K_[Nstages], t0, q0);
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper RK23<T, SD, JD, OdeType, SP, Derived>::method() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+Stepper RK23<T, SD, OdeType, SP, Derived>::method() const{
     return Stepper::RK23;
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK23<T, SD, JD, OdeType, SP, Derived>::Reset(){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK23<T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    this->rhs(K_[Nstages], this->t_new(), this->vector_new());
+    THIS->Rhs(K_[Nstages], this->t_new(), this->vector_new());
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK23<T, SD, JD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK23<T, SD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
     // the first stage of the next step (FSAL)
-    this->rhs(K_[Nstages], this->t(), new_vector);
+    THIS->Rhs(K_[Nstages], this->t(), new_vector);
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK23<T, SD, JD, OdeType, SP, Derived>::cache_coef_matrix() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK23<T, SD, OdeType, SP, Derived>::cache_coef_matrix() const{
     if (coef_mat_is_cached_){
         return;
     }
@@ -76,8 +76,8 @@ void RK23<T, SD, JD, OdeType, SP, Derived>::cache_coef_matrix() const{
     coef_mat_is_cached_ = true;
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-T RK23<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T RK23<T, SD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T& t, const T& h, const State& q){
     decltype(auto) rhs_scratch = r_scratch_.get();
     decltype(auto) real_buf = real_scratch.get();
     return detail::rk23_step_impl<T, SD>(
@@ -93,13 +93,13 @@ T RK23<T, SD, JD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const
         this->atol(),
         A, B, C, E,
         [this](State& out, const T& time, const State& y){
-            this->rhs(out, time, y);
+            THIS->Rhs(out, time, y);
         }
     );
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-StepResult RK23<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+StepResult RK23<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     coef_mat_is_cached_ = false; // K_ is about to change
     // FSAL: the previous step's last stage becomes this step's first
     copy_state<SD>(K_[0], K_[Nstages]);
@@ -121,8 +121,8 @@ StepResult RK23<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_n
     );
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto RK23<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+auto RK23<T, SD, OdeType, SP, Derived>::local_interp_impl() const{
     this->cache_coef_matrix();
     return make_light_functor([](State& out, const T& t, const auto& t1, const auto& t2, const auto& y1, const auto& y2, const auto& cm){
         return coef_mat_interp<T, SD>(out, t, t1, t2, y1, y2, cm.data(), INTERP_ORDER);

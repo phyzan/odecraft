@@ -149,5 +149,22 @@ T detLU_row_major(T* mat, size_t N) {
     return det*sign;
 }
 
-    
+
+// out = A * B over the leading n x n blocks of column-major matrices, the rest of out is left as
+// it is. out must be neither A nor B.
+template<typename T, size_t N>
+void matmul(FArray2D<T, N, N>& out, const FArray2D<T, N, N>& A, const FArray2D<T, N, N>& B, size_t n){
+    for (size_t j = 0; j < n; ++j){
+        for (size_t i = 0; i < n; ++i){
+            out(i, j) = 0;
+        }
+        for (size_t k = 0; k < n; ++k){
+            const cache_t<T> b_kj = B(k, j);
+            for (size_t i = 0; i < n; ++i){
+                out(i, j) += A(i, k) * b_kj;
+            }
+        }
+    }
+}
+
 } // namespace ode

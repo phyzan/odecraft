@@ -39,7 +39,7 @@ using cache_t = std::conditional_t<
     const F&>;
 
 template<typename T, typename SD>
-using value_t = SD::template scalar<T>;
+using value_t = SD::template value_type<T>;
 
 template<typename T, typename SD, int Order>
 using dual_t = xdiff::Dual<value_t<T, SD>, SD, Order>;
@@ -60,10 +60,10 @@ template<typename T, typename SD>
 using state_t = SD::template state_type<value_t<T, SD>>;
 
 template<typename T, typename SD>
-using jacmat_t = SD::template jacobian_matrix<value_t<T, SD>>;
+using jacmat_t = SD::JD::template jacobian_matrix<value_t<T, SD>>;
 
-template<typename T, typename SD, typename JD, int Order>
-using dual_jacmat_t = SD::template jacobian_matrix<dual_t<T, SD, Order>>;
+template<typename T, typename SD, int Order>
+using dual_jacmat_t = SD::JD::template jacobian_matrix<dual_t<T, SD, Order>>;
 
 
 namespace detail{
@@ -91,25 +91,25 @@ concept supportsDualRhsAt =
         { f.Rhs(out, t, q) } -> std::same_as<void>;
     };
 
-template<typename F, int Order, typename T, typename SD, typename JD>
+template<typename F, int Order, typename T, typename SD>
 concept supportsDualJacAt =
-    requires(F f, dual_jacmat_t<T, SD, JD, Order>& out, T t, const seed_state_t<T, SD, Order>& q) {
+    requires(F f, dual_jacmat_t<T, SD, Order>& out, T t, const seed_state_t<T, SD, Order>& q) {
         { f.Jac(out, t, q) } -> std::same_as<void>;
     };
 
 template<typename F, typename T, typename SD, typename Seq>
 inline constexpr bool supportsDualRhsAll = false;
 
-template<typename F, typename T, typename SD, typename JD, typename Seq>
+template<typename F, typename T, typename SD, typename Seq>
 inline constexpr bool supportsDualJacAll = false;
 
 template<typename F, typename T, typename SD, int... Is>
 inline constexpr bool supportsDualRhsAll<F, T, SD, std::integer_sequence<int, Is...>> =
     (supportsDualRhsAt<F, Is+1, T, SD> && ...);
 
-template<typename F, typename T, typename SD, typename JD, int... Is>
-inline constexpr bool supportsDualJacAll<F, T, SD, JD, std::integer_sequence<int, Is...>> =
-    (supportsDualJacAt<F, Is+1, T, SD, JD> && ...);
+template<typename F, typename T, typename SD, int... Is>
+inline constexpr bool supportsDualJacAll<F, T, SD, std::integer_sequence<int, Is...>> =
+    (supportsDualJacAt<F, Is+1, T, SD> && ...);
 } // namespace ode::detail
 
 
@@ -166,7 +166,6 @@ requires(const F& f, size_t i){
     { f[i] } -> std::same_as<const T&>;
 };
 
-
 // Satisfied when f.Rhs(out, t, q) allows for `out` and `q`
 // to be Duals of order 1 <= order <= MaxOrder
 template<typename F, int MaxOrder, typename T, typename SD>
@@ -176,10 +175,10 @@ concept supportsDualRhs =
 
 // Satisfied when f.Jac(out, t, q) allows for `out` and `q`
 // to be Duals of order 1 <= order <= MaxOrder
-template<typename F, int MaxOrder, typename T, typename SD, typename JD>
+template<typename F, int MaxOrder, typename T, typename SD>
 concept supportsDualJac =
     MaxOrder > 0 &&
-    detail::supportsDualJacAll<F, T, SD, JD, std::make_integer_sequence<int, MaxOrder>>;
+    detail::supportsDualJacAll<F, T, SD, std::make_integer_sequence<int, MaxOrder>>;
 
 
 template<typename F, typename T, typename State>
@@ -258,7 +257,7 @@ enum class JacPolicy : std::uint8_t{
 template<typename T, typename SD, typename F>
 constexpr JacPolicy getJacPolicy(){
     static_assert(hasRhsFunc<F, T, state_t<T, SD>>, "F::Rhs has invalid signature");
-    using JM = SD::template jacobian_matrix<value_t<T, SD>>;
+    using JM = jacmat_t<T, SD>;
     if constexpr (hasJacFunc<F, T, state_t<T, SD>, JM>){
         // An explicitly provided Jacobian should
         // always be utilized, even when the Rhs supports Duals
@@ -387,12 +386,20 @@ inline bool isfinite(const T& value) {
 template<typename T, typename SD>
 bool all_are_finite(const state_t<T, SD>& state){
 #ifndef ODECRAFT_NO_NAN_CHECK
-    // TODO optimize similar to allEqual
-    bool res = true;
-    SD::for_each([&res](const value_t<T, SD>& x){
-        res = res ? isfinite(x) : false;
+    return SD::all_true([](const value_t<T, SD>& x){
+        return isfinite(x);
     }, state);
-    return res;
+#else
+    return true;
+#endif
+}
+
+template<typename T, typename SD>
+bool jac_all_are_finite(const jacmat_t<T, SD>& J){
+#ifndef ODECRAFT_NO_NAN_CHECK
+    return SD::JD::all_true([](const value_t<T, SD>& x){
+        return isfinite(x);
+    }, J);
 #else
     return true;
 #endif

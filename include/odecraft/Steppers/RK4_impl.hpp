@@ -55,8 +55,8 @@ void rk4_interp(state_t<T, SD>& out, const T& t, const T& t1, const T& t2, const
 } // namespace ode::detail
 
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-RK4<T, SD, JD, OdeType, SP, Derived>::RK4(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T, State> events)
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+RK4<T, SD, OdeType, SP, Derived>::RK4(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T, State> events)
     : Base(std::move(ode), t0, q0, std::move(rtol), std::move(atol), 0, 0, stepsize, dir, std::move(events)),
       r_scratch_(q0) {
     // min_step and max_step are not used in RK4
@@ -67,13 +67,13 @@ RK4<T, SD, JD, OdeType, SP, Derived>::RK4(OdeType ode, T t0, State q0, RealState
 #endif
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper RK4<T, SD, JD, OdeType, SP, Derived>::method() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+Stepper RK4<T, SD, OdeType, SP, Derived>::method() const{
     return Stepper::RK4;
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-StepResult RK4<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+StepResult RK4<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     // standard Runge-Kutta-4 with fixed step size
 
     interp_data_is_cached_ = false; // K_ is about to change
@@ -85,9 +85,9 @@ StepResult RK4<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_ne
 
     decltype(auto) rhs_scratch = r_scratch_.get();
 
-    this->rhs(K_[0], t, q);
+    THIS->Rhs(K_[0], t, q);
     detail::rk4_step<T, SD>(q_new, t, h, q, K_, rhs_scratch, [this](State& out, const T& time, const State& y){
-        this->rhs(out, time, y);
+        THIS->Rhs(out, time, y);
     });
 
     if (!all_are_finite<T, SD>(q_new)){
@@ -97,8 +97,8 @@ StepResult RK4<T, SD, JD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_ne
     }
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-auto RK4<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+auto RK4<T, SD, OdeType, SP, Derived>::local_interp_impl() const{
 #ifdef ODECRAFT_RK4_DENSE
     // a step straight from the start of the interval to t, which starts from the same derivative f1
     return make_light_functor([](State& out, const T& t, const auto& ode, const auto& t1, const auto& y1, const auto& f1, const auto& K_scratch, const auto& r_scratch){
@@ -117,12 +117,12 @@ auto RK4<T, SD, JD, OdeType, SP, Derived>::local_interp_impl() const{
 #endif
 }
 
-template<typename T, typename SD, typename JD, typename OdeType, SolverPolicy SP, typename Derived>
-void RK4<T, SD, JD, OdeType, SP, Derived>::cache_interp_data() const{
+template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void RK4<T, SD, OdeType, SP, Derived>::cache_interp_data() const{
     if (interp_data_is_cached_){
         return;
     }
-    this->rhs(K_[Nstages], this->t_new(), this->vector_new());
+    THIS->Rhs(K_[Nstages], this->t_new(), this->vector_new());
     interp_data_is_cached_ = true;
 }
 
