@@ -1,34 +1,9 @@
-cmake_minimum_required(VERSION 3.15...3.26)
-
+cmake_minimum_required(VERSION 3.24)
 project(odecraft LANGUAGES CXX)
 
-# odecraft_crafted is compiled with -flto, and a static library of LTO objects is only indexed when
-# archived through the compiler's wrapper (gcc-ar), which loads the matching LTO plugin. Plain ar
-# finds one on some systems only: elsewhere the objects go unindexed and linking against the
-# library leaves undefined symbols.
-if(CMAKE_CXX_COMPILER_AR AND CMAKE_CXX_COMPILER_RANLIB)
-    set(CMAKE_AR ${CMAKE_CXX_COMPILER_AR})
-    set(CMAKE_RANLIB ${CMAKE_CXX_COMPILER_RANLIB})
-endif()
-
-# Only when odecraft is the project being configured.
-if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
-   (NOT DEFINED PROJECT_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR))
+if(PROJECT_IS_TOP_LEVEL)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
-
-# ----------- Main odecraft interface target ---------------
-
-add_library(odecraft INTERFACE)
-add_library(odecraft::odecraft ALIAS odecraft)
-
-target_compile_features(odecraft INTERFACE cxx_std_20)
-
-target_include_directories(odecraft INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-# ----------- Add interface for macros ---------------
 
 option(ODECRAFT_RK4_DENSE "Enable accurate RK4 dense output for the RK4 solver (extra memory, slightly slower performance)" OFF)
 option(ODECRAFT_NO_WARN "Disable ODE solver console warnings" OFF)
@@ -36,18 +11,37 @@ option(ODECRAFT_NO_NAN_CHECK "Disable NaN/inf checks on solver output for perfor
 option(ODECRAFT_USE_FLAT_AUTODIFF "Use the flat dual layout for compile-time sized systems (dynamic ones stay nested)" OFF)
 option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazex::LazyType<mpfr::mpreal> instead of plain mpfr::mpreal" ON)
 option(ODECRAFT_RHS_THROWS "Allow Rhs and the other user callbacks to throw (otherwise the solvers call them noexcept)" OFF)
-
-# ON when odecraft is configured directly, OFF when another project pulls it in via add_subdirectory/FetchContent
-if((DEFINED PROJECT_IS_TOP_LEVEL AND PROJECT_IS_TOP_LEVEL) OR
-   (NOT DEFINED PROJECT_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR))
-    set(ODECRAFT_BUILD_CRAFTED_DEFAULT ON)
-else()
-    set(ODECRAFT_BUILD_CRAFTED_DEFAULT OFF)
-endif()
-
-option(ODECRAFT_BUILD_CRAFTED "Build the pre-compiled ode::crafted interface (src/*.cpp) alongside the header-only one" ${ODECRAFT_BUILD_CRAFTED_DEFAULT})
+option(ODECRAFT_BUILD_CRAFTED "Build the pre-compiled ode::crafted library (ON by default only when odecraft is the top-level project)" ${PROJECT_IS_TOP_LEVEL})
 option(DEBUG "Enable debug build (-O0 -g3, asserts enabled) instead of the optimized release build" OFF)
 
+add_subdirectory(external/xdiff)
+
+# ndspan and polybox are header-only without a CMakeLists of their own
+add_library(odecraft_ndspan INTERFACE)
+add_library(odecraft::ndspan ALIAS odecraft_ndspan)
+target_include_directories(odecraft_ndspan INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/external/ndspan/include)
+
+add_library(odecraft_polybox INTERFACE)
+add_library(odecraft::polybox ALIAS odecraft_polybox)
+target_include_directories(odecraft_polybox INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/external/polybox/include)
+
+# qhull (reentrant C library, e.g. libqhull-dev) backs the Delaunay triangulation that <odecraft/odecraft.hpp> includes
+find_path(ODECRAFT_QHULL_INCLUDE_DIR libqhull_r/qhull_ra.h REQUIRED)
+find_library(ODECRAFT_QHULL_LIBRARY qhull_r REQUIRED)
+
+add_library(odecraft_qhull INTERFACE)
+add_library(odecraft::qhull ALIAS odecraft_qhull)
+target_include_directories(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_INCLUDE_DIR})
+target_link_libraries(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_LIBRARY})
+
+# ----------- Header-only interface (namespace ode) ---------------
+
+add_library(odecraft INTERFACE)
+add_library(odecraft::odecraft ALIAS odecraft)
+target_include_directories(odecraft INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(odecraft SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/external/mpreal)  # vendored mpreal.h
+target_compile_features(odecraft INTERFACE cxx_std_20)
+target_link_libraries(odecraft INTERFACE xdiff odecraft::ndspan odecraft::polybox odecraft::qhull)
 target_compile_definitions(odecraft INTERFACE
     $<$<BOOL:${ODECRAFT_RK4_DENSE}>:ODECRAFT_RK4_DENSE>
     $<$<BOOL:${ODECRAFT_NO_WARN}>:ODECRAFT_NO_WARN>
@@ -57,134 +51,71 @@ target_compile_definitions(odecraft INTERFACE
     $<$<BOOL:${ODECRAFT_RHS_THROWS}>:ODECRAFT_RHS_THROWS>
 )
 
-
-set(ODECRAFT_DEBUG_BUILD OFF)
-if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(ODECRAFT_DEBUG_BUILD ON)
+# Building odecraft itself without ode::crafted: there are no sources to export, so a target
+# compiling each header on its own (not built by default) gives compile_commands.json its entries.
+if(PROJECT_IS_TOP_LEVEL AND NOT ODECRAFT_BUILD_CRAFTED)
+    file(GLOB_RECURSE ODECRAFT_HEADERS CONFIGURE_DEPENDS include/*.hpp)
+    target_sources(odecraft INTERFACE FILE_SET HEADERS BASE_DIRS include FILES ${ODECRAFT_HEADERS})
+    set_target_properties(odecraft PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
 endif()
 
-# ode::crafted is compiled for mpreal_t as well as the built-in floats, so it needs lazex::mpfr
-# (mpreal.h plus the mpfr/gmp system libraries). LAZEX_ENABLE_MPREAL is consumed while xdiff is
-# configured below, hence setting it here.
-if(ODECRAFT_BUILD_CRAFTED)
-    set(LAZEX_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
-endif()
-
-#===========================================================================================
-#                                           xdiff
-#===========================================================================================
-add_subdirectory(external/xdiff)
-
-#===========================================================================================
-#                           ndspan (header-only, no CMakeLists of its own)
-#===========================================================================================
-add_library(odecraft_ndspan INTERFACE)
-add_library(odecraft::ndspan ALIAS odecraft_ndspan)
-target_include_directories(odecraft_ndspan INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/ndspan/include
-)
-
-#===========================================================================================
-#                           polybox (header-only, no CMakeLists of its own)
-#===========================================================================================
-add_library(odecraft_polybox INTERFACE)
-add_library(odecraft::polybox ALIAS odecraft_polybox)
-target_include_directories(odecraft_polybox INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/polybox/include
-)
-
-# odecraft_crafted (below) is a static library that consumers link into shared objects, such as
-# Python extension modules, so everything defined from here on is position-independent.
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-#===========================================================================================
-#                           qhull (system library, like MPFR)
-#===========================================================================================
-# Delaunay triangulation (scattered-data interpolation) is built on qhull's reentrant C API,
-# and <odecraft/odecraft.hpp> includes it, so qhull has to be installed.
-find_path(ODECRAFT_QHULL_INCLUDE_DIR libqhull_r/qhull_ra.h)
-find_library(ODECRAFT_QHULL_LIBRARY NAMES qhull_r)
-if(NOT ODECRAFT_QHULL_INCLUDE_DIR OR NOT ODECRAFT_QHULL_LIBRARY)
-    message(FATAL_ERROR
-        "qhull (the reentrant C library, libqhull_r) was not found. Install it, e.g. "
-        "`sudo apt install libqhull-dev`, or point CMAKE_PREFIX_PATH at its installation prefix.")
-endif()
-
-add_library(odecraft_qhull INTERFACE)
-add_library(odecraft::qhull ALIAS odecraft_qhull)
-target_include_directories(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_INCLUDE_DIR})
-target_link_libraries(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_LIBRARY})
-
-# ----------- Link everything into the umbrella target ---------------
-
-target_link_libraries(odecraft INTERFACE
-    xdiff
-    odecraft::ndspan
-    odecraft::polybox
-    odecraft::qhull
-)
-
-#===========================================================================================
-#                     Pre-compiled interface (namespace ode::crafted)
-#===========================================================================================
-# The headers under include/odecraft/Compiled/ expose the library with every template
-# parameter but the scalar type pinned down (dynamic system size, std::function callables),
-# and each one has exactly one translation unit here that explicitly instantiates it for some arithmetic types. Consumers of ode::crafted therefore never instantiate a
-# solver themselves; they link these objects instead.
-#
-# The list is in dependency order, each unit only instantiating what no earlier one already
-# has. Every Compiled/ header carries matching `extern template` declarations, so a later
-# unit -- and any consumer -- reuses those instantiations rather than repeating them.
-#
-# This is additive: the header-only interface in namespace `ode` is untouched, still comes
-# from odecraft::odecraft alone, and needs none of this.
+# ----------- Pre-compiled interface (namespace ode::crafted) ---------------
+# Each unit explicitly instantiates the Compiled/ headers for the supported scalar types, in
+# dependency order; the headers' `extern template` declarations let later units and consumers
+# reuse those instantiations.
 
 if(ODECRAFT_BUILD_CRAFTED)
-    set(ODECRAFT_CRAFTED_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Toolkit.cpp        # set_mpreal_prec
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Interpolators.cpp  # dense output
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Events.cpp         # event detection
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/OdeHistory.cpp     # OdeResult / OdeSolution
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Euler.cpp          # one unit per stepper
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/RK4.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/RK23_DOPRI.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/RK45_DOPRI.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/DOP853.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/BDF.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Steppers.cpp       # runtime factories over the steppers
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ODE.cpp            # high-level driver
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/NdInterpolators.cpp # regular / scattered field interpolation
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/RegularVectorField.cpp   # one unit per vector field: each
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ScatteredVectorField.cpp # compiles its own streamline solvers
+    # The objects are built with -flto, and an archive of LTO objects is only indexed when made
+    # through the compiler's wrapper (gcc-ar), which loads the matching LTO plugin.
+    if(CMAKE_CXX_COMPILER_AR AND CMAKE_CXX_COMPILER_RANLIB)
+        set(CMAKE_AR ${CMAKE_CXX_COMPILER_AR})
+        set(CMAKE_RANLIB ${CMAKE_CXX_COMPILER_RANLIB})
+    endif()
 
-        # Variational solvers. Split one unit per stepper for the same reason the plain
-        # steppers are: each compiles its whole stepper again for the augmented 2N system
-        # (a different OdeType, so nothing is shared with the units above), and as a single
-        # unit that work dominated the build's wall-clock.
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_Euler.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK4.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK23_DOPRI.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_RK45_DOPRI.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_DOP853.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos_BDF.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Chaos.cpp          # variational driver + factory
+    add_library(odecraft_crafted STATIC
+        src/Toolkit.cpp                 # set_mpreal_prec
+        src/Interpolators.cpp           # dense output
+        src/Events.cpp                  # event detection
+        src/OdeHistory.cpp              # OdeResult / OdeSolution
+        src/Euler.cpp                   # one unit per stepper
+        src/RK4.cpp
+        src/RK23_DOPRI.cpp
+        src/RK45_DOPRI.cpp
+        src/DOP853.cpp
+        src/BDF.cpp
+        src/Steppers.cpp                # runtime factories over the steppers
+        src/ODE.cpp                     # high-level driver
+        src/NdInterpolators.cpp         # regular / scattered field interpolation
+        src/RegularVectorField.cpp      # one unit per vector field
+        src/ScatteredVectorField.cpp
+        src/Chaos_Euler.cpp             # variational solvers, one unit per stepper
+        src/Chaos_RK4.cpp
+        src/Chaos_RK23_DOPRI.cpp
+        src/Chaos_RK45_DOPRI.cpp
+        src/Chaos_DOP853.cpp
+        src/Chaos_BDF.cpp
+        src/Chaos.cpp                   # variational driver + factory
     )
-
-    add_library(odecraft_crafted STATIC ${ODECRAFT_CRAFTED_SOURCES})
     add_library(odecraft::crafted ALIAS odecraft_crafted)
 
-    # PUBLIC: anything linking odecraft::crafted also gets the headers and the header-only
-    # interface, so <odecraft/Compiled/odecraft.hpp> is all a consumer needs to include.
-    target_link_libraries(odecraft_crafted PUBLIC odecraft::odecraft lazex::mpfr)
+    # Linked into shared objects such as Python extension modules
+    set_target_properties(odecraft_crafted PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-    # Tools.hpp uses `#pragma omp simd`, which works with -fopenmp-simd, without the OpenMP runtime.
-    # PUBLIC so that consumers compiling the headers don't warn about an unknown pragma.
-    target_compile_options(odecraft_crafted PRIVATE
-        -Wall -Wextra -Wpedantic -Wshadow -Wno-sign-conversion -Wno-unused-parameter
+    # Also compiled for mpfr::mpreal, so it links the MPFR and GMP system libraries.
+    find_library(MPFR_LIBRARY mpfr REQUIRED)
+    find_library(GMP_LIBRARY gmp REQUIRED)
+
+    # PUBLIC: <odecraft/Compiled/odecraft.hpp> is all a consumer needs to include
+    target_link_libraries(odecraft_crafted PUBLIC odecraft::odecraft ${MPFR_LIBRARY} ${GMP_LIBRARY})
+
+    # -fopenmp-simd enables `#pragma omp simd` without the OpenMP runtime; PUBLIC so that consumers
+    # compiling the headers don't warn about an unknown pragma.
+    target_compile_options(odecraft_crafted
+        PUBLIC -fopenmp-simd
+        PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wno-sign-conversion -Wno-unused-parameter
     )
-    target_compile_options(odecraft_crafted PUBLIC -fopenmp-simd)
 
-    if(ODECRAFT_DEBUG_BUILD)
+    if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(odecraft_crafted PRIVATE -O0 -g3 -UNDEBUG)
     else()
         target_compile_options(odecraft_crafted PRIVATE -O3 -flto -funroll-loops -DNDEBUG -g0 -fno-math-errno -fno-trapping-math)

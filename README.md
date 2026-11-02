@@ -38,7 +38,7 @@ git submodule update --recursive
 ## Requirements
 - C++20 compatible compiler: GCC or Clang. The build passes their compiler flags, so on Windows use MSYS2's MinGW toolchain rather than MSVC.
 - **qhull**, for Delaunay triangulation (scattered-data interpolation). Required, since the main `<odecraft/odecraft.hpp>` header includes it.
-- **mpfr** and **gmp**, for the optional arbitrary precision support.
+- **mpfr** and **gmp**, for the arbitrary precision support. Required to [build](#building-odecraft) the compiled `ode::crafted` interface, optional otherwise. Their C++ wrapper, [mpreal](https://github.com/advanpix/mpreal), is bundled as a submodule.
 
 All three come as prebuilt packages:
 
@@ -50,7 +50,7 @@ All three come as prebuilt packages:
 | macOS (Homebrew) | `brew install qhull mpfr gmp` |
 | Windows (MSYS2, UCRT64 shell) | `pacman -S mingw-w64-ucrt-x86_64-qhull mingw-w64-ucrt-x86_64-mpfr mingw-w64-ucrt-x86_64-gmp` |
 
-If qhull is installed somewhere CMake does not search by default, point `CMAKE_PREFIX_PATH` at its prefix. On Apple Silicon Macs, Homebrew installs into `/opt/homebrew`, which the compiler does not search by default (and CMake may not either), so before configuring:
+If any of them is installed somewhere CMake does not search by default, point `CMAKE_PREFIX_PATH` at its prefix. On Apple Silicon Macs, Homebrew installs into `/opt/homebrew`, which the compiler does not search by default (and CMake may not either), so before configuring:
 ```bash
 export CMAKE_PREFIX_PATH=$(brew --prefix) CPATH=$(brew --prefix)/include LIBRARY_PATH=$(brew --prefix)/lib
 ```
@@ -81,7 +81,9 @@ cmake -S . -B build \
 cmake --build build -j
 ```
 
-This produces `build/libodecraft_crafted.a`. Similarly, the tests and tutorials can be configured from their own directories:
+This produces `build/libodecraft_crafted.a`. Configuring also writes `build/compile_commands.json` for clangd, with or without `ODECRAFT_BUILD_CRAFTED`.
+
+Similarly, the tests and tutorials can be configured from their own directories:
 
 ```bash
 cd tests     && cmake -S . -B build && cmake --build build -j

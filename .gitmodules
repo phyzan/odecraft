@@ -7,3 +7,6 @@
 [submodule "external/polybox"]
 	path = external/polybox
 	url = https://github.com/phyzan/polybox
+[submodule "external/mpreal"]
+	path = external/mpreal
+	url = https://github.com/advanpix/mpreal
