@@ -22,13 +22,8 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS STREQUAL "")
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
-# lazy_scalar.cpp runs the solvers on mpfr::mpreal, so it needs lazex::mpfr, which only exists
-# when lazex is configured with this option. lazex is configured from inside odecraft's own
-# CMakeLists, so this has to be set before pulling that in below.
-set(LAZEX_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
-
 # odecraft is a subproject here, where the crafted library defaults to OFF. The tests cover it,
-# so ask for it explicitly.
+# so ask for it explicitly. It also links MPFR/GMP, which lazy_scalar.cpp needs.
 set(ODECRAFT_BUILD_CRAFTED ON CACHE BOOL "" FORCE)
 
 # The library itself lives one level up. Building it here keeps this project self-contained:
@@ -47,7 +42,7 @@ endif()
 add_executable(odecraft_tests ${ODECRAFT_TEST_SOURCES})
 
 target_include_directories(odecraft_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(odecraft_tests PRIVATE odecraft::odecraft lazex::mpfr)
+target_link_libraries(odecraft_tests PRIVATE odecraft::odecraft)
 
 if(TARGET odecraft::crafted)
     target_link_libraries(odecraft_tests PRIVATE odecraft::crafted)
