@@ -228,8 +228,8 @@ View1D<T> ODE<T, N>::t()const{
 }
 
 template<typename T, size_t N>
-View2D<T, 0, N> ODE<T, N>::q()const{
-    return View2D<T, 0, N>{orbit_data_.q.data(), this->n_points(), this->nsys()};
+CView2D<T, 0, N> ODE<T, N>::q()const{
+    return CView2D<T, 0, N>{orbit_data_.q.data(), this->n_points(), this->nsys()};
 }
 
 template<typename T, size_t N>

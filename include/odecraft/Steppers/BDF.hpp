@@ -72,7 +72,7 @@ public:
 protected:
 
     using Base = detail::BaseDispatcher<GetDerived<BDF<T, N, SP, OdeType>, Derived>, T, N, SP, OdeType>;
-    using Dlike = Array2D<T, 0, N>;
+    using Dlike = CArray2D<T, 0, N>;
     struct private_tag{};
 
     StepResult      adapt_impl(T& t_new, T& habs_new, T* q_new, const T& t, const T& habs, const T* q);

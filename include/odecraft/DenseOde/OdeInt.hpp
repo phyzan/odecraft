@@ -123,7 +123,7 @@ public:
 
     const T&                    t(size_t i) const;
 
-    View2D<T, 0, N>             q() const;
+    CView2D<T, 0, N>             q() const;
 
     View1D<T, N>                q(size_t i) const;
 

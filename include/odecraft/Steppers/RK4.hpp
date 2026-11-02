@@ -44,9 +44,9 @@ protected:
 
     // 4 stages of size N, plus one auxiliary array. if ODECRAFT_RK4_DENSE, K has 4 extra stages for dense output. So visually K = [k1, k2, k3, k4, aux | k1, k2, l3, k4 ]
 #ifdef ODECRAFT_RK4_DENSE
-    mutable Array2D<T, 9, N>    K;
+    mutable CArray2D<T, 9, N>    K;
 #else
-    mutable Array2D<T, 5, N>    K;
+    mutable CArray2D<T, 5, N>    K;
 #endif
     mutable bool        interp_data_set = false;
 
