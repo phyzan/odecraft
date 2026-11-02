@@ -22,11 +22,6 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS STREQUAL "")
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
-# ArbitraryPrecision.cpp runs the solvers on mpfr::mpreal, so it needs lazex::mpfr, which only
-# exists when lazex is configured with this option. lazex is configured from inside odecraft's
-# own CMakeLists, so this has to be set before pulling that in below.
-set(LAZEX_ENABLE_MPREAL ON CACHE BOOL "" FORCE)
-
 file(GLOB ODECRAFT_TUTORIAL_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
 # Most tutorials use only the header-only `ode` interface, so the compiled library is not built
@@ -80,11 +75,10 @@ foreach(tutorial_src IN LISTS ODECRAFT_TUTORIAL_SOURCES)
     target_compile_options(${tutorial_name} PRIVATE ${ODECRAFT_TUTORIAL_COMPILE_OPTIONS})
 endforeach()
 
-# ArbitraryPrecision additionally needs the MPFR-enabled lazex target.
+# ArbitraryPrecision runs the solvers on mpfr::mpreal, so it also links the MPFR/GMP libraries
+# (odecraft::odecraft already provides the vendored mpreal.h).
 if(TARGET ArbitraryPrecision)
-    if(TARGET lazex::mpfr)
-        target_link_libraries(ArbitraryPrecision PRIVATE lazex::mpfr)
-    else()
-        message(FATAL_ERROR "ArbitraryPrecision needs lazex::mpfr; configure with -DLAZEX_ENABLE_MPREAL=ON")
-    endif()
+    find_library(MPFR_LIBRARY mpfr REQUIRED)
+    find_library(GMP_LIBRARY gmp REQUIRED)
+    target_link_libraries(ArbitraryPrecision PRIVATE ${MPFR_LIBRARY} ${GMP_LIBRARY})
 endif()
