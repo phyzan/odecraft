@@ -20,10 +20,10 @@ struct DOP_COEFS{
     static constexpr size_t INTERP_ORDER = 7;
     static constexpr int ERR_EST_ORDER = 7;
 
-    using DOP_A = Array2D<T, N_STAGES_EXT, N_STAGES_EXT, Allocation::Stack>;
+    using DOP_A = CArray2D<T, N_STAGES_EXT, N_STAGES_EXT, Allocation::Stack>;
     using DOP_B = Array1D<T, N_STAGES, Allocation::Stack>;
     using DOP_C = Array1D<T, N_STAGES_EXT, Allocation::Stack>;
-    using DOP_D = Array2D<T, INTERP_ORDER - 3, N_STAGES_EXT, Allocation::Stack>;
+    using DOP_D = CArray2D<T, INTERP_ORDER - 3, N_STAGES_EXT, Allocation::Stack>;
     using DOP_E = Array1D<T, N_STAGES+1, Allocation::Stack>;
 
     static constexpr DOP_A make_A();
@@ -82,10 +82,10 @@ protected:
 
 private:
 
-    using Atype      = Array2D<T, N_STAGES, N_STAGES, Allocation::Stack>;
+    using Atype      = CArray2D<T, N_STAGES, N_STAGES, Allocation::Stack>;
     using Btype      = Array1D<T, N_STAGES, Allocation::Stack>;
     using Ctype      = Array1D<T, N_STAGES, Allocation::Stack>;
-    using AExtraType = Array2D<T, N_STAGES_EXTRA, N_STAGES_EXT, Allocation::Stack>;
+    using AExtraType = CArray2D<T, N_STAGES_EXTRA, N_STAGES_EXT, Allocation::Stack>;
     using CExtraType = Array1D<T, N_STAGES_EXTRA, Allocation::Stack>;
 
     static constexpr Atype      Amatrix();
@@ -116,9 +116,9 @@ private:
     typename DOP_COEFS<T>::DOP_E E5 = DOP_COEFS<T>::make_E5();
 
     T                                                     h_last_ = 0; // step size actually used by the last sweep
-    mutable Array2D<T, N_STAGES_EXT, STAGE_STRIDE, Allocation::Auto> K_; // one stage per row, n used of each
+    mutable CArray2D<T, N_STAGES_EXT, STAGE_STRIDE, Allocation::Auto> K_; // one stage per row, n used of each
     mutable Array1D<T, N, Allocation::Auto>                           df_tmp_;
-    mutable Array2D<T, N, 0>                                          coef_mat_;
+    mutable CArray2D<T, N, 0>                                          coef_mat_;
     mutable bool                                                      mat_is_set_ = false;
 
     T ERR_EXP = T(-1)/T(ERR_EST_ORDER+1);

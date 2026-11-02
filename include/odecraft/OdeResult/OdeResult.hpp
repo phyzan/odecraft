@@ -24,7 +24,7 @@ struct OrbitData{
 
     View1D<T> t_view() const;
 
-    View2D<T, 0, 0> q_view() const;
+    CView2D<T, 0, 0> q_view() const;
 
     const T& get_q(size_t i, size_t j) const;
 
@@ -90,7 +90,7 @@ public:
 
     View1D<T> t() const;
 
-    View2D<T, 0, N> q() const;
+    CView2D<T, 0, N> q() const;
 
     const T& q(size_t i, size_t j) const;
 

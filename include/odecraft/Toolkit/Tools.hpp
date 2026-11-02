@@ -14,6 +14,7 @@
 #include <ndspan/ndspan.hpp>
 #include "Cache.hpp" // IWYU pragma: keep
 #include "Scratch.hpp"
+#include "ndspan/core/layoutmap.hpp"
 
 
 
@@ -30,7 +31,14 @@ ODECRAFT_USING_MATH;
 
 using std::real, std::imag, ndspan::min, ndspan::max, std::complex;
 
-using ndspan::Array, ndspan::Array1D, ndspan::Array2D, ndspan::View, ndspan::MutView, ndspan::View1D, ndspan::View2D, ndspan::View3D, ndspan::Allocation, ndspan::Layout, ndspan::prod;
+using ndspan::Array, ndspan::Array2D, ndspan::CArray2D, ndspan::FArray2D, ndspan::View, ndspan::MutView, ndspan::View2D, ndspan::View3D, ndspan::CView2D, ndspan::CView3D, ndspan::Allocation, ndspan::Layout, ndspan::prod;
+
+// odecraft's own 1D aliases: unlike ndspan's, the size defaults to 0 (dynamic)
+template<typename T, size_t N = 0, Allocation Alloc = Allocation::Auto>
+using Array1D = ndspan::Array1D<T, N, Alloc>;
+
+template<typename T, size_t N = 0>
+using View1D = ndspan::View1D<T, N, ndspan::Layout::C>;
 
 using xdiff::Vector, xdiff::make_vector;
 
@@ -64,7 +72,7 @@ using SeedVec = xdiff::SeedVector<T, (N == 0 ? -1 : int(N)), int(Order), dual_la
 
 
 template<typename T, size_t N>
-using JacMat = Array2D<T, N, N, Allocation::Auto, Layout::F>;
+using JacMat = FArray2D<T, N, N>;
 
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;

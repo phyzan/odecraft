@@ -2,7 +2,7 @@
 #define ODECRAFT_MATH_HPP
 
 #include <xdiff/math.hpp>
-#include <lazex/math.hpp>
+#include <lazex/src/math.hpp>
 
 
 /**

@@ -35,7 +35,7 @@ int RegularGridInterpolator<NDIM, AS_VIRTUAL>::ndim() const{
 template<int NDIM, bool AS_VIRTUAL>
 bool RegularGridInterpolator<NDIM, AS_VIRTUAL>::interp(double* out, const double* coords) const{
     int nd = this->ndim();
-    Array2D<double, NDIM, 2, Base::ALLOC> cube(nd, 2); // cube(axis, neighbor)
+    CArray2D<double, NDIM, 2, Base::ALLOC> cube(nd, 2); // cube(axis, neighbor)
 
     Array1D<double, NDIM, Base::ALLOC> coefs(nd); // interpolation coefficients for each axis
     Array1D<int, NDIM, Base::ALLOC> left_nbrs(nd); // left neighbors for each axis
@@ -145,7 +145,7 @@ void RegularVectorField<NDIM, AS_VIRTUAL>::OdeFuncNorm(double* out, double t, co
 
 
 template<int NDIM, bool AS_VIRTUAL>
-std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Stepper method) const{
+std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Stepper method) const{
     return streamplot_data_core(max_length, ds, density, rtol, atol, min_step, max_step, stepsize, method, std::make_index_sequence<NDIM>{});
 }
 
@@ -153,7 +153,7 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
 
 template<int NDIM, bool AS_VIRTUAL>
 template<size_t... I>
-std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Stepper method, std::index_sequence<I...>) const{
+std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Stepper method, std::index_sequence<I...>) const{
     
     if (density <= 1){
         throw std::domain_error("Density must be greater than 1 in streamplot_data");
@@ -183,7 +183,7 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
 
     int max_pts = int(max_length / ds) + 1; //per integration direction
 
-    NdArray<bool, NDIM> is_full(nullptr, N.data(), this->ndim());
+    CArrayND<bool, NDIM> is_full(nullptr, N.data(), this->ndim());
     Array1D<std::vector<int>, NDIM, InterpBase::ALLOC> reached(this->ndim()); // reached[axis] = vector of reached indices along that axis
     is_full.fill(false);
 
@@ -290,7 +290,7 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
         return n_steps;
     };
 
-    auto GetStreamline = [&](bool& success, Array2D<double, NDIM, 0>& worker_line, const double* x0) {
+    auto GetStreamline = [&](bool& success, CArray2D<double, NDIM, 0>& worker_line, const double* x0) {
         assert( (worker_line.shape(1) == size_t(2*max_pts + 1)) && "Line array must have shape (2, 2*max_pts + 1)");
         if constexpr (NDIM > 0) {
             ((worker_line(I, max_pts) = x0[I]), ...);
@@ -327,7 +327,7 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
                 x_line[axis] = worker_line.ptr(axis, max_pts - n_steps_bwd);
             }
         }
-        Array2D<double, NDIM, 0> true_line(this->ndim(), n_steps_tot);
+        CArray2D<double, NDIM, 0> true_line(this->ndim(), n_steps_tot);
         if (s_total > min_length && n_steps_tot > 1){
             if constexpr (NDIM > 0){
                 ((std::copy(x_line[I], x_line[I] + n_steps_tot, true_line.ptr(I, 0))), ...);
@@ -366,8 +366,8 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
         return true_line;
     };
 
-    std::vector<Array2D<double, NDIM, 0>> streamlines;
-    auto TryTrajectory = [&](Array2D<double, NDIM, 0>& worker_line, const Array1D<int, NDIM, InterpBase::ALLOC>& idx) NDSPAN_LAMBDA_INLINE{
+    std::vector<CArray2D<double, NDIM, 0>> streamlines;
+    auto TryTrajectory = [&](CArray2D<double, NDIM, 0>& worker_line, const Array1D<int, NDIM, InterpBase::ALLOC>& idx) NDSPAN_LAMBDA_INLINE{
 
         if constexpr (NDIM > 0) {
             if (((idx[I] < 0 || idx[I] >= int(N[I])) || ...)) {
@@ -400,7 +400,7 @@ std::vector<Array2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::stre
     };
 
     // Seeding streamlines from edges working inwards (shell by shell):
-    Array2D<double, NDIM, 0> line(this->ndim(), 2*max_pts + 1);
+    CArray2D<double, NDIM, 0> line(this->ndim(), 2*max_pts + 1);
 
     int min_N = *std::min_element(N.begin(), N.end());
     int max_shells = (min_N + 1) / 2;

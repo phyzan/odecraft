@@ -33,14 +33,14 @@ public:
     // wihtout having to recompute the triangulation.
     DelaunayTri() = default;
 
-    void set_state(const View2D<double, 0, NDIM>& points, const View2D<int, 0, DIM_SPX>& simplices, const View2D<int, 0, DIM_SPX>& neighbors, const View2D<double, 0, NDIM>& v0, const View3D<double, 0, NDIM, NDIM>& invT);
+    void set_state(const CView2D<double, 0, NDIM>& points, const CView2D<int, 0, DIM_SPX>& simplices, const CView2D<int, 0, DIM_SPX>& neighbors, const CView2D<double, 0, NDIM>& v0, const CView3D<double, 0, NDIM, NDIM>& invT);
 
     // Member variable accessors
-    const Array2D<double, 0, NDIM>& get_points() const; // (n_points, ndim)
-    const Array2D<int, 0, DIM_SPX>& get_simplices() const; // (nsimplices, ndim+1)
-    const Array2D<int, 0, DIM_SPX>& get_neighbors() const; // (nsimplices, ndim+1)
-    const Array2D<double, 0, NDIM>& get_v0() const; // (nsimplices, ndim)
-    const Array3D<double, 0, NDIM, NDIM>& get_invT() const; // (nsimplices, ndim, ndim)
+    const CArray2D<double, 0, NDIM>& get_points() const; // (n_points, ndim)
+    const CArray2D<int, 0, DIM_SPX>& get_simplices() const; // (nsimplices, ndim+1)
+    const CArray2D<int, 0, DIM_SPX>& get_neighbors() const; // (nsimplices, ndim+1)
+    const CArray2D<double, 0, NDIM>& get_v0() const; // (nsimplices, ndim)
+    const CArray3D<double, 0, NDIM, NDIM>& get_invT() const; // (nsimplices, ndim, ndim)
     
 
     int                 ndim() const;
@@ -72,7 +72,7 @@ private:
 
     int& thread_cache() const;
 
-    Array2D<double, NDIM, NDIM>& mat_cache() const;
+    CArray2D<double, NDIM, NDIM>& mat_cache() const;
 
 
     // ============================================================================
@@ -83,11 +83,11 @@ private:
 
     void compute_delaunay();
 
-    Array2D<double, 0, NDIM>        points_;    // (npoints, ndim)
-    Array2D<int, 0, DIM_SPX>        simplices_; // (nsimplices, ndim+1)
-    Array2D<int, 0, DIM_SPX>        neighbors_; // (nsimplices, ndim+1), -1 = boundary
-    Array2D<double, 0, NDIM>        v0_;        // (nsimplices, ndim)
-    Array3D<double, 0, NDIM, NDIM>  invT_;      // (nsimplices, ndim, ndim)
+    CArray2D<double, 0, NDIM>        points_;    // (npoints, ndim)
+    CArray2D<int, 0, DIM_SPX>        simplices_; // (nsimplices, ndim+1)
+    CArray2D<int, 0, DIM_SPX>        neighbors_; // (nsimplices, ndim+1), -1 = boundary
+    CArray2D<double, 0, NDIM>        v0_;        // (nsimplices, ndim)
+    CArray3D<double, 0, NDIM, NDIM>  invT_;      // (nsimplices, ndim, ndim)
 
 };
 

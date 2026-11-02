@@ -310,7 +310,7 @@ VariationalSolver<S, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType ode,
     View1D<T, 2*N>{nullptr, 2*q0.size()} :
     View1D<T, 2*N>{
         join_arrays(q0, delta_q0).data(),
-        2*q0.size()
+        2*q0.size(),
     }, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)), worker(4*q0.size()), tmp_state_(2*q0.size()), period_(period), t_next_(t0+period*dir), t_last_(t0) {
 
     if (period <= 0){
@@ -542,7 +542,7 @@ pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, Ode
 
     return choose_integrator_case<pbox::Box<ChaoticSolver<T, 2*N, UP>>>(method,
         [&]<Stepper S>(){
-            using Solver = typename ::ode::detail::SolverTypeGetter<S, T, N, SP, OdeType>::type;
+            using Solver = ::ode::detail::SolverTypeGetter<S, T, N, SP, OdeType>::type;
             return pbox::make_box<VariationalSolver<
                 S,
                 typename Solver::value_type,

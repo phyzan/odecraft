@@ -56,11 +56,11 @@ protected:
 
 private:
 
-    using Atype = Array2D<T, Nstages, Nstages, Allocation::Stack>;
+    using Atype = CArray2D<T, Nstages, Nstages, Allocation::Stack>;
     using Btype = Array1D<T, Nstages, Allocation::Stack>;
     using Ctype = Array1D<T, Nstages, Allocation::Stack>;
     using Etype = Array1D<T, Nstages+1, Allocation::Stack>;
-    using Ptype = Array2D<T, Nstages+1, INTERP_ORDER, Allocation::Stack>;
+    using Ptype = CArray2D<T, Nstages+1, INTERP_ORDER, Allocation::Stack>;
 
     static constexpr Atype Amatrix();
     static constexpr Btype Bmatrix();
@@ -86,7 +86,7 @@ private:
     T                                       h_last_ = 0; // step size of the last sweep, replayed by set_coef_matrix
     mutable Array1D<T, N>                   K0_;
     mutable Array1D<T, N>                   KF_;
-    mutable Array2D<T, N, 0>                coef_mat;
+    mutable CArray2D<T, N, 0>                coef_mat;
 
     // the stage rows K1..K5, then the FSAL stage of a replayed sweep
     [[no_unique_address]] mutable detail::ScratchPageFor<T, (Nstages-1)*STAGE_STRIDE + N>   rk_scratch_;

@@ -22,8 +22,8 @@ View1D<T> OrbitData<T>::t_view() const {
 }
 
 template<typename T>
-View2D<T, 0, 0> OrbitData<T>::q_view() const {
-    return View2D<T, 0, 0>(q.data(), t.size(), nsys);
+CView2D<T, 0, 0> OrbitData<T>::q_view() const {
+    return CView2D<T, 0, 0>(q.data(), t.size(), nsys);
 }
 
 template<typename T>
@@ -182,8 +182,8 @@ View1D<T> OdeResult<T, N>::t() const {
 }
 
 template<typename T, size_t N>
-View2D<T, 0, N> OdeResult<T, N>::q() const {
-    return View2D<T, 0, N>{orbit_data_.q.data(), orbit_data_.t.size(), orbit_data_.nsys};
+CView2D<T, 0, N> OdeResult<T, N>::q() const {
+    return CView2D<T, 0, N>{orbit_data_.q.data(), orbit_data_.t.size(), orbit_data_.nsys};
 }
 
 template<typename T, size_t N>
