@@ -1,10 +1,12 @@
+#include "odecraft/Core/SolverFactory.hpp"
+#include "odecraft/Toolkit/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 
 
 struct MyODE{
 
 
-    static void Rhs(auto* dy_dt, auto /*t*/, auto q) {
+    static void Rhs(auto& dy_dt, auto /*t*/, const auto& q) {
         //3D lorenz system, args = {sigma, rho, beta}
         const double sigma = 10.0;
         const double rho = 28.0;
@@ -20,7 +22,7 @@ struct MyODE{
 using namespace ode;
 
 
-void test_variational_solver(){
+int main(){
 
     std::cout << "\n---------- Testing VariationalSolver ------------------\n" << std::endl;
 
@@ -33,14 +35,16 @@ void test_variational_solver(){
     std::array<T, 3> y0 = {1.0, 1.0, 1.0};
     std::array<T, 3> y0_var = {1.0, 1.0, 1.0};
 
-    chaos::VariationalSolver<Stepper::BDF, T, NSYS, ode::SolverPolicy::Static, MyODE> solver(
+    std::array<T, 3> rtol = {1e-9, 1e-9, 1e-9};
+    std::array<T, 3> atol = {1e-12, 1e-12, 1e-12};
+
+    chaos::VariationalSolver<Stepper::BDF, T, DenseDescriptor<3>, MyODE, ode::SolverPolicy::Static> solver(
         MyODE{},
         0.0,
-        View1D<T, NSYS>{y0.data()},
-        View1D<T, NSYS>{y0_var.data()},
+        {y0, y0_var},
         0.1,
-        1e-9,
-        1e-12,
+        {rtol, rtol},
+        {atol, atol},
         0.0,
         0.0,
         0.0,
@@ -51,8 +55,8 @@ void test_variational_solver(){
     auto t_start = std::chrono::high_resolution_clock::now();
     solver.advance_until(10000);
     auto t_end = std::chrono::high_resolution_clock::now();
-    print("Expected Lyapunov exponent: ~0.905");
-    print("Computed Lyapunov exponent: ", solver.lyapunov_exponent());
-    print("Computation completed in ", std::chrono::duration_cast<std::chrono::duration<double>>(t_end - t_start).count()*1000, " ms");
+    std::cout << ("Expected Lyapunov exponent: ~0.905\n");
+    std::cout <<"Computed Lyapunov exponent: " << solver.lyapunov_exponent() << "\n";
+    std::cout <<"Computation completed in " << " " << std::chrono::duration_cast<std::chrono::duration<double>>(t_end - t_start).count()*1000 << " ms\n";
 
 }
