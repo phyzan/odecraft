@@ -101,7 +101,19 @@ inline constexpr bool MainRhsSupportsDuals = supportsDualRhs<OdeType, Order, T, 
 template<int Order, typename OdeType, typename T, typename SD>
 inline constexpr bool MainJacSupportsDuals = supportsDualJac<OdeType, Order, T, SD>;
 
+// A dual with a single derivative component: the derivative along one direction
+template<typename T, typename SD>
+using dir_dual_t = xdiff::Dual<value_t<T, SD>, xdiff::StaticState<1>, 1>;
 
+template<typename T, typename SD>
+using dir_state_t = SD::template state_type<dir_dual_t<T, SD>>;
+
+// Whether the main Rhs takes states of such duals, as its derivative along delta_q
+template<typename OdeType, typename T, typename SD>
+concept MainRhsSupportsDirDuals =
+    requires(OdeType f, dir_state_t<T, SD>& out, T t, const dir_state_t<T, SD>& q) {
+        { f.Rhs(out, t, q) } -> std::same_as<void>;
+    };
 
 } // namespace ode::chaos::detail
 
@@ -131,12 +143,12 @@ public:
     static constexpr bool MainJacSupportsDuals = detail::MainJacSupportsDuals<Order, OdeType, T, SD>;
 
     /*
-    For the variational part:
-        If (JP_MAIN == Exact) : use it
+    For the variational part, J*delta_q, the derivative of f along delta_q:
+        If (JP_MAIN == Exact) : J from it, times delta_q
         else if (JP_MAIN == Nullable) use that,
-            with possible fallback to finite differences
-        else if (JP_MAIN == Autodiff) : Just pass 1st order duals in the main Rhs
-        else : use finite differences
+            with possible fallback to a finite difference along delta_q
+        else if (JP_MAIN == Autodiff) : one main Rhs call with duals that carry the derivative along delta_q
+        else : a finite difference along delta_q, 2 more main Rhs calls
     */
     void    Rhs(State& out, const T& t, const State& q) const;
 
@@ -152,12 +164,19 @@ public:
 
 private:
 
-    // 1st order duals give f and J*delta_q in one main Rhs call
+    // 1st order duals give J for JacMain, and f and J*delta_q in one main Rhs call
     static constexpr bool AD_RHS = (JP_MAIN == JacPolicy::Autodiff);
+    // Duals with only the derivative along delta_q do the latter at the cost of about two main Rhs calls
+    static constexpr bool AD_DIR = AD_RHS && detail::MainRhsSupportsDirDuals<OdeType, T, SD>;
+    // An explicit Jacobian gives J*delta_q as J times delta_q
+    static constexpr bool JAC_RHS = (JP_MAIN == JacPolicy::Exact || JP_MAIN == JacPolicy::Nullable);
     // 2nd order duals give both blocks of the full Jacobian
     static constexpr bool AD_JAC = detail::MainRhsSupportsDuals<2, OdeType, T, SD>;
 
     void    jacmat_findiffs(MainJacMat& mat, const T& t, const MainState& q) const;
+
+    // J*delta_q into out, by a central difference along delta_q: 2 main Rhs calls
+    void    jvp_findiffs(MainState& out, const T& t, const State& q) const;
 
     // Computes the bottom left matrix of the full jacobian matrix,
     // which is d(J)/dq * delta_q, of dims = (N x N)
@@ -166,9 +185,11 @@ private:
 
     OdeType ode_;
     MainRealState atol_;
-    [[no_unique_address]] ::ode::detail::scratch_if<!AD_RHS, MainJacMat> jm_scratch_;  // J, for J*delta_q
+    [[no_unique_address]] ::ode::detail::scratch_if<JAC_RHS, MainJacMat> jm_scratch_;  // J, for J*delta_q
     worker_t<MainState> x_scratch_, y1_scratch_, y2_scratch_;                   // finite differences
     worker_t<MainState> f0_scratch_, col_scratch_;                               // delta_J
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_DIR, detail::dir_state_t<T, SD>> dir_in_scratch_;
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_DIR, detail::dir_state_t<T, SD>> dir_out_scratch_;
     [[no_unique_address]] ::ode::detail::scratch_if<AD_RHS, dual_state_t<T, SD, 1>> dual1_scratch_;
     [[no_unique_address]] ::ode::detail::scratch_if<AD_RHS, seed_state_t<T, SD, 1>> seed1_scratch_;
     [[no_unique_address]] ::ode::detail::scratch_if<AD_JAC, dual_state_t<T, SD, 2>> dual2_scratch_;
