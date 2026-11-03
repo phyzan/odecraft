@@ -110,4 +110,15 @@ private:
     [[no_unique_address]] mutable storage_t state_;
 };
 
+
+namespace detail{
+
+// In place of a worker that a configuration never uses
+struct no_scratch{};
+
+template<bool Enabled, typename State>
+using scratch_if = std::conditional_t<Enabled, worker_t<State>, no_scratch>;
+
+} // namespace ode::detail
+
 } // namespace ode

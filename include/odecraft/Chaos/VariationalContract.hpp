@@ -24,7 +24,7 @@ struct VarState{
     State variation;
 };
 
-template<typename SD, typename OdeType>
+template<typename SD>
 struct VarSD{
 
     template<typename T>

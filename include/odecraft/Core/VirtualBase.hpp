@@ -4,6 +4,7 @@
 #include <odecraft/Events/Events.hpp>
 #include <polybox/polybox.hpp>
 #include <odecraft/Core/SolverFactory.hpp>
+#include <ostream>
 #include <span>
 
 namespace ode {
@@ -49,7 +50,7 @@ public:
     virtual BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const = 0;
     virtual T                   get_auto_step(const T& t, const State& q) const = 0;
     virtual T                   get_auto_step() const = 0;
-    virtual void                show_state(int prec=8) const = 0;
+    virtual void                show_state(std::ostream& out, int prec=8) const = 0;
     virtual std::unique_ptr<OdeSolver<T, SD>> clone() const = 0;
 
     // MODIFIERS
