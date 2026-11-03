@@ -3,26 +3,44 @@
 #include <odecraft/Chaos/VariationalSolvers.hpp>
 #include <odecraft/Toolkit/Tools.hpp>
 #include <odecraft/Toolkit/FinDiff.hpp>
+#include <limits>
+#include <stdexcept>
+#include <tuple>
 #include "VariationalSolvers_mem_impl.hpp" // IWYU pragma: keep
 
 
 namespace ode::chaos{
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-VariationalOdeSys<T, N, OdeType>::VariationalOdeSys(OdeType ode, size_t ode_nsys, T atol) : ode_(std::move(ode)), nsys_(ode_nsys), atol_(std::move(atol)),
-    scratch_(request_scratch_page<T, N*N + 3*N>(ode_nsys*ode_nsys + 3*ode_nsys)), dual_scratch_(ode_nsys), ddual_scratch_(ode_nsys) {
-    assert((N == 0 || N == ode_nsys) && "Incorrect number of equations in VariationalOdeSys");
+template<typename T, typename SD, typename OdeType>
+VariationalOdeSys<T, SD, OdeType>::VariationalOdeSys(OdeType ode, const State& q0, const RealState& atol) : ode_(std::move(ode)), atol_(atol.main),
+    x_scratch_(q0.main), y1_scratch_(q0.main), y2_scratch_(q0.main), f0_scratch_(q0.main), col_scratch_(q0.main) {
+
+    if constexpr (AD_RHS){
+        decltype(auto) duals = dual1_scratch_.get();
+        decltype(auto) seeds = seed1_scratch_.get();
+        SD::resize_like(duals, q0.main);
+        SD::resize_like(seeds, q0.main);
+    } else {
+        MainJacMat J{};
+        SD::JD::resize_like(J, q0.main);
+        jm_scratch_ = J;
+    }
+
+    if constexpr (AD_JAC){
+        decltype(auto) duals = dual2_scratch_.get();
+        decltype(auto) seeds = seed2_scratch_.get();
+        SD::resize_like(duals, q0.main);
+        SD::resize_like(seeds, q0.main);
+    }
 
     const char* err_msg = "Variational ODE systems that do not provide a Jacobian function for the main ODE system require a non-zero `atol` to compute the stepsize for finite differences";
 
+    bool findiff_jac = (JP_MAIN == JacPolicy::Approx);
     if constexpr (JP_MAIN == JacPolicy::Nullable){
-        if (ode_.Jac == nullptr && atol_ == 0){
-            throw std::runtime_error(err_msg);
-        }
-    } else if constexpr (JP_MAIN == JacPolicy::Approx) {
-        if (atol_ == 0){
-            throw std::runtime_error(err_msg);
-        }
+        findiff_jac = (ode_.Jac == nullptr);
+    }
+    if (findiff_jac && !SD::all_true([](const T& a){ return a != 0; }, atol_)){
+        throw std::runtime_error(err_msg);
     }
 }
 
@@ -31,72 +49,41 @@ VariationalOdeSys<T, N, OdeType>::VariationalOdeSys(OdeType ode, size_t ode_nsys
 // VariationalOdeSys accessors
 // ----------------------------------------------------------------------------
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-const OdeType& VariationalOdeSys<T, N, OdeType>::ode() const{
+template<typename T, typename SD, typename OdeType>
+const OdeType& VariationalOdeSys<T, SD, OdeType>::ode() const{
     return ode_;
 }
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-constexpr size_t VariationalOdeSys<T, N, OdeType>::nsys_main() const{
-    if constexpr (N > 0){
-        return N;
-    } else {
-        return nsys_;
-    }
-}
 
 
 // ----------------------------------------------------------------------------
 // VariationalOdeSys Rhs
 // ----------------------------------------------------------------------------
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const{
-    const size_t n = this->nsys_main();
-    const T* delta_q = q + n;
-    if constexpr (MainRhsSupportsDuals<1>){
-        DualType<T, N, 1>::with_default_nvars(n,
-            [&](){
-                auto out_duals = dual_scratch_.template request<N>(n);
-                ode_.Rhs(out_duals.data(), t, SeedVec<T, N, 1>{q, int(n), 1});
-                std::fill(out+n, out+2*n, 0);
-                for (size_t j=0; j<n; j++){
-                    out[j] = out_duals[j].value();
-                    for (size_t i=0; i<n; i++){
-                        out[i+n] += out_duals[i].get_diff_wrt(j) * delta_q[j];
-                    }
-                }
-            }
-        );
+template<typename T, typename SD, typename OdeType>
+void VariationalOdeSys<T, SD, OdeType>::Rhs(State& out, const T& t, const State& q) const{
+    using S = value_t<T, SD>;
+    if constexpr (AD_RHS){
+        // One main Rhs call with 1st order duals: f_i is the value of each, and (J*delta_q)_i
+        // its gradient dotted with delta_q, without forming J
+        decltype(auto) out_duals = dual1_scratch_.get();
+        decltype(auto) seeds = seed1_scratch_.get();
+        xdiff::set_seeds<T, SD>(seeds, q.main);
+        ode_.Rhs(out_duals, t, seeds);
+        SD::for_each([&q](S& f_i, S& df_i, const dual_t<T, SD, 1>& fi){
+            f_i = fi.value();
+            df_i = 0;
+            SD::for_each([&df_i](const S& dfi_dqj, const S& dq_j){
+                df_i += dfi_dqj * dq_j;
+            }, fi.grad(), q.variation);
+        }, out.main, out.variation, out_duals);
     } else {
+        ode_.Rhs(out.main, t, q.main); // Main system filled
 
-        ode_.Rhs(out, t, q); // Main system filled
-
-        // First let's fill a temporary jacobian matrix
-        auto jm_worker = scratch_.template request<N*N>(n*n);
-        T* mat = jm_worker.data();
-
-        if constexpr (JP_MAIN == JacPolicy::Exact || JP_MAIN == JacPolicy::Nullable){
-            if constexpr (JP_MAIN == JacPolicy::Exact){
-                ode_.Jac(mat, t, q);
-            } else if (ode_.Jac != nullptr) {
-                ode_.Jac(mat, t, q);
-            } else { // Finite differences fallback
-                this->jacmat_findiffs(mat, t, q);
-            }
-        } else { // Finite differences fallback
-            this->jacmat_findiffs(mat, t, q);
-        }
-
-        // The Jacobian matrix is now filled,
-        // proceeding to fill the variational part
-        T* delta_qdot = out + n;
-        std::fill(delta_qdot, delta_qdot+n, 0);
-        for (size_t j=0; j<n; j++){
-            for (size_t i=0; i<n; i++){
-                delta_qdot[i] += mat[j*n + i] * delta_q[j];
-            }
-        }
+        // The Jacobian of the main system, then the variational part
+        decltype(auto) J = jm_scratch_.get();
+        this->JacMain(J, t, q.main);
+        SD::JD::linalg::dot(out.variation, J, q.variation);
     }
 }
 
@@ -105,64 +92,61 @@ void VariationalOdeSys<T, N, OdeType>::Rhs(T* out, const T& t, const T* q) const
 // VariationalOdeSys Jac
 // ----------------------------------------------------------------------------
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const{
-    const size_t n = this->nsys_main();
-    if constexpr (MainRhsSupportsDuals<2>){
-        using DDual = DualType<T, N, 2>;
-        DDual::with_default_nvars(n,
-            [&](){
-                auto out_dduals = ddual_scratch_.template request<N>(n);
+template<typename T, typename SD, typename OdeType>
+void VariationalOdeSys<T, SD, OdeType>::Jac(JacMat& out, const T& t, const State& q) const{
+    using S = value_t<T, SD>;
+    if constexpr (AD_JAC){
+        // One main Rhs call with 2nd order duals. The gradient of f_i holds row i of J in its
+        // values, and row i of dJ/dq*delta_q in its own gradients, dotted with delta_q
+        decltype(auto) out_duals = dual2_scratch_.get();
+        decltype(auto) seeds = seed2_scratch_.get();
+        xdiff::set_seeds<T, SD>(seeds, q.main);
+        ode_.Rhs(out_duals, t, seeds);
 
-                ode_.Rhs(out_dduals.data(), t, SeedVec<T, N, 2>{q, int(n), 2});
+        const auto row_i = [](const dual_t<T, SD, 2>& fi){
+            return std::tie(fi.grad());
+        };
+        SD::JD::linalg::for_each_row([](S& J_ij, const dual_t<T, SD, 1>& dfi_dqj){
+            J_ij = dfi_dqj.value();
+        }, row_i, std::tie(out[0]), out_duals);
 
-                MutView<T, ndspan::Layout::F, 2*N, 2*N> m(out, 2*n, 2*n);
-                for (size_t i=0; i<n; i++){
-                    for (size_t j=0; j<n; j++){
-                        m(i, j) = m(i+n, j+n) = out_dduals[i].get_diff_wrt(j);
-                        m(i, j+n) = 0;
-                        T sum = 0;
-                        for (size_t k=0; k<n; k++){
-                            sum += out_dduals[i].get_diff_wrt(k, j) * q[n+k];
-                        }
-                        m(i+n, j) = sum;
-                    }
-                }
-            }
-        );
+        SD::JD::linalg::for_each_row([&q](S& B_ij, const dual_t<T, SD, 1>& dfi_dqj){
+            B_ij = 0;
+            SD::for_each([&B_ij](const S& d2fi_dqj_dqk, const S& dq_k){
+                B_ij += d2fi_dqj_dqk * dq_k;
+            }, dfi_dqj.grad(), q.variation);
+        }, row_i, std::tie(out[1]), out_duals);
     } else {
+        this->JacMain(out[0], t, q.main);
+        this->delta_J(out[1], t, q);
+    }
+}
 
-        auto jm_worker = scratch_.template request<N*N>(n*n);
-        T* mat = jm_worker.data();
-        if constexpr (JP_MAIN == JacPolicy::Exact || JP_MAIN == JacPolicy::Nullable){
-            if constexpr (JP_MAIN == JacPolicy::Exact){
-                ode_.Jac(mat, t, q);
-            } else if (ode_.Jac != nullptr) {
-                ode_.Jac(mat, t, q);
-            } else { // Finite differences fallback
-                this->jacmat_findiffs(mat, t, q);
-            }
+template<typename T, typename SD, typename OdeType>
+void VariationalOdeSys<T, SD, OdeType>::JacMain(MainJacMat& out, const T& t, const MainState& q) const{
+    using S = value_t<T, SD>;
+    if constexpr (JP_MAIN == JacPolicy::Exact){
+        ode_.Jac(out, t, q);
+    } else if constexpr (JP_MAIN == JacPolicy::Nullable){
+        if (ode_.Jac != nullptr){
+            ode_.Jac(out, t, q);
         } else { // Finite differences fallback
-            this->jacmat_findiffs(mat, t, q);
+            this->jacmat_findiffs(out, t, q);
         }
+    } else if constexpr (JP_MAIN == JacPolicy::Autodiff){
+        decltype(auto) out_duals = dual1_scratch_.get();
+        decltype(auto) seeds = seed1_scratch_.get();
+        xdiff::set_seeds<T, SD>(seeds, q);
+        ode_.Rhs(out_duals, t, seeds);
 
-        // Fill the 2 main diagonal blocks
-        for (size_t j=0; j<n; j++){
-            for (size_t i=0; i<n; i++){
-                out[2*j*n + i] = mat[j*n + i];
-                out[2*n*n + 2*j*n + n + i] = mat[j*n + i];
-                // fill the upper right block with zeros
-                out[2*n*n + 2*j*n + i] = 0;
-            }
-        }
-
-        // Now the main lower left block
-        this->delta_J(mat, t, q, nullptr);
-        for (size_t j=0; j<n; j++){
-            for (size_t i=0; i<n; i++){
-                out[n + 2*j*n + i] = mat[j*n + i];
-            }
-        }
+        // Row i of the Jacobian is the gradient of f_i
+        SD::JD::linalg::for_each_row([](S& out_ij, const S& dfi_dqj){
+            out_ij = dfi_dqj;
+        }, [](const dual_t<T, SD, 1>& fi){
+            return std::tie(fi.grad());
+        }, std::tie(out), out_duals);
+    } else { // Finite differences fallback
+        this->jacmat_findiffs(out, t, q);
     }
 }
 
@@ -171,24 +155,27 @@ void VariationalOdeSys<T, N, OdeType>::Jac(T* out, const T& t, const T* q) const
 // VariationalOdeSys finite differences
 // ----------------------------------------------------------------------------
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-void VariationalOdeSys<T, N, OdeType>::jacmat_findiffs(T* mat, const T& t, const T* q) const{
-    auto worker = scratch_.template request<3*N>(3*nsys_main());
-    jac_approx<T>(
-        [this](T* out_, const T& t_, const T* q_){
+template<typename T, typename SD, typename OdeType>
+void VariationalOdeSys<T, SD, OdeType>::jacmat_findiffs(MainJacMat& mat, const T& t, const MainState& q) const{
+    decltype(auto) x = x_scratch_.get();
+    decltype(auto) y1 = y1_scratch_.get();
+    decltype(auto) y2 = y2_scratch_.get();
+    jac_approx_autostep<T, SD>(
+        [this](MainState& out_, const T& t_, const MainState& q_){
             this->ode_.Rhs(out_, t_, q_);
         },
-        mat, worker.data(), t, q, nullptr, atol_, nsys_main()
+        mat, x, y1, y2, t, q, atol_
     );
 }
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-void VariationalOdeSys<T, N, OdeType>::delta_J(T* mat, const T& t, const T* q, const T* dt) const{
+template<typename T, typename SD, typename OdeType>
+void VariationalOdeSys<T, SD, OdeType>::delta_J(MainJacMat& mat, const T& t, const State& q) const{
     /*
     Requires 4 rhs evaluations per derivative, but only for the bottom left half
     So should be more efficient than using central finite differences on the
     full (augmented) system.
     */
+    using S = value_t<T, SD>;
 
     const T EPS = std::numeric_limits<T>::epsilon();
     // Second derivatives amplify roundoff by 1/h^2, so the sqrt(EPS) step used for
@@ -198,36 +185,51 @@ void VariationalOdeSys<T, N, OdeType>::delta_J(T* mat, const T& t, const T* q, c
     // giving h ~ EPS^(1/4) and an error of ~ sqrt(EPS).
     const T EPS_4TH = sqrt(sqrt(EPS));
 
-    const size_t n = this->nsys_main();
-    auto worker = scratch_.template request<3*N>(3*n);
+    decltype(auto) x = x_scratch_.get();
+    decltype(auto) y1 = y1_scratch_.get();
+    decltype(auto) y2 = y2_scratch_.get();
+    decltype(auto) f0 = f0_scratch_.get();
+    decltype(auto) col = col_scratch_.get();
 
-    T* x = worker.data();
-    T* y1 = worker.data() + n;
-    T* y2 = worker.data() + 2*n;
+    copy_state<SD>(x, q.main);
+    ode_.Rhs(f0, t, q.main); // unperturbed evaluation, for the pure second derivatives
 
-    std::fill(mat, mat + n*n, 0); // initialize the entire block to zero, since we will be adding to it in the loops below
-    std::copy(q, q + n, x);
-    const T* const delta_q = q + n;
-    for (size_t j=0; j<n; j++){ // d/dq_j
-        T* col = mat + j*n; // j-th column of the bottom left block
+    // Column j of the block, d/dq_j of J*delta_q, into col
+    SD::JD::linalg::for_each_column([](S& mat_ij, const S& col_i){
+        mat_ij = col_i;
+    }, [&](S& xj, const S& qj, const T& atol_j){
+
+        const T h_j = EPS_4TH * max_ref(atol_j, T(abs(qj)));
+        SD::for_each([](S& col_i){
+            col_i = 0;
+        }, col);
 
         // Now iterating over the index k,
         // which is contracted with delta_q[k] in the final result
         // for each (i, j) element of the bottom left block
-        for (size_t k=0; k<n; k++){ // d/dq_k
+        SD::for_each([&](S& xk, const S& qk, const S& dq_k, const T& atol_k){ // d/dq_k
 
-            const T abs_qj = abs(q[j]);
-            const T abs_qk = abs(q[k]);
-            T h_j, h_k, h_sq;
-            if (dt != nullptr){
-                h_j = dt[j];
-                h_k = dt[k];
-                h_sq = h_j*h_k;
-            } else {
-                h_j = EPS_4TH * max_ref(atol_, abs_qj);
-                h_k = EPS_4TH * max_ref(atol_, abs_qk);
-                h_sq = h_j*h_k;
+            if (&xk == &xj){
+                // The 4-point stencil below degenerates when both perturbations
+                // act on the same axis: it collapses to f[j+1] - f[j-1], which is a
+                // first derivative, not a second one. The pure second derivative
+                // needs the central 3-point stencil instead.
+                xj = qj + h_j;
+                ode_.Rhs(y1, t, x);
+
+                xj = qj - h_j;
+                ode_.Rhs(y2, t, x);
+
+                xj = qj; // x[j] restored
+                const T h_sq = h_j*h_j;
+                SD::for_each([&](S& col_i, const S& y1_i, const S& y2_i, const S& f0_i){
+                    // final value = delta_q[j] * d^2f^i/dx_j^2
+                    col_i += dq_k * (y1_i + y2_i - f0_i - f0_i) / h_sq;
+                }, col, y1, y2, f0);
+                return;
             }
+
+            const T h_k = EPS_4TH * max_ref(atol_k, T(abs(qk)));
 
             /*
             f[j-1, k+1]     f[j+1, k+1]
@@ -241,76 +243,53 @@ void VariationalOdeSys<T, N, OdeType>::delta_J(T* mat, const T& t, const T* q, c
             f[j-1, k-1]     f[j+1, k-1]
             */
 
-            if (j == k){
-                // The 4-point stencil below degenerates when both perturbations
-                // act on the same axis: it collapses to f[j+1] - f[j-1], which is a
-                // first derivative, not a second one. The pure second derivative
-                // needs the central 3-point stencil instead.
-                x[j] = q[j] + h_j;
-                ode_.Rhs(y1, t, x);
-
-                x[j] = q[j] - h_j;
-                ode_.Rhs(y2, t, x);
-                for (size_t i=0; i<n; i++){
-                    y1[i] += y2[i];
-                }
-
-                x[j] = q[j]; // unperturbed evaluation
-                ode_.Rhs(y2, t, x);
-                for (size_t i=0; i<n; i++){
-                    // final value = delta_q[j] * d^2f^i/dx_j^2
-                    col[i] += delta_q[j] * (y1[i] - 2*y2[i]) / h_sq;
-                }
-                continue; // x[j] is already restored
-            }
-
             // Bottom left evaluation
-            x[j] = q[j] - h_j;
-            x[k] = q[k] - h_k;
+            xj = qj - h_j;
+            xk = qk - h_k;
             ode_.Rhs(y1, t, x);
 
             // Upper right evaluation
-            x[j] = q[j] + h_j;
-            x[k] = q[k] + h_k;
+            xj = qj + h_j;
+            xk = qk + h_k;
             ode_.Rhs(y2, t, x);
 
             // Combine them into one of the two temporaries
-            for (size_t i=0; i<n; i++){
-                y1[i] += y2[i];
-            }
+            SD::for_each([](S& y1_i, const S& y2_i){
+                y1_i += y2_i;
+            }, y1, y2);
 
             // Upper left evaluation
-            x[j] = q[j] - h_j;
+            xj = qj - h_j;
             ode_.Rhs(y2, t, x);
-            for (size_t i=0; i<n; i++){
-                y1[i] -= y2[i];
-            }
+            SD::for_each([](S& y1_i, const S& y2_i){
+                y1_i -= y2_i;
+            }, y1, y2);
 
             // Lower right evaluation
-            x[j] = q[j] + h_j;
-            x[k] = q[k] - h_k;
+            xj = qj + h_j;
+            xk = qk - h_k;
             ode_.Rhs(y2, t, x);
-            for (size_t i=0; i<n; i++){
+            const T four_h_sq = 4*h_j*h_k;
+            SD::for_each([&](S& col_i, const S& y1_i, const S& y2_i){
                 // final value = delta_q[k] * df^i/(dx_j dx_k)
-                col[i] += delta_q[k] * (y1[i] - y2[i]) / (4*h_sq);
-            }
-            x[k] = q[k]; // reset x[k] to its original value
-        }
-        x[j] = q[j]; // reset x[j] to its original value
-    }
+                col_i += dq_k * (y1_i - y2_i) / four_h_sq;
+            }, col, y1, y2);
+
+            xj = qj; // reset x[j] and x[k] to their original values
+            xk = qk;
+        }, x, q.main, q.variation, atol_);
+
+        return std::tie(col);
+    }, std::tie(mat), x, q.main, atol_);
 }
 
 
 
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-VariationalSolver<S, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events) : Base(VariationalOdeSys<T, N, OdeType>(ode, q0.size(),atol), t0,
-    !q0.data() || !delta_q0.data() ?
-    View1D<T, 2*N>{nullptr, 2*q0.size()} :
-    View1D<T, 2*N>{
-        join_arrays(q0, delta_q0).data(),
-        2*q0.size()
-    }, rtol, atol, min_step, max_step, stepsize, dir, std::move(events)), worker(4*q0.size()), tmp_state_(2*q0.size()), period_(period), t_next_(t0+period*dir), t_last_(t0) {
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+VariationalSolver<S, T, SD, OdeType, SP, Derived>::VariationalSolver(OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> events) :
+    Base(VariationalOdeSys<T, SD, OdeType>(std::move(ode), q0, atol), t0, normalized_ics(q0), std::move(rtol), atol, min_step, max_step, stepsize, dir, std::move(events)),
+    flag_state_(this->vector_ics()), current_scratch_(this->vector_ics()), period_(period), t_next_(t0+period*dir), t_last_(t0) {
 
     if (period <= 0){
         throw std::runtime_error("The renormalization period must be positive");
@@ -324,50 +303,59 @@ VariationalSolver<S, T, N, SP, OdeType, Derived>::VariationalSolver(OdeType ode,
             }
         }
     }
-    
-    const T* ics_vector = this->vector_ics().data();
-    std::copy(ics_vector, ics_vector + 2*q0.size(), tmp_state_.data());
-
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::elapsed_time() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+auto VariationalSolver<S, T, SD, OdeType, SP, Derived>::normalized_ics(State q0) -> State{
+    detail::normalized<T, SD>(q0.variation, q0.variation);
+    return q0;
+}
+
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::elapsed_time() const{
     return this->t() - this->t_ics();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::stretching_number() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::stretching_number() const{
+    if (flagged){
+        // The deviation vector was just renormalized, so the new period starts at unit norm.
+        // The solver holds the old one until the next Adv_Impl applies it.
+        return T(0);
+    }
     // TODO : cache the stretching number, since calling fill_current_vector interpolates every time.
-    const size_t nsys = this->nsys()/2;
-    this->fill_current_vector(this->worker.data());
-    return log(norm(this->worker.data()+nsys, nsys));
+    decltype(auto) q = current_scratch_.get();
+    this->fill_current_vector(q);
+    return log(detail::state_norm<T, SD>(q.variation));
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::kick() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::kick() const{
+    if (flagged){
+        // At the renormalization time t() == t_last_: the kick of the period that just ended
+        return (logksi_ - logksi_last_)/(period_*this->direction());
+    }
     return stretching_number()/(this->t() - t_last_);
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::period() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::period() const{
     return period_;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::log_ksi() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::log_ksi() const{
     return logksi_ + this->stretching_number();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::lyapunov_exponent() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::lyapunov_exponent() const{
     return np == 0 ? T{0} : T(log_ksi()/elapsed_time());
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<S, T, N, SP, OdeType, Derived>::Reset(){
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<S, T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    const T* ics_vector = this->vector_ics().data();
-    std::copy(ics_vector, ics_vector + this->nsys(), tmp_state_.data());
     t_last_ = this->t_ics();
     t_next_ = t_last_ + period_*this->direction();
     np = 0;
@@ -376,39 +364,21 @@ void VariationalSolver<S, T, N, SP, OdeType, Derived>::Reset(){
     logksi_last_ = 0;
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<S, T, N, SP, OdeType, Derived>::RhsMain(T* out, const T& t, const T* q) const{
-    this->ode().ode().Rhs(out, t, q); //fills the first half (nsys) entries
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<S, T, SD, OdeType, SP, Derived>::RhsMain(MainState& out, const T& t, const MainState& q) const{
+    this->ode().ode().Rhs(out, t, q);
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<S, T, N, SP, OdeType, Derived>::JacMain(T* out, const T& t, const T* q) const{
-    // Mirrors the dispatch in VariationalOdeSys: an explicitly provided Jacobian is used
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<S, T, SD, OdeType, SP, Derived>::JacMain(MainJacMat& out, const T& t, const MainState& q) const{
+    // The dispatch of VariationalOdeSys: an explicitly provided Jacobian is used
     // whenever it exists, and a Nullable one that is null at runtime falls back to
     // finite differences rather than being called.
-    constexpr JacPolicy JP_MAIN = VariationalOdeSys<T, N, OdeType>::JP_MAIN;
-
-    const auto& main_ode = this->ode().ode();
-
-    if constexpr (JP_MAIN == JacPolicy::Exact){
-        main_ode.Jac(out, t, q);
-        return;
-    } else if constexpr (JP_MAIN == JacPolicy::Nullable){
-        if (main_ode.Jac != nullptr){
-            main_ode.Jac(out, t, q);
-            return;
-        }
-    }
-
-    jac_approx<T>(
-        [this](T* out_, const T& t_, const T* q_){
-            this->RhsMain(out_, t_, q_);
-        }, out, worker.data(), t, q, nullptr, this->atol(), this->nsys()/2
-    );
+    this->ode().JacMain(out, t, q);
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<S, T, N, SP, OdeType, Derived>::ReAdjust(const T* /*new_vector*/){
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<S, T, SD, OdeType, SP, Derived>::ReAdjust(const State& /*new_vector*/){
     // assertion, not an error, as the ReAdjust member function is restricted to the internal machinery and not intended for public use.
     assert(false && "ReAdjust is not supported in VariationalSolver because it would interfere with the renormalization process.");
 }
@@ -419,276 +389,134 @@ void VariationalSolver<S, T, N, SP, OdeType, Derived>::ReAdjust(const T* /*new_v
 // accessors above so that internal callers never pay for a virtual dispatch.
 // ----------------------------------------------------------------------------
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<S, T, N, SP, OdeType, Derived>::get_rhs_main(T* out, const T& t, const T* q) const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_rhs_main(MainState& out, const T& t, const MainState& q) const{
     RhsMain(out, t, q);
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-void VariationalSolver<S, T, N, SP, OdeType, Derived>::get_jac_main(T* out, const T& t, const T* q) const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_jac_main(MainJacMat& out, const T& t, const MainState& q) const{
     JacMain(out, t, q);
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::get_elapsed_time() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_elapsed_time() const{
     return elapsed_time();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::get_kick() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_kick() const{
     return kick();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::get_period() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_period() const{
     return period();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::get_log_ksi() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_log_ksi() const{
     return log_ksi();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::get_lyapunov_exponent() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_lyapunov_exponent() const{
     return lyapunov_exponent();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-T VariationalSolver<S, T, N, SP, OdeType, Derived>::get_stretching_number() const{
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_stretching_number() const{
     return stretching_number();
 }
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-Array1D<T, 2*N> VariationalSolver<S, T, N, SP, OdeType, Derived>::join_arrays(View1D<T, N> q0, View1D<T, N> delta_q0){
-    assert(q0.size() == delta_q0.size() && "q0 and delta_q0 must have the same size");
-    Array1D<T, 2*N> tmp(2*q0.size());
-    std::copy(q0.data(), q0.data() + q0.size(), tmp.data());
-    std::copy(delta_q0.data(), delta_q0.data() + delta_q0.size(), tmp.data()+q0.size());
-    detail::normalized(tmp.data(), tmp.data(), q0.size());
-    return tmp;
-}
 
 
-namespace detail{
+// template<typename T, size_t N>
+// std::unique_ptr<ODE<T, N>> VariationalODE<T, N>::clone() const{
+//     return std::make_unique<VariationalODE<T, N>>(*this);
+// }
 
-template<typename T>
-void normalized(T* out, const T* src, size_t nsys){
-    T N = norm(src+nsys, nsys);
-    for (size_t i=0; i<nsys; i++){
-        out[i] = src[i];
-        out[i+nsys] /= N;
-    }
-}
+// template<typename T, size_t N>
+// const std::vector<T>& VariationalODE<T, N>::renorm_times() const{
+//     return renorm_times_;
+// }
 
-} // namespace ode::detail
+// template<typename T, size_t N>
+// const std::vector<T>& VariationalODE<T, N>::lyap_values() const{
+//     return lyap_values_;
+// }
 
+// template<typename T, size_t N>
+// const std::vector<T>& VariationalODE<T, N>::kick_values() const{
+//     return kick_values_;
+// }
 
-template<typename T, size_t N>
-std::unique_ptr<ODE<T, N>> VariationalODE<T, N>::clone() const{
-    return std::make_unique<VariationalODE<T, N>>(*this);
-}
+// template<typename T, size_t N>
+// void VariationalODE<T, N>::clear(){
+//     Base::clear();
+//     renorm_times_ = std::vector<T>{};
+//     lyap_values_ = std::vector<T>{};
+//     kick_values_ = std::vector<T>{};
+// }
 
-template<typename T, size_t N>
-const std::vector<T>& VariationalODE<T, N>::renorm_times() const{
-    return renorm_times_;
-}
+// template<typename T, size_t N>
+// void VariationalODE<T, N>::reset(){
+//     Base::reset();
+//     renorm_times_ = std::vector<T>{};
+//     lyap_values_ = std::vector<T>{};
+//     kick_values_ = std::vector<T>{};
+// }
 
-template<typename T, size_t N>
-const std::vector<T>& VariationalODE<T, N>::lyap_values() const{
-    return lyap_values_;
-}
+// template<typename T, size_t N>
+// const ChaoticSolver<T, N, UtilPolicy::RichVirtual>* VariationalODE<T, N>::solver() const {
+//     return static_cast<const ChaoticSolver<T, N, UtilPolicy::RichVirtual>*>(Base::solver());
+// }
 
-template<typename T, size_t N>
-const std::vector<T>& VariationalODE<T, N>::kick_values() const{
-    return kick_values_;
-}
-
-template<typename T, size_t N>
-void VariationalODE<T, N>::clear(){
-    Base::clear();
-    renorm_times_ = std::vector<T>{};
-    lyap_values_ = std::vector<T>{};
-    kick_values_ = std::vector<T>{};
-}
-
-template<typename T, size_t N>
-void VariationalODE<T, N>::reset(){
-    Base::reset();
-    renorm_times_ = std::vector<T>{};
-    lyap_values_ = std::vector<T>{};
-    kick_values_ = std::vector<T>{};
-}
-
-template<typename T, size_t N>
-const ChaoticSolver<T, N, UtilPolicy::RichVirtual>* VariationalODE<T, N>::solver() const {
-    return static_cast<const ChaoticSolver<T, N, UtilPolicy::RichVirtual>*>(Base::solver());
-}
-
-template<typename T, size_t N>
-void VariationalODE<T, N>::register_state(){
-    Base::register_state();
-    renorm_times_.push_back(this->solver()->get_time());
-    lyap_values_.push_back(this->solver()->get_lyapunov_exponent());
-    kick_values_.push_back(this->solver()->get_kick());
-}
+// template<typename T, size_t N>
+// void VariationalODE<T, N>::register_state(){
+//     Base::register_state();
+//     renorm_times_.push_back(this->solver()->get_time());
+//     lyap_values_.push_back(this->solver()->get_lyapunov_exponent());
+//     kick_values_.push_back(this->solver()->get_kick());
+// }
 
 
-template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args){
+template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
+pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args){
 
     constexpr SolverPolicy SP = UP == UtilPolicy::Virtual ? SolverPolicy::Virtual : SolverPolicy::RichVirtual;
 
-    return choose_integrator_case<pbox::Box<ChaoticSolver<T, 2*N, UP>>>(method,
+    return choose_integrator_case<pbox::Box<ChaoticSolver<T, SD, UP>>>(method,
         [&]<Stepper S>(){
-            using Solver = typename ::ode::detail::SolverTypeGetter<S, T, N, SP, OdeType>::type;
-            return pbox::make_box<VariationalSolver<
-                S,
-                typename Solver::value_type,
-                Solver::NSYS,
-                SP,
-                OdeType>>(std::move(ode), t0, q0, delta_q0, period, std::forward<Args>(args)...);
+            return pbox::make_box<VariationalSolver<S, T, SD, OdeType, SP>>(std::move(ode), std::move(t0), std::move(q0), std::move(period), std::forward<Args>(args)...);
         }
     );
 }
 
 
-template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
-auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step, T max_step, T stepsize, int direction, EventList<T> events){
-    return VariationalSolver<S, T, N, SP, OdeType, void>(std::move(ode), t0, q0, delta_q0, period, rtol, atol, min_step, max_step, stepsize, direction, std::move(events));
+template<SolverPolicy SP, Stepper S, typename T, typename SD, typename OdeType>
+auto getVariationalSolver(OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, real_state_t<T, VarSD<SD>> rtol, real_state_t<T, VarSD<SD>> atol, T min_step, T max_step, T stepsize, int direction, EventList<T, state_t<T, VarSD<SD>>> events){
+    return VariationalSolver<S, T, SD, OdeType, SP, void>(std::move(ode), std::move(t0), std::move(q0), std::move(period), std::move(rtol), std::move(atol), min_step, max_step, stepsize, direction, std::move(events));
 }
 
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-template<size_t Order>
-requires (detail::FullRhsSupportsDuals<T, N, OdeType, Order> && N > 0)
-void VariationalOdeSys<T, N, OdeType>::Rhs(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const{
-    /*
-    TODO
-    Is the first branch indeed preferable to the second one?
-    It requires both an Rhs and a Jac call of Duals<Order>, filling
-    N + N*N elements
-    However the second branch only calls Rhs a single time,
-    but using Duals<Order+1>
-    Maybe the branches should be reversed ?
-
-    TODO
-    We could also provide an overloaded Rhs for dynamic size N,
-    (and for specific Order, maybe just =1)
-    but for now the provided Jac(...) is enough. Also its very unlikely
-    that dynamic sized ODE systems will be used for variational equations,
-    let alone call a templated Rhs for autodiff. Compile-size N unlocks all features.
-    */
-
-    /*
-    Only the dual *width* is that of the augmented system (2*N), because the caller
-    differentiates with respect to all 2*N augmented variables. The loop bounds and
-    offsets stay at N: `out` and `q` hold 2*N entries in total, the original state in
-    [0, N) and the deviation vector in [N, 2*N).
-    */
-    using AugDual = DualType<T, 2*N, Order>;
-    if constexpr (MainRhsSupportsAugDuals<Order> && MainJacSupportsAugDuals<Order>){
-        std::array<AugDual, N*N> scratch_jacmat; // size n*n, what ode_.Jac fills
-        ode_.Rhs(out, t, q); // Fills the first half
-        ode_.Jac(scratch_jacmat.data(), t, q);
-        AugDual* delta_qdot = out + N;
-        std::fill(delta_qdot, delta_qdot+N, T{0});
-        for (size_t j=0; j<N; j++){
-            for (size_t i=0; i<N; i++){
-                delta_qdot[i] += scratch_jacmat[j*N + i] * q[N + j];
-            }
-        }
-    } else {
-        using AugDualHi = DualType<T, 2*N, Order+1>;
-        std::array<AugDualHi, N> scratch_duals; // n for the rhs
-        auto* rhs = scratch_duals.data();
-        ode_.Rhs(rhs, t, q.template with_order<Order+1>());
-        std::fill(out+N, out+2*N, T{0});
-        for (size_t j=0; j<N; j++){
-            out[j] = rhs[j].trimmed(); // Must truncate diff information. Besides it was always used for below.
-            for (size_t i=0; i<N; i++){
-                // Using q (and not trimming y)
-                // because as mentioned earlier, it is assumed that q only contains a value and a gradient
-                // with the gradient being exactly one along its index.
-                out[i+N] += rhs[i].trimmed_diff_wrt(j) * q[N + j];
-            }
-        }
-    }
-}
-
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
-template<size_t Order>
-requires (detail::FullJacSupportsDuals<T, N, OdeType, Order> && N > 0)
-void VariationalOdeSys<T, N, OdeType>::Jac(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const{
-    /*
-    As in the templated Rhs above, only the dual width is 2*N. The output is the
-    (2*N x 2*N) Jacobian of the augmented system in F-storage, built from the
-    (N x N) Jacobian of the main system and its derivatives:
-
-        [        J                0 ]
-        [ d(J)/dq * delta_q       J ]
-    */
-    using AugDual = DualType<T, 2*N, Order>;
-    if constexpr (MainJacSupportsAugDuals<Order+1>){
-        using AugDualHi = DualType<T, 2*N, Order+1>;
-        std::array<AugDualHi, N*N> scratch_jacmat; // size n*n
-        ode_.Jac(scratch_jacmat.data(), t, q.template with_order<Order+1>());
-        MutView<AugDualHi, ndspan::Layout::F, N, N> m_in{scratch_jacmat.data()};
-        MutView<AugDual, ndspan::Layout::F, 2*N, 2*N> m_out{out};
-        for (size_t i=0; i<N; i++){
-            for (size_t j=0; j<N; j++){
-                m_out(i, j) = m_out(i+N, j+N) = m_in(i, j).trimmed(); // upper left and lower right block
-                m_out(i, j+N) = T{0}; // upper right block
-
-                // lower left block: sum_k d(J_ik)/d(q_j) * delta_q_k.
-                // The contracted index k is the *column* of J; the differentiation
-                // is with respect to j, not the other way around.
-                m_out(i+N, j) = T{0};
-                for (size_t k=0; k<N; k++){
-                    m_out(i+N, j) += m_in(i, k).trimmed_diff_wrt(j) * q[N+k];
-                }
-            }
-        }
-    } else {
-        using DDual = DualType<T, 2*N, Order+2>;
-        std::array<DDual, N> scratch_duals; // n for the rhs
-
-        DDual* rhs = scratch_duals.data();
-        ode_.Rhs(rhs, t, q.template with_order<Order+2>());
-
-        MutView<AugDual, ndspan::Layout::F, 2*N, 2*N> m{out};
-        for (size_t i=0; i<N; i++){
-            for (size_t j=0; j<N; j++){
-                m(i, j) = m(i+N, j+N) = rhs[i].trimmed_diff_wrt(j).trimmed();
-                m(i, j+N) = T{0};
-                // d2(f_i)/(dq_k dq_j) == d(J_ik)/d(q_j) by symmetry of the Hessian
-                m(i+N, j) = T{0};
-                for (size_t k=0; k<N; k++){
-                    m(i+N, j) += rhs[i].trimmed_diff_wrt(k, j) * q[N+k];
-                }
-            }
-        }
-    }
-}
-
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 template<typename... Args>
-bool VariationalSolver<S, T, N, SP, OdeType, Derived>::Adv_Impl(Args&&... args) {
+bool VariationalSolver<S, T, SD, OdeType, SP, Derived>::Adv_Impl(Args&&... args) {
     if (flagged){
-        Base::ReAdjust(tmp_state_.data());
+        Base::ReAdjust(flag_state_);
         flagged = false;
     }
 
     const int d = this->direction();
     const bool success = Base::Adv_Impl(t_next_, std::forward<Args>(args)...);
     if (success && (this->t() == t_next_)){
-        const size_t nsys = this->nsys()/2;
         t_last_ = t_next_;
         t_next_ = this->t_ics() + (++np + 1UL)*period_*d;
-        this->fill_current_vector(tmp_state_.data());
+        this->fill_current_vector(flag_state_);
         logksi_last_ = logksi_;
-        logksi_ += log(norm(tmp_state_.data()+nsys, nsys));
-        detail::normalized(tmp_state_.data(), tmp_state_.data(), nsys);
+        logksi_ += log(detail::state_norm<T, SD>(flag_state_.variation));
+        detail::normalized<T, SD>(flag_state_.variation, flag_state_.variation);
         flagged = true;
         return true;
     } else if (success){

@@ -6,7 +6,8 @@
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/Core/VirtualTraits.hpp>
 #include <odecraft/Steppers/Steppers.hpp>
-
+#include <odecraft/Toolkit/Toolkit.hpp>
+#include "VariationalContract.hpp"
 
 namespace ode::chaos {
 
@@ -17,32 +18,52 @@ namespace ode::chaos {
 
 namespace detail{
 
-// out (size 2*nsys) and in (size 2*nsys) can be the same pointer
-template<typename T>
-void normalized(T* out, const T* src, size_t nsys);
+template<typename T, typename SD>
+T state_norm(const state_t<T, SD>& src){
+    T norm_sqr{0};
+    SD::for_each([&norm_sqr](const value_t<T, SD>& x){
+        norm_sqr += SD::norm_sqr(x);
+    }, src);
+    return sqrt(norm_sqr);
+}
+
+
+template<typename T, typename SD>
+state_t<T, SD>& normalized(state_t<T, SD>& out, const state_t<T, SD>& src){
+    T norm = state_norm<T, SD>(src);
+    SD::for_each([&norm](value_t<T, SD>& delta_x, const value_t<T, SD>& x){
+        delta_x = x / norm;
+    }, out, src);
+    return out;
+}
 
 } // namespace ode::chaos::detail
 
 
-template<typename T, size_t N, UtilPolicy UP>
+template<typename T, typename SD, UtilPolicy UP>
 class ChaoticSolver;
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived = void>
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class VariationalSolver;
 
-template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
+template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
+pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args);
 
 
-template<typename T, size_t N, UtilPolicy UP>
-class ChaoticSolver : public std::conditional_t<UP==UtilPolicy::RichVirtual, OdeRichSolver<T, 2*N>, OdeSolver<T, 2*N>>{
+// The solver integrates states of VarSD<SD>, the main state and its variation. MainState and
+// MainJacMat are those of the main system alone.
+template<typename T, typename SD, UtilPolicy UP>
+class ChaoticSolver : public std::conditional_t<UP==UtilPolicy::RichVirtual, OdeRichSolver<T, VarSD<SD>>, OdeSolver<T, VarSD<SD>>>{
 
 public:
 
-    // ACCESSORS
-    virtual void    get_rhs_main(T* out, const T& t, const T* q) const = 0;
+    using MainState = state_t<T, SD>;
+    using MainJacMat = jacmat_t<T, SD>;
 
-    virtual void    get_jac_main(T* out, const T& t, const T* q) const = 0;
+    // ACCESSORS
+    virtual void    get_rhs_main(MainState& out, const T& t, const MainState& q) const = 0;
+
+    virtual void    get_jac_main(MainJacMat& out, const T& t, const MainState& q) const = 0;
 
     virtual T       get_elapsed_time() const = 0;
 
@@ -74,82 +95,40 @@ sequence, so the definition no longer matches the declaration.
 
 // Duals of the *main* system's width (N). These guard the non-templated Rhs/Jac,
 // which seed duals over the N original variables only.
-template<typename T, size_t N, typename OdeType, size_t Order>
-inline constexpr bool MainRhsSupportsDuals = supportsDualRhs<OdeType, T, N, Order>;
+template<int Order, typename OdeType, typename T, typename SD>
+inline constexpr bool MainRhsSupportsDuals = supportsDualRhs<OdeType, Order, T, SD>;
 
-template<typename T, size_t N, typename OdeType, size_t Order>
-inline constexpr bool MainJacSupportsDuals = supportsDualJac<OdeType, T, N, Order>;
+template<int Order, typename OdeType, typename T, typename SD>
+inline constexpr bool MainJacSupportsDuals = supportsDualJac<OdeType, Order, T, SD>;
 
-// Duals of the *augmented* system's width (2*N). These guard the templated Rhs/Jac:
-// those receive duals differentiated with respect to all 2*N augmented variables, so
-// the main Rhs/Jac must accept that width, not N. Keeping the two families apart
-// matters for an OdeType whose Rhs is templated on the order but fixed at width N:
-// it satisfies the Main* traits yet cannot be called from the templated overloads.
-template<typename T, size_t N, typename OdeType, size_t Order>
-inline constexpr bool MainRhsSupportsAugDuals = supportsDualRhs<OdeType, T, 2*N, Order>;
 
-template<typename T, size_t N, typename OdeType, size_t Order>
-inline constexpr bool MainJacSupportsAugDuals = supportsDualJac<OdeType, T, 2*N, Order>;
-
-// First condition (... && ...) preferred, but if not, the second case is utilized
-template<typename T, size_t N, typename OdeType, size_t Order>
-inline constexpr bool FullRhsSupportsDuals =
-    (MainRhsSupportsAugDuals<T, N, OdeType, Order> && MainJacSupportsAugDuals<T, N, OdeType, Order>)
-    || MainRhsSupportsAugDuals<T, N, OdeType, Order+1>; // 2 conditions in order of preference
-
-// Two conditions in order of preference.
-// If the first condition is satisfied, see the scheme in the definition for how
-// it will be used. The second condition is a fallback, which also uses that scheme.
-template<typename T, size_t N, typename OdeType, size_t Order>
-inline constexpr bool FullJacSupportsDuals =
-    (MainJacSupportsAugDuals<T, N, OdeType, Order+1> || FullRhsSupportsDuals<T, N, OdeType, Order+2>);
 
 } // namespace ode::chaos::detail
 
 
-template<typename T, size_t N, hasRhsFunc<T> OdeType>
+template<typename T, typename SD, typename OdeType>
 struct VariationalOdeSys{
-
+    static_assert(hasRhsFunc<OdeType, T, state_t<T, SD>>, "The given OdeType does not have a proper Rhs");
 public:
-
+    using State = state_t<T, VarSD<SD>>;
+    using RealState = real_state_t<T, VarSD<SD>>;
+    using JacMat = jacmat_t<T, VarSD<SD>>;
+    using MainState = state_t<T, SD>;
+    using MainRealState = real_state_t<T, SD>;
+    using MainJacMat = jacmat_t<T, SD>;
     // same as in BaseSolver, but we need to redefine it here for the variational system
-    static constexpr JacPolicy JP_MAIN = getJacPolicy<T, N, OdeType>();
+    static constexpr JacPolicy JP_MAIN = getJacPolicy<T, SD, OdeType>();
 
-    /// @throws std::runtime_error if the Jacobian function for the main ODE system is not provided and `atol` is zero.
-    VariationalOdeSys(OdeType ode, size_t ode_nsys, T atol);
+    /// @throws std::runtime_error if finite differences of the main system may be needed and `atol.main` contains zeros.
+    VariationalOdeSys(OdeType ode, const State& q0, const RealState& atol);
 
     // Readable aliases for the namespace-scope traits above. The constraints below
     // must spell out the detail:: form (see the note there), but the function bodies
     // are free to use these.
-    template<size_t Order>
-    static constexpr bool MainRhsSupportsDuals = detail::MainRhsSupportsDuals<T, N, OdeType, Order>;
-    template<size_t Order>
-    static constexpr bool MainJacSupportsDuals = detail::MainJacSupportsDuals<T, N, OdeType, Order>;
-    template<size_t Order>
-    static constexpr bool MainRhsSupportsAugDuals = detail::MainRhsSupportsAugDuals<T, N, OdeType, Order>;
-    template<size_t Order>
-    static constexpr bool MainJacSupportsAugDuals = detail::MainJacSupportsAugDuals<T, N, OdeType, Order>;
-    template<size_t Order>
-    static constexpr bool FullRhsSupportsDuals = detail::FullRhsSupportsDuals<T, N, OdeType, Order>;
-    template<size_t Order>
-    static constexpr bool FullJacSupportsDuals = detail::FullJacSupportsDuals<T, N, OdeType, Order>;
-
-
-    // This Dual-supporting Rhs should not make the Jac provided below unutilized by the solver.
-    // In contrast, the appropriate Jac overload of this struct should be used by the solver
-    // no matter the availability of this Rhs overload.
-    //
-    // Passes n-order duals in the main Rhs and the main Jac
-    // or if Jac does not support that, passes (n+1)-order duals in the main Rhs
-    // Can be used to compute the Jacobian of the *full, augmented* system
-    // No point to call it to compute the Jacobian of the main system,
-    // since if this is unlocked, then OdeType::Rhs can be called with duals
-    //
-    // N > 0 is required so that the scratch arrays are allocated on the stack,
-    // since we cannot preallocate for every possible `Order`
-    template<size_t Order> // Not important feature, the Stepper will choose the Jac function anyway, not autodiff
-    requires (detail::FullRhsSupportsDuals<T, N, OdeType, Order> && N > 0)
-    void    Rhs(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const;
+    template<int Order>
+    static constexpr bool MainRhsSupportsDuals = detail::MainRhsSupportsDuals<Order, OdeType, T, SD>;
+    template<int Order>
+    static constexpr bool MainJacSupportsDuals = detail::MainJacSupportsDuals<Order, OdeType, T, SD>;
 
     /*
     For the variational part:
@@ -159,44 +138,50 @@ public:
         else if (JP_MAIN == Autodiff) : Just pass 1st order duals in the main Rhs
         else : use finite differences
     */
-    void    Rhs(T* out, const T& t, const T* q) const;
-
-    // Not ever required by the solver, the untemplated Jac is only (for some steppers) used
-    template<size_t Order>
-    requires (detail::FullJacSupportsDuals<T, N, OdeType, Order> && N > 0)
-    void    Jac(DualType<T, 2*N, Order>* out, const T& t, SeedVec<T, 2*N, Order> q) const;
+    void    Rhs(State& out, const T& t, const State& q) const;
 
     // Providing a Jacobian and not letting the solver use finite differences,
-    // only using them here as a final fallback.
-    void    Jac(T* out, const T& t, const T* q) const;
+    // only using them here as a final fallback. Both blocks come from 2nd order duals
+    // if the main Rhs accepts them, otherwise J from JacMain and dJ/dq*delta_q from delta_J.
+    void    Jac(JacMat& out, const T& t, const State& q) const;
+
+    // The Jacobian of the main system, with the same dispatch as the variational part of Rhs
+    void    JacMain(MainJacMat& out, const T& t, const MainState& q) const;
 
     const OdeType& ode() const;
 
-    constexpr size_t nsys_main() const;
-
 private:
 
-    void    jacmat_findiffs(T* mat, const T& t, const T* q) const;
+    // 1st order duals give f and J*delta_q in one main Rhs call
+    static constexpr bool AD_RHS = (JP_MAIN == JacPolicy::Autodiff);
+    // 2nd order duals give both blocks of the full Jacobian
+    static constexpr bool AD_JAC = detail::MainRhsSupportsDuals<2, OdeType, T, SD>;
+
+    void    jacmat_findiffs(MainJacMat& mat, const T& t, const MainState& q) const;
 
     // Computes the bottom left matrix of the full jacobian matrix,
     // which is d(J)/dq * delta_q, of dims = (N x N)
     // by performing central finite differences of 2nd diff order
-    void    delta_J(T* mat, const T& t, const T* q, const T* dt) const;
+    void    delta_J(MainJacMat& mat, const T& t, const State& q) const;
 
     OdeType ode_;
-    size_t nsys_ = N; // Size of the original system, without the variational equations (not the augmented system)
-    T atol_;
-
-    // The main Jacobian block (N*N), with the finite-difference worker (3*N) nested inside it.
-    // The dual pages exist only when the main Rhs accepts duals of that order.
-    [[no_unique_address]] mutable ::ode::detail::ScratchPageFor<T, N*N + 3*N> scratch_;
-    [[no_unique_address]] mutable ::ode::detail::ScratchPageIf<MainRhsSupportsDuals<1>, DualType<T, N, 1>, N> dual_scratch_;
-    [[no_unique_address]] mutable ::ode::detail::ScratchPageIf<MainRhsSupportsDuals<2>, DualType<T, N, 2>, N> ddual_scratch_;
+    MainRealState atol_;
+    [[no_unique_address]] ::ode::detail::scratch_if<!AD_RHS, MainJacMat> jm_scratch_;  // J, for J*delta_q
+    worker_t<MainState> x_scratch_, y1_scratch_, y2_scratch_;                   // finite differences
+    worker_t<MainState> f0_scratch_, col_scratch_;                               // delta_J
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_RHS, dual_state_t<T, SD, 1>> dual1_scratch_;
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_RHS, seed_state_t<T, SD, 1>> seed1_scratch_;
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_JAC, dual_state_t<T, SD, 2>> dual2_scratch_;
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_JAC, seed_state_t<T, SD, 2>> seed2_scratch_;
 };
 
 
-template<Stepper S, typename T, size_t N, SolverPolicy SP, hasRhsFunc<T> OdeType, typename Derived>
-class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, T, 2*N, SP, VariationalOdeSys<T, N, OdeType>, GetDerived<VariationalSolver<S, T, N, SP, OdeType, Derived>, Derived>>::type {
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, SP, T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, GetDerived<VariationalSolver<S, T, SD, OdeType, SP, Derived>, Derived>>::type {
+
+    // As ODECRAFT_DECLARE_STEPPER, qualified: the unqualified names would declare new templates in ode::chaos
+    template<typename, typename, typename, typename, SolverPolicy> friend class ::ode::BaseSolver;
+    template<typename, typename, typename, typename, SolverPolicy> friend class ::ode::RichSolver;
 
     /**
     This solvers integrates the coupled / augmented ODE system consisting of the original system and the variational equations. The state vector is of size 2*N, where the first N entries correspond to the state of the original system and the last N entries correspond to the deviation vector. The deviation vector is renormalized every "period" time units, and log_ksi keeps track of the logarithm of the stretching factor since the last renormalization. The user can retrieve the current value of the largest Lyapunov exponent using lyapunov_exponent(), which is computed as log_ksi divided by the elapsed time since the beginning of the integration.
@@ -215,33 +200,32 @@ class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, T, 2*N, SP, 
 
     */
 
-    using Base = typename ::ode::detail::SolverTypeGetter<S, T, 2*N, SP, VariationalOdeSys<T, N, OdeType>, GetDerived<VariationalSolver<S, T, N, SP, OdeType, Derived>, Derived>>::type;
+    using Base = ::ode::detail::SolverTypeGetter<S, SP, T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, GetDerived<VariationalSolver<S, T, SD, OdeType, SP, Derived>, Derived>>::type;
 
 public:
+    using State = state_t<T, VarSD<SD>>;
+    using RealState = real_state_t<T, VarSD<SD>>;
+    using JacMat = jacmat_t<T, VarSD<SD>>;
+    using MainState = state_t<T, SD>;
+    using MainJacMat = jacmat_t<T, SD>;
 
-    VariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T> events={});
+    // q0.main is the initial state of the main system, and q0.variation the deviation vector, which is normalized
+    VariationalSolver(OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T, State> events={});
+
+    void    RhsMain(MainState& out, const T& t, const MainState& q) const;
+    void    JacMain(MainJacMat& out, const T& t, const MainState& q) const;
 
     T       elapsed_time() const;
-
     T       stretching_number() const;
-
     T       kick() const;
-
     T       period() const;
-
     T       log_ksi() const;
-
     T       lyapunov_exponent() const;
-
     void    Reset();
 
-    void    RhsMain(T* out, const T& t, const T* q) const;
-
-    void    JacMain(T* out, const T& t, const T* q) const;
-
     // VIRTUAL INTERFACE ALIASES (overrides that forward to the non-virtual accessors)
-    void    get_rhs_main(T* out, const T& t, const T* q) const;
-    void    get_jac_main(T* out, const T& t, const T* q) const;
+    void    get_rhs_main(MainState& out, const T& t, const MainState& q) const;
+    void    get_jac_main(MainJacMat& out, const T& t, const MainState& q) const;
     T       get_elapsed_time() const;
     T       get_kick() const;
     T       get_period() const;
@@ -251,7 +235,7 @@ public:
 
 protected:
 
-    void    ReAdjust(const T* new_vector);
+    void    ReAdjust(const State& new_vector);
 
     template<typename... Args>
     bool Adv_Impl(Args&&... args);
@@ -259,10 +243,11 @@ protected:
 private:
     struct private_tag{};
 
-    static Array1D<T, 2*N> join_arrays(View1D<T, N> q0, View1D<T, N> delta_q0);
+    // q0 with its variation normalized
+    static State normalized_ics(State q0);
 
-    mutable Array1D<T, 4*N> worker;
-    Array1D<T, 2*N> tmp_state_;
+    State flag_state_; // the state at the last renormalization time, normalized, until ReAdjust applies it
+    worker_t<State> current_scratch_; // the current state, for stretching_number
     T period_;
     T t_next_; // the next time at which to renormalize
     T t_last_;
@@ -273,67 +258,68 @@ private:
 };
 
 
-template<typename T, size_t N>
-class VariationalODE : public ODE<T, N>{
+// template<typename T, size_t N>
+// class VariationalODE : public ODE<T, N>{
 
-public:
+// public:
 
-    using Base = ODE<T, N>;
+//     using Base = ODE<T, N>;
 
-    template<hasRhsFunc<T> OdeType>
-    VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T> events = {}, Stepper method = Stepper::RK45);
+//     template<hasRhsFunc<T> OdeType>
+//     VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T> events = {}, Stepper method = Stepper::RK45);
 
-    std::unique_ptr<ODE<T, N>> clone() const override;
+//     std::unique_ptr<ODE<T, N>> clone() const override;
 
-    const std::vector<T>& renorm_times() const;
+//     const std::vector<T>& renorm_times() const;
 
-    const std::vector<T>& lyap_values() const;
+//     const std::vector<T>& lyap_values() const;
 
-    const std::vector<T>& kick_values() const;
+//     const std::vector<T>& kick_values() const;
 
-    DEFAULT_RULE_OF_FOUR(VariationalODE)
+//     DEFAULT_RULE_OF_FOUR(VariationalODE)
 
-    void clear() override;
+//     void clear() override;
 
-    void reset() override;
+//     void reset() override;
 
-    const ChaoticSolver<T, N, UtilPolicy::RichVirtual>* solver() const;
+//     const ChaoticSolver<T, N, UtilPolicy::RichVirtual>* solver() const;
 
-protected:
+// protected:
 
-    void register_state() override;
+//     void register_state() override;
 
-private:
+// private:
 
-    std::vector<T> renorm_times_ = {};
-    std::vector<T> lyap_values_ = {};
-    std::vector<T> kick_values_ = {};
+//     std::vector<T> renorm_times_ = {};
+//     std::vector<T> lyap_values_ = {};
+//     std::vector<T> kick_values_ = {};
 
-};
-
-
-
-template<UtilPolicy UP, typename T, size_t N, hasRhsFunc<T> OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, 2*N, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, Args&&... args);
+// };
 
 
-template<SolverPolicy SP, Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType>
-auto getVariationalSolver(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events = {});
+
+template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
+pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args);
+
+
+template<SolverPolicy SP, Stepper S, typename T, typename SD, typename OdeType>
+auto getVariationalSolver(OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, real_state_t<T, VarSD<SD>> rtol, real_state_t<T, VarSD<SD>> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, state_t<T, VarSD<SD>>> events = {});
 
 } // namespace ode::chaos
 
 
 namespace ode::traits{
 
-template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, typename DerivedVS, size_t NBase>
-struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, N, SolverPolicy::Virtual, OdeType, DerivedVS>, T, NBase, SolverPolicy::Virtual> {
-    using type = chaos::ChaoticSolver<T, N, UtilPolicy::Virtual>;
+// The base solver asks with the SD it integrates, VarSD<SD>
+template<Stepper S, typename T, typename SD, typename OdeType, typename DerivedVS>
+struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, SD, OdeType, SolverPolicy::Virtual, DerivedVS>, T, chaos::VarSD<SD>, SolverPolicy::Virtual> {
+    using type = chaos::ChaoticSolver<T, SD, UtilPolicy::Virtual>;
 };
 
 
-template<Stepper S, typename T, size_t N, hasRhsFunc<T> OdeType, typename DerivedVS, size_t NBase>
-struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, N, SolverPolicy::RichVirtual, OdeType, DerivedVS>, T, NBase, SolverPolicy::RichVirtual> {
-    using type = chaos::ChaoticSolver<T, N, UtilPolicy::RichVirtual>;
+template<Stepper S, typename T, typename SD, typename OdeType, typename DerivedVS>
+struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, SD, OdeType, SolverPolicy::RichVirtual, DerivedVS>, T, chaos::VarSD<SD>, SolverPolicy::RichVirtual> {
+    using type = chaos::ChaoticSolver<T, SD, UtilPolicy::RichVirtual>;
 };
 
 } // namespace ode::traits

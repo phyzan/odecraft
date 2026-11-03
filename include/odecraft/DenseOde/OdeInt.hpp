@@ -1,163 +1,163 @@
-#pragma once
+// #pragma once
 
-#include <odecraft/OdeResult/OdeResult.hpp>
-#include <odecraft/Core/BaseSolver/BaseSolver.hpp>
-#include <odecraft/Core/SolverFactory.hpp> // IWYU pragma: keep
-
-
-namespace ode {
-
-// ============================================================================
-// DECLARATIONS
-// ============================================================================
+// #include <odecraft/OdeResult/OdeResult.hpp>
+// #include <odecraft/Core/BaseSolver/BaseSolver.hpp>
+// #include <odecraft/Core/SolverFactory.hpp> // IWYU pragma: keep
 
 
-template<typename T, size_t N>
-class EventCounter{
+// namespace ode {
 
-public:
+// // ============================================================================
+// // DECLARATIONS
+// // ============================================================================
 
-    EventCounter(std::vector<EventOptions> options);
 
-    DEFAULT_RULE_OF_FOUR(EventCounter)
+// template<typename T, size_t N>
+// class EventCounter{
 
-    int operator[](size_t i) const;
+// public:
 
-    bool count_it(size_t i);
+//     EventCounter(std::vector<EventOptions> options);
 
-    bool is_running() const;
+//     DEFAULT_RULE_OF_FOUR(EventCounter)
 
-    bool can_fit(size_t event)const;
+//     int operator[](size_t i) const;
 
-    size_t total()const;
+//     bool count_it(size_t i);
 
-private:
+//     bool is_running() const;
 
-    std::vector<EventOptions> _options;
-    std::vector<int> _counter;
-    std::vector<int> _period_counter;
-    size_t _total=0;
-    bool _is_running = true;
-};
+//     bool can_fit(size_t event)const;
 
-template<typename T, size_t N=0>
-class ODE{
+//     size_t total()const;
 
-public:
+// private:
 
-    template<hasRhsFunc<T> OdeType>
-    ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events={}, Stepper method=Stepper::RK45);
+//     std::vector<EventOptions> _options;
+//     std::vector<int> _counter;
+//     std::vector<int> _period_counter;
+//     size_t _total=0;
+//     bool _is_running = true;
+// };
 
-    DEFAULT_RULE_OF_FOUR(ODE)
+// template<typename T, size_t N=0>
+// class ODE{
 
-    virtual ~ODE() = default;
+// public:
 
-    void                        Rhs(T* out, const T& t, const T* q) const;
+//     template<hasRhsFunc<T> OdeType>
+//     ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events={}, Stepper method=Stepper::RK45);
 
-    void                        Jac(T* out, const T& t, const T* q) const;
+//     DEFAULT_RULE_OF_FOUR(ODE)
 
-    void                        Jac(T* out, const T& t, const T* q, const T* dt) const;
+//     virtual ~ODE() = default;
 
-    virtual std::unique_ptr<ODE<T, N>>  clone() const;
+//     void                        Rhs(T* out, const T& t, const T* q) const;
 
-    size_t                      nsys() const;
+//     void                        Jac(T* out, const T& t, const T* q) const;
 
-    bool                        integrate_until(
-        OdeResult<T, N>* out,
-        T t_max,
-        const std::vector<EventOptions>& event_options={},
-        int max_progress_reports=0,
-        observer_t<T> observer=nullptr
-    );
+//     void                        Jac(T* out, const T& t, const T* q, const T* dt) const;
 
-    bool                        integrate_until(
-        OdeResult<T, N>* out,
-        T t_max,
-        const std::vector<EventOptions>& event_options,
-        int max_progress_reports,
-        observer_t<T> observer,
-        const std::vector<T>& t_eval
-    );
+//     virtual std::unique_ptr<ODE<T, N>>  clone() const;
 
-    bool                        integrate(
-        OdeResult<T, N>* out,
-        T interval,
-        const std::vector<EventOptions>& event_options={},
-        int max_progress_reports=0,
-        observer_t<T> observer=nullptr
-    );
+//     size_t                      nsys() const;
 
-    bool                        integrate(
-        OdeResult<T, N>* out,
-        T interval,
-        const std::vector<EventOptions>& event_options,
-        int max_progress_reports,
-        observer_t<T> observer,
-        const std::vector<T>& t_eval
-    );
+//     bool                        integrate_until(
+//         OdeResult<T, N>* out,
+//         T t_max,
+//         const std::vector<EventOptions>& event_options={},
+//         int max_progress_reports=0,
+//         observer_t<T> observer=nullptr
+//     );
 
-    bool                        rich_integrate_until(
-        OdeSolution<T, N>& out,
-        T time,
-        const std::vector<EventOptions>& event_options={},
-        int max_progress_reports = 0,
-        observer_t<T> observer = nullptr
-    );
+//     bool                        integrate_until(
+//         OdeResult<T, N>* out,
+//         T t_max,
+//         const std::vector<EventOptions>& event_options,
+//         int max_progress_reports,
+//         observer_t<T> observer,
+//         const std::vector<T>& t_eval
+//     );
 
-    bool                        rich_integrate(
-        OdeSolution<T, N>& out,
-        T interval,
-        const std::vector<EventOptions>& event_options={},
-        int max_progress_reports = 0,
-        observer_t<T> observer = nullptr
-    );
+//     bool                        integrate(
+//         OdeResult<T, N>* out,
+//         T interval,
+//         const std::vector<EventOptions>& event_options={},
+//         int max_progress_reports=0,
+//         observer_t<T> observer=nullptr
+//     );
 
-    bool                        diverges() const;
+//     bool                        integrate(
+//         OdeResult<T, N>* out,
+//         T interval,
+//         const std::vector<EventOptions>& event_options,
+//         int max_progress_reports,
+//         observer_t<T> observer,
+//         const std::vector<T>& t_eval
+//     );
 
-    bool                        is_dead() const;
+//     bool                        rich_integrate_until(
+//         OdeSolution<T, N>& out,
+//         T time,
+//         const std::vector<EventOptions>& event_options={},
+//         int max_progress_reports = 0,
+//         observer_t<T> observer = nullptr
+//     );
 
-    size_t                      n_points() const;
+//     bool                        rich_integrate(
+//         OdeSolution<T, N>& out,
+//         T interval,
+//         const std::vector<EventOptions>& event_options={},
+//         int max_progress_reports = 0,
+//         observer_t<T> observer = nullptr
+//     );
 
-    View1D<T>                   t() const;
+//     bool                        diverges() const;
 
-    const T&                    t(size_t i) const;
+//     bool                        is_dead() const;
 
-    View2D<T, 0, N>             q() const;
+//     size_t                      n_points() const;
 
-    View1D<T, N>                q(size_t i) const;
+//     View1D<T>                   t() const;
 
-    const OrbitData<T>&         event_data(const std::string& event) const;
+//     const T&                    t(size_t i) const;
 
-    double                      runtime() const;
+//     View2D<T, 0, N>             q() const;
 
-    const OdeRichSolver<T, N>*  solver() const;
+//     View1D<T, N>                q(size_t i) const;
 
-    virtual void                clear();
+//     const OrbitData<T>&         event_data(const std::string& event) const;
 
-    virtual void                reset();
+//     double                      runtime() const;
 
-protected:
+//     const OdeRichSolver<T, N>*  solver() const;
 
-    ODE(size_t nsys);
+//     virtual void                clear();
 
-    pbox::owner<OdeRichSolver<T, N>> solver_;
-    OrbitData<T> orbit_data_;
-    EventData<T> event_data_;
-    std::vector<size_t> cached_idx_;
-    double runtime_ = 0;
+//     virtual void                reset();
 
-    template<hasRhsFunc<T> OdeType>
-    void                                        init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events={}, Stepper method = Stepper::RK45);
+// protected:
 
-    virtual void                                register_state();
+//     ODE(size_t nsys);
 
-    virtual void                                register_event(size_t i);
+//     pbox::owner<OdeRichSolver<T, N>> solver_;
+//     OrbitData<T> orbit_data_;
+//     EventData<T> event_data_;
+//     std::vector<size_t> cached_idx_;
+//     double runtime_ = 0;
 
-private:
+//     template<hasRhsFunc<T> OdeType>
+//     void                                        init(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T> events={}, Stepper method = Stepper::RK45);
 
-    template<typename ArrayType, typename Callable>
-    bool                                        priv_integrate_until(OdeResult<T, N>* out, const T& t_max, ArrayType&& t_store, const std::vector<EventOptions>& event_options, Callable&& observer, int max_progress_reports, bool interpolate);
+//     virtual void                                register_state();
 
-};
+//     virtual void                                register_event(size_t i);
 
-} // namespace ode
+// private:
+
+//     template<typename ArrayType, typename Callable>
+//     bool                                        priv_integrate_until(OdeResult<T, N>* out, const T& t_max, ArrayType&& t_store, const std::vector<EventOptions>& event_options, Callable&& observer, int max_progress_reports, bool interpolate);
+
+// };
+
+// } // namespace ode
