@@ -20,7 +20,16 @@ VariationalOdeSys<T, SD, OdeType>::VariationalOdeSys(OdeType ode, const State& q
         decltype(auto) seeds = seed1_scratch_.get();
         SD::resize_like(duals, q0.main);
         SD::resize_like(seeds, q0.main);
-    } else {
+    }
+
+    if constexpr (AD_DIR){
+        decltype(auto) dir_in = dir_in_scratch_.get();
+        decltype(auto) dir_out = dir_out_scratch_.get();
+        SD::resize_like(dir_in, q0.main);
+        SD::resize_like(dir_out, q0.main);
+    }
+
+    if constexpr (JAC_RHS){
         MainJacMat J{};
         SD::JD::resize_like(J, q0.main);
         jm_scratch_ = J;
@@ -63,7 +72,21 @@ const OdeType& VariationalOdeSys<T, SD, OdeType>::ode() const{
 template<typename T, typename SD, typename OdeType>
 void VariationalOdeSys<T, SD, OdeType>::Rhs(State& out, const T& t, const State& q) const{
     using S = value_t<T, SD>;
-    if constexpr (AD_RHS){
+    if constexpr (AD_DIR){
+        // One main Rhs call with duals that carry a single derivative, along delta_q: for
+        // q + eps*delta_q, f_i is the value of each, and (J*delta_q)_i its derivative
+        using D = detail::dir_dual_t<T, SD>;
+        decltype(auto) q_dir = dir_in_scratch_.get();
+        decltype(auto) f_dir = dir_out_scratch_.get();
+        SD::for_each([](D& x_i, const S& q_i, const S& dq_i){
+            x_i = D(q_i, typename D::state_type{dq_i});
+        }, q_dir, q.main, q.variation);
+        ode_.Rhs(f_dir, t, q_dir);
+        SD::for_each([](S& f_i, S& df_i, const D& y_i){
+            f_i = y_i.value();
+            df_i = y_i.grad()[0];
+        }, out.main, out.variation, f_dir);
+    } else if constexpr (AD_RHS){
         // One main Rhs call with 1st order duals: f_i is the value of each, and (J*delta_q)_i
         // its gradient dotted with delta_q, without forming J
         decltype(auto) out_duals = dual1_scratch_.get();
@@ -80,10 +103,20 @@ void VariationalOdeSys<T, SD, OdeType>::Rhs(State& out, const T& t, const State&
     } else {
         ode_.Rhs(out.main, t, q.main); // Main system filled
 
-        // The Jacobian of the main system, then the variational part
-        decltype(auto) J = jm_scratch_.get();
-        this->JacMain(J, t, q.main);
-        SD::JD::linalg::dot(out.variation, J, q.variation);
+        // The variational part: J times delta_q if J is given, else the difference along delta_q
+        if constexpr (JAC_RHS){
+            if constexpr (JP_MAIN == JacPolicy::Nullable){
+                if (ode_.Jac == nullptr){
+                    this->jvp_findiffs(out.variation, t, q);
+                    return;
+                }
+            }
+            decltype(auto) J = jm_scratch_.get();
+            ode_.Jac(J, t, q.main);
+            SD::JD::linalg::dot(out.variation, J, q.variation);
+        } else {
+            this->jvp_findiffs(out.variation, t, q);
+        }
     }
 }
 
@@ -166,6 +199,48 @@ void VariationalOdeSys<T, SD, OdeType>::jacmat_findiffs(MainJacMat& mat, const T
         },
         mat, x, y1, y2, t, q, atol_
     );
+}
+
+template<typename T, typename SD, typename OdeType>
+void VariationalOdeSys<T, SD, OdeType>::jvp_findiffs(MainState& out, const T& t, const State& q) const{
+    // A central difference along delta_q, with the step that moves q by sqrt(EPS) of its scale,
+    // max(atol, |q|) in the rms sense, as each column of jac_approx does along one axis
+    using S = value_t<T, SD>;
+    const T EPS_SQRT = sqrt(std::numeric_limits<T>::epsilon());
+
+    T scale_sqr = 0;
+    T dq_sqr = 0;
+    SD::for_each([&scale_sqr, &dq_sqr](const S& q_i, const S& dq_i, const T& atol_i){
+        const T w_i = max_ref(atol_i, T(abs(q_i)));
+        scale_sqr += w_i*w_i;
+        dq_sqr += SD::norm_sqr(dq_i);
+    }, q.main, q.variation, atol_);
+
+    if (dq_sqr == 0){
+        SD::for_each([](S& out_i){
+            out_i = 0;
+        }, out);
+        return;
+    }
+
+    const T h = EPS_SQRT * sqrt(scale_sqr/dq_sqr);
+    decltype(auto) x = x_scratch_.get();
+    decltype(auto) y = y1_scratch_.get();
+
+    SD::for_each([&h](S& x_i, const S& q_i, const S& dq_i){
+        x_i = q_i + h*dq_i;
+    }, x, q.main, q.variation);
+    ode_.Rhs(out, t, x);
+
+    SD::for_each([&h](S& x_i, const S& q_i, const S& dq_i){
+        x_i = q_i - h*dq_i;
+    }, x, q.main, q.variation);
+    ode_.Rhs(y, t, x);
+
+    const T two_h = 2*h;
+    SD::for_each([&two_h](S& out_i, const S& y_i){
+        out_i = (out_i - y_i) / two_h;
+    }, out, y);
 }
 
 template<typename T, typename SD, typename OdeType>
