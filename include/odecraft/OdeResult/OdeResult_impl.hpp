@@ -10,38 +10,17 @@ namespace ode{
 //                                      OrbitData<T>
 //===========================================================================================
 
-template<typename T>
-size_t OrbitData<T>::size() const {
-    return t.size();
-}
-
-template<typename T>
-View1D<T> OrbitData<T>::t_view() const {
-    return View1D<T>(t.data(), t.size());
-}
-
-template<typename T>
-View2D<T, 0, 0> OrbitData<T>::q_view() const {
-    return View2D<T, 0, 0>(q.data(), t.size(), nsys);
-}
-
-template<typename T>
-const T& OrbitData<T>::get_q(size_t i, size_t j) const {
-    assert(i < t.size() && j < nsys && "Index out of range");
-    return q[i * nsys + j];
-}
-
-template<typename T>
-void OrbitData<T>::clear_points() {
+template<typename T, typename SD>
+void OrbitData<T, SD>::clear_all() {
     t = std::vector<T>();
-    q = std::vector<T>();
+    q = std::vector<State>();
 }
 
-template<typename T>
-void OrbitData<T>::add_point(const T& t_val, const T* q_val) {
-    t.push_back(t_val);
+template<typename T, typename SD>
+void OrbitData<T, SD>::add_point(T time, State state) {
+    t.push_back(std::move(time));
     try {
-        q.insert(q.end(), q_val, q_val + nsys);
+        q.push_back(std::move(state));
     } catch (...) {
         t.pop_back();  // rollback
         throw;
@@ -53,39 +32,34 @@ void OrbitData<T>::add_point(const T& t_val, const T* q_val) {
 //                                      EventData<T>
 //===========================================================================================
 
-template<typename T>
-EventData<T>::EventData(const EventData& other, const std::vector<size_t>& start_indices) : event_names_(other.event_names_), nsys_(other.nsys_) {
+template<typename T, typename SD>
+EventData<T, SD>::EventData(const EventData& other, const std::vector<size_t>& start_indices) : event_names_(other.event_names_){
     assert(start_indices.size() == other.size() && "Start indices size must match the number of events");
     for (size_t i = 0; i < other.size(); ++i) {
         size_t start_idx = start_indices[i];
         assert(start_idx <= other.data(i).t.size() && "Start index must be within the bounds of the provided data");
-        OrbitData<T> data;
-        const OrbitData<T>& other_data = other.data(i);
+        OrbitData<T, SD> data;
+        const OrbitData<T, SD>& other_data = other.data(i);
         data.t = std::vector<T>(other_data.t.begin() + start_idx, other_data.t.end());
-        data.q = std::vector<T>(other_data.q.begin() + start_idx * nsys_, other_data.q.end());
-        data.nsys = other_data.nsys;
+        data.q = std::vector<T>(other_data.q.begin() + start_idx, other_data.q.end());
         event_data_.push_back(std::move(data));
     }
 }
 
-template<typename T>
-size_t EventData<T>::size() const {
+template<typename T, typename SD>
+size_t EventData<T, SD>::size() const {
     return event_data_.size();
 }
 
-template<typename T>
-size_t EventData<T>::nsys() const {
-    return nsys_;
-}
 
-template<typename T>
-const OrbitData<T>& EventData<T>::data(size_t i) const {
+template<typename T, typename SD>
+const OrbitData<T, SD>& EventData<T, SD>::data(size_t i) const {
     assert(i < event_data_.size() && "Event index out of range");
     return event_data_[i];
 }
 
-template<typename T>
-const OrbitData<T>& EventData<T>::data(const std::string& name) const {
+template<typename T, typename SD>
+const OrbitData<T, SD>& EventData<T, SD>::data(const std::string& name) const {
     auto it = std::ranges::find(event_names_, name);
     if (it == event_names_.end()){
         throw std::runtime_error("Event name not found: " + name);
@@ -94,130 +68,120 @@ const OrbitData<T>& EventData<T>::data(const std::string& name) const {
     return this->data(index);
 }
 
-template<typename T>
-const std::string& EventData<T>::name(size_t i) const {
+template<typename T, typename SD>
+const std::string& EventData<T, SD>::name(size_t i) const {
     assert(i < event_names_.size() && "Event index out of range");
     return event_names_[i];
 }
 
-template<typename T>
-OrbitData<T>& EventData<T>::data(size_t i) {
+template<typename T, typename SD>
+OrbitData<T, SD>& EventData<T, SD>::data(size_t i) {
     assert(i < event_data_.size() && "Event index out of range");
     return event_data_[i];
 }
 
-template<typename T>
-void EventData<T>::allocate_event(const std::string& name) {
+template<typename T, typename SD>
+void EventData<T, SD>::allocate_event(std::string name) {
     if (name.empty()){
         throw std::runtime_error("Event name cannot be empty");
     }
     if (std::ranges::find(event_names_, name) != event_names_.end()){
         throw std::runtime_error("Event name already exists");
     }
-    event_data_.emplace_back(OrbitData<T>{.t = {}, .q = {}, .nsys = nsys_});
+    event_data_.emplace_back(OrbitData<T, SD>{.t = {}, .q = {}});
 
     try {
-        event_names_.push_back(name);
+        event_names_.push_back(std::move(name));
     } catch (...) {
         event_data_.pop_back();  // rollback
         throw;
     }
 }
 
-template<typename T>
-void EventData<T>::add_event(size_t event_idx, const T& t, const T* q) {
+template<typename T, typename SD>
+void EventData<T, SD>::add_event(size_t event_idx, T t, State q) {
     if (event_idx >= event_names_.size()){
         throw std::runtime_error("Event index out of range");
     }
-    OrbitData<T>& data = event_data_[event_idx];
-    data.t.push_back(t);
-    try {
-        data.q.insert(data.q.end(), q, q + nsys_);
-    } catch (...) {
-        data.t.pop_back();  // rollback
-        throw;
-    }
+    OrbitData<T, SD>& data = event_data_[event_idx];
+    // TODO Make a more general "try_append" otherwise will need to do `try` and `catch` everywhere
+    data.t.push_back(std::move(t));
+    data.q.push_back(std::move(q));
 }
 
-template<typename T>
-void EventData<T>::add_event(const std::string& name, const T& t, const T* q) {
+template<typename T, typename SD>
+void EventData<T, SD>::add_event(const std::string& name, T t, State q) {
     auto it = std::ranges::find(event_names_, name);
     if (it == event_names_.end()){
         throw std::runtime_error("Event name not found: " + name);
     }
     size_t index = std::distance(event_names_.begin(), it);
-    this->add_event(index, t, q);
+    this->add_event(index, std::move(t), std::move(q));
 }
 
-template<typename T>
-void EventData<T>::clear_points() {
+template<typename T, typename SD>
+void EventData<T, SD>::clear_points() {
     for (auto& data : event_data_){
-        data = OrbitData<T>{.t = {}, .q = {}, .nsys = nsys_};
+        data = OrbitData<T, SD>{.t = {}, .q = {}};
     }
 }
 
 
 //===========================================================================================
-//                                      OdeResult<T, N>
+//                                      OdeResult<T, SD>
 //===========================================================================================
 
-template<typename T, size_t N>
-OdeResult<T, N>::OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message) : event_data_(std::move(event_data)), status_(status), runtime_(runtime), message_(std::move(message)) {
+template<typename T, typename SD>
+OdeResult<T, SD>::OdeResult(const OrbitData<T, SD>& orbit_data, EventData<T, SD> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message) : event_data_(std::move(event_data)), message_(std::move(message)), status_(status), runtime_(runtime) {
     assert(orb_idx_start <= orbit_data.t.size() && "Start index must be within the bounds of the provided data");
     // Copy only the relevant portion of the data based on the provided start indices
     orbit_data_.t = std::vector<T>(orbit_data.t.begin() + orb_idx_start, orbit_data.t.end());
-    orbit_data_.q = std::vector<T>(orbit_data.q.begin() + orb_idx_start * orbit_data.nsys, orbit_data.q.end());
-    orbit_data_.nsys = orbit_data.nsys;
+    orbit_data_.q = std::vector<T>(orbit_data.q.begin() + orb_idx_start, orbit_data.q.end());
 }
 
-template<typename T, size_t N>
-std::unique_ptr<OdeResult<T, N>> OdeResult<T, N>::clone() const {
-    return std::make_unique<OdeResult<T, N>>(*this);
+template<typename T, typename SD>
+std::unique_ptr<OdeResult<T, SD>> OdeResult<T, SD>::clone() const {
+    return std::make_unique<OdeResult<T, SD>>(*this);
 }
 
-template<typename T, size_t N>
-View1D<T> OdeResult<T, N>::t() const {
-    return View1D<T>{orbit_data_.t.data(), orbit_data_.t.size()};
+template<typename T, typename SD>
+const std::vector<T>& OdeResult<T, SD>::t() const {
+    return this->orbit_data_.t;
 }
 
-template<typename T, size_t N>
-View2D<T, 0, N> OdeResult<T, N>::q() const {
-    return View2D<T, 0, N>{orbit_data_.q.data(), orbit_data_.t.size(), orbit_data_.nsys};
+template<typename T, typename SD>
+const std::vector<state_t<T, SD>>& OdeResult<T, SD>::q() const {
+    return orbit_data_.q;
 }
 
-template<typename T, size_t N>
-const T& OdeResult<T, N>::q(size_t i, size_t j) const{
-    assert(i < orbit_data_.t.size() && j < orbit_data_.nsys && "Index out of range");
-    return orbit_data_.q[i * orbit_data_.nsys + j];
-}
 
-template<typename T, size_t N>
-const EventData<T>& OdeResult<T, N>::event_data() const{
+template<typename T, typename SD>
+const EventData<T, SD>& OdeResult<T, SD>::event_data() const{
     return event_data_;
 }
 
-template<typename T, size_t N>
-bool OdeResult<T, N>::success() const {
+template<typename T, typename SD>
+bool OdeResult<T, SD>::success() const {
     return status_ == StepperStatus::NewStep || status_ == StepperStatus::BetweenSteps;
 }
 
-template<typename T, size_t N>
-StepperStatus OdeResult<T, N>::status() const {
+template<typename T, typename SD>
+StepperStatus OdeResult<T, SD>::status() const {
     return status_;
 }
 
-template<typename T, size_t N>
-double OdeResult<T, N>::runtime() const {
+template<typename T, typename SD>
+double OdeResult<T, SD>::runtime() const {
     return runtime_;
 }
 
-template<typename T, size_t N>
-const std::string& OdeResult<T, N>::message() const {
+template<typename T, typename SD>
+const std::string& OdeResult<T, SD>::message() const {
     return message_;
 }
 
-template<typename T, size_t N>
-void OdeResult<T, N>::examine() const {
+template<typename T, typename SD>
+void OdeResult<T, SD>::examine() const {
     std::cout << std::endl << "\n=============== OdeResult ===============\n"
               << "\tPoints           : " << orbit_data_.t.size() << "\n"
               << "\tSuccess          : " << (success() ? "true" : "false") << "\n"
@@ -226,12 +190,12 @@ void OdeResult<T, N>::examine() const {
               << event_log();
 }
 
-template<typename T, size_t N>
-std::string OdeResult<T, N>::event_log() const {
+template<typename T, typename SD>
+std::string OdeResult<T, SD>::event_log() const {
     std::ostringstream oss;
     oss << "\tEvents:\n\t----------\n";
     for (size_t i=0; i<event_data_.size(); i++){
-        const OrbitData<T>& data = event_data_.data(i);
+        const OrbitData<T, SD>& data = event_data_.data(i);
         const std::string& name = event_data_.name(i);
         oss << "\t    " << name << " : " << data.t.size() << "\n";
     }
@@ -245,20 +209,20 @@ std::string OdeResult<T, N>::event_log() const {
 // ==================================================================================
 
 
-template<typename T, size_t N>
-OdeSolution<T, N>::OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator) : OdeResult<T, N>(std::move(orbit_data), std::move(event_data), orb_idx_start, status, runtime, std::move(message)), interpolator_(interpolator.clone()) {}
+template<typename T, typename SD>
+OdeSolution<T, SD>::OdeSolution(OrbitData<T, SD> orbit_data, EventData<T, SD> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message, const interp::uni::Interpolator<T, SD>& interpolator) : OdeResult<T, SD>(std::move(orbit_data), std::move(event_data), orb_idx_start, status, runtime, std::move(message)), interpolator_(interpolator.clone()) {}
 
 
-template<typename T, size_t N>
-Array1D<T, N> OdeSolution<T, N>::operator()(const T& t) const{
+template<typename T, typename SD>
+void OdeSolution<T, SD>::operator()(State& out, const T& t) const{
     if (this->t().size() == 0){
         // Only a solution whose integration never started has no points, and no interpolator.
         throw std::runtime_error("OdeSolution has no dense output: " + this->message());
     }
-    return interpolator_->make_call(t);
+    return interpolator_->call(out, t);
 }
 
-template<typename T, size_t N>
-std::unique_ptr<OdeResult<T, N>> OdeSolution<T, N>::clone() const{ return std::make_unique<OdeSolution<T, N>>(*this);}
+template<typename T, typename SD>
+std::unique_ptr<OdeResult<T, SD>> OdeSolution<T, SD>::clone() const{ return std::make_unique<OdeSolution<T, SD>>(*this);}
 
 } // namespace ode

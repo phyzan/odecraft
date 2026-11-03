@@ -8,37 +8,28 @@ namespace ode{
 
 
 //===========================================================================================
-//                                      OdeResult<T, N>
+//                                      OdeResult<T, SD>
 //===========================================================================================
 
 //ODERESULT STRUCT TO ENCAPSULATE THE RESULT OF AN ODE INTEGRATION
 
-template<typename T>
+template<typename T, typename SD>
 struct OrbitData{
+    using State = state_t<T, SD>;
     std::vector<T> t;
-    std::vector<T> q; //flattened 2D array
-    size_t nsys;
+    std::vector<State> q;
 
-    size_t size() const;
+    void clear_all();
 
-    View1D<T> t_view() const;
-
-    View2D<T, 0, 0> q_view() const;
-
-    const T& get_q(size_t i, size_t j) const;
-
-    void clear_points();
-
-    void add_point(const T& t_val, const T* q_val);
+    void add_point(T time, State state);
 };
 
 
-template<typename T>
+template<typename T, typename SD>
 class EventData{
 
 public:
-
-    EventData(size_t nsys) : nsys_(nsys) {}
+    using State = state_t<T, SD>;
 
     EventData() = default;
 
@@ -48,38 +39,36 @@ public:
 
     size_t size() const;
 
-    size_t nsys() const;
+    const OrbitData<T, SD>& data(size_t i) const;
 
-    const OrbitData<T>& data(size_t i) const;
-
-    const OrbitData<T>& data(const std::string& name) const;
+    const OrbitData<T, SD>& data(const std::string& name) const;
 
     const std::string& name(size_t i) const;
 
-    OrbitData<T>& data(size_t i);
+    OrbitData<T, SD>& data(size_t i);
 
-    void allocate_event(const std::string& name);
+    void allocate_event(std::string name);
 
-    void add_event(size_t event_idx, const T& t, const T* q);
+    void add_event(size_t event_idx, T t, State q);
 
-    void add_event(const std::string& name, const T& t, const T* q);
+    void add_event(const std::string& name, T t, State q);
 
     void clear_points();
 
 private:
 
-    std::vector<OrbitData<T>> event_data_;
+    std::vector<OrbitData<T, SD>> event_data_;
     std::vector<std::string> event_names_;
-    size_t nsys_ = 0;
 };
 
 
-template<typename T, size_t N=0>
+template<typename T, typename SD>
 class OdeResult{
 
 public:
+    using State = state_t<T, SD>;
 
-    OdeResult(const OrbitData<T>& orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message);
+    OdeResult(const OrbitData<T, SD>& orbit_data, EventData<T, SD> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message);
 
     OdeResult() = default;
 
@@ -87,13 +76,11 @@ public:
 
     virtual ~OdeResult() = default;
 
-    View1D<T> t() const;
+    const std::vector<T>& t() const;
 
-    View2D<T, 0, N> q() const;
+    const std::vector<State>& q() const;
 
-    const T& q(size_t i, size_t j) const;
-
-    const EventData<T>& event_data() const;
+    const EventData<T, SD>& event_data() const;
 
     bool success() const;
 
@@ -107,42 +94,43 @@ public:
 
     std::string event_log() const;
 
-    virtual std::unique_ptr<OdeResult<T, N>> clone() const;
+    virtual std::unique_ptr<OdeResult<T, SD>> clone() const;
 
 private:
 
-    OrbitData<T> orbit_data_;
-    EventData<T> event_data_;
+    OrbitData<T, SD> orbit_data_;
+    EventData<T, SD> event_data_;
+    std::string message_ = "No integration performed";
     StepperStatus status_ = StepperStatus::BadICS;
     double runtime_ = 0;
-    std::string message_ = "No integration performed";
+
 };
 
 
 // ============================================================================================
-//                                      OdeSolution<T, N>
+//                                      OdeSolution<T, SD>
 // ============================================================================================
 
 
-template<typename T, size_t N=0>
-class OdeSolution : public OdeResult<T, N>{
+template<typename T, typename SD>
+class OdeSolution : public OdeResult<T, SD>{
 
 public:
-
+    using State = state_t<T, SD>;
     OdeSolution() = default;
 
-    OdeSolution(OrbitData<T> orbit_data, EventData<T> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message, const interp::uni::Interpolator<T, N>& interpolator);
+    OdeSolution(OrbitData<T, SD> orbit_data, EventData<T, SD> event_data, size_t orb_idx_start, StepperStatus status, double runtime, std::string message, const interp::uni::Interpolator<T, SD>& interpolator);
 
     template<typename Interp>
-    OdeSolution(OdeResult<T, N>&& other, Interp&& interpolator) : OdeResult<T, N>(std::move(other)), interpolator_(std::forward<Interp>(interpolator)) {}
+    OdeSolution(OdeResult<T, SD>&& other, Interp&& interpolator) : OdeResult<T, SD>(std::move(other)), interpolator_(std::forward<Interp>(interpolator)) {}
 
-    Array1D<T, N> operator()(const T& t) const;
+    void operator()(State& out, const T& t) const;
 
-    std::unique_ptr<OdeResult<T, N>> clone() const override;
+    std::unique_ptr<OdeResult<T, SD>> clone() const override;
 
 private:
 
-    interp::uni::InterpObj<T, N> interpolator_;
+    interp::uni::InterpObj<T, SD> interpolator_;
 
 };
 
