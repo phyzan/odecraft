@@ -13,7 +13,7 @@ namespace ode::chaos{
 
 template<typename T, typename SD, typename OdeType>
 VariationalOdeSys<T, SD, OdeType>::VariationalOdeSys(OdeType ode, const State& q0, const RealState& atol) : ode_(std::move(ode)), atol_(atol.main),
-    x_scratch_(q0.main), y1_scratch_(q0.main), y2_scratch_(q0.main), f0_scratch_(q0.main), col_scratch_(q0.main) {
+    x_scratch_(q0.main), y1_scratch_(q0.main), y2_scratch_(q0.main), col_scratch_(q0.main) {
 
     if constexpr (AD_RHS){
         decltype(auto) duals = dual1_scratch_.get();
@@ -22,11 +22,21 @@ VariationalOdeSys<T, SD, OdeType>::VariationalOdeSys(OdeType ode, const State& q
         SD::resize_like(seeds, q0.main);
     }
 
-    if constexpr (AD_DIR){
+    if constexpr (AD_DIR || AD_JAC_DIR){
         decltype(auto) dir_in = dir_in_scratch_.get();
-        decltype(auto) dir_out = dir_out_scratch_.get();
         SD::resize_like(dir_in, q0.main);
+    }
+
+    if constexpr (AD_DIR){
+        decltype(auto) dir_out = dir_out_scratch_.get();
         SD::resize_like(dir_out, q0.main);
+    }
+
+    if constexpr (AD_JAC_DIR){
+        decltype(auto) duals = jac_out_scratch_.get();
+        decltype(auto) seeds = jac_seed_scratch_.get();
+        SD::resize_like(duals, q0.main);
+        SD::resize_like(seeds, q0.main);
     }
 
     if constexpr (JAC_RHS){
@@ -129,7 +139,31 @@ inline void VariationalOdeSys<T, SD, OdeType>::Rhs(State& out, const T& t, const
 template<typename T, typename SD, typename OdeType>
 void VariationalOdeSys<T, SD, OdeType>::Jac(JacMat& out, const T& t, const State& q) const{
     using S = value_t<T, SD>;
-    if constexpr (AD_JAC){
+    if constexpr (AD_JAC_DIR){
+        // One main Rhs call with duals over the main state, whose scalars carry the derivative
+        // along delta_q. The gradient of f_i holds row i of J in its values, and row i of
+        // dJ/dq*delta_q in their derivatives: no second derivatives along other directions
+        using D = detail::dir_dual_t<T, SD>;
+        decltype(auto) q_dir = dir_in_scratch_.get();
+        decltype(auto) seeds = jac_seed_scratch_.get();
+        decltype(auto) out_duals = jac_out_scratch_.get();
+        SD::for_each([](D& x_i, const S& q_i, const S& dq_i){
+            x_i = D(q_i, typename D::state_type{dq_i});
+        }, q_dir, q.main, q.variation);
+        xdiff::set_seeds<D, SD, 1>(seeds, q_dir);
+        ode_.Rhs(out_duals, t, seeds);
+
+        const auto row_i = [](const detail::jac_dual_t<T, SD>& fi){
+            return std::tie(fi.grad());
+        };
+        SD::JD::linalg::for_each_row([](S& J_ij, const D& dfi_dqj){
+            J_ij = dfi_dqj.value();
+        }, row_i, std::tie(out[0]), out_duals);
+
+        SD::JD::linalg::for_each_row([](S& B_ij, const D& dfi_dqj){
+            B_ij = dfi_dqj.grad()[0];
+        }, row_i, std::tie(out[1]), out_duals);
+    } else if constexpr (AD_JAC){
         // One main Rhs call with 2nd order duals. The gradient of f_i holds row i of J in its
         // values, and row i of dJ/dq*delta_q in its own gradients, dotted with delta_q
         decltype(auto) out_duals = dual2_scratch_.get();
@@ -247,9 +281,9 @@ void VariationalOdeSys<T, SD, OdeType>::jvp_findiffs(MainState& out, const T& t,
 template<typename T, typename SD, typename OdeType>
 void VariationalOdeSys<T, SD, OdeType>::delta_J(MainJacMat& mat, const T& t, const State& q) const{
     /*
-    Requires 4 rhs evaluations per derivative, but only for the bottom left half
-    So should be more efficient than using central finite differences on the
-    full (augmented) system.
+    Column j of the block is d/dq_j of J*delta_q: the mixed second derivative of f along the axis j
+    and along delta_q. A 4-point stencil over these two directions gives it in 4 rhs evaluations,
+    so the block takes 4n of them.
     */
     using S = value_t<T, SD>;
 
@@ -264,96 +298,67 @@ void VariationalOdeSys<T, SD, OdeType>::delta_J(MainJacMat& mat, const T& t, con
     decltype(auto) x = x_scratch_.get();
     decltype(auto) y1 = y1_scratch_.get();
     decltype(auto) y2 = y2_scratch_.get();
-    decltype(auto) f0 = f0_scratch_.get();
     decltype(auto) col = col_scratch_.get();
 
-    copy_state<SD>(x, q.main);
-    ode_.Rhs(f0, t, q.main); // unperturbed evaluation, for the pure second derivatives
+    // The step along delta_q moves q by EPS^(1/4) of its scale, max(atol, |q|) in the rms sense
+    T scale_sqr = 0;
+    T dq_sqr = 0;
+    SD::for_each([&scale_sqr, &dq_sqr](const S& q_i, const S& dq_i, const T& atol_i){
+        const T w_i = max_ref(atol_i, T(abs(q_i)));
+        scale_sqr += w_i*w_i;
+        dq_sqr += SD::norm_sqr(dq_i);
+    }, q.main, q.variation, atol_);
 
-    // Column j of the block, d/dq_j of J*delta_q, into col
+    if (dq_sqr == 0){
+        // J*delta_q is zero for every q, and so is its derivative
+        SD::for_each([](S& col_i){
+            col_i = 0;
+        }, col);
+        SD::JD::linalg::for_each_column([](S& mat_ij, const S& col_i){
+            mat_ij = col_i;
+        }, [&col](const S& /*qj*/){
+            return std::tie(col);
+        }, std::tie(mat), q.main);
+        return;
+    }
+
+    const T eps = EPS_4TH * sqrt(scale_sqr/dq_sqr);
+
+    // Column j: [f(+h, +eps) - f(-h, +eps) - f(+h, -eps) + f(-h, -eps)] / (4*h*eps),
+    // with f(a, b) evaluated at q + a*e_j + b*delta_q
     SD::JD::linalg::for_each_column([](S& mat_ij, const S& col_i){
         mat_ij = col_i;
     }, [&](S& xj, const S& qj, const T& atol_j){
 
         const T h_j = EPS_4TH * max_ref(atol_j, T(abs(qj)));
-        SD::for_each([](S& col_i){
-            col_i = 0;
-        }, col);
 
-        // Now iterating over the index k,
-        // which is contracted with delta_q[k] in the final result
-        // for each (i, j) element of the bottom left block
-        SD::for_each([&](S& xk, const S& qk, const S& dq_k, const T& atol_k){ // d/dq_k
+        // Along +delta_q
+        SD::for_each([&eps](S& x_i, const S& q_i, const S& dq_i){
+            x_i = q_i + eps*dq_i;
+        }, x, q.main, q.variation);
+        const S xj_plus = xj;
+        xj = xj_plus + h_j;
+        ode_.Rhs(y1, t, x);
+        xj = xj_plus - h_j;
+        ode_.Rhs(y2, t, x);
+        SD::for_each([](S& col_i, const S& y1_i, const S& y2_i){
+            col_i = y1_i - y2_i;
+        }, col, y1, y2);
 
-            if (&xk == &xj){
-                // The 4-point stencil below degenerates when both perturbations
-                // act on the same axis: it collapses to f[j+1] - f[j-1], which is a
-                // first derivative, not a second one. The pure second derivative
-                // needs the central 3-point stencil instead.
-                xj = qj + h_j;
-                ode_.Rhs(y1, t, x);
+        // Along -delta_q
+        SD::for_each([&eps](S& x_i, const S& q_i, const S& dq_i){
+            x_i = q_i - eps*dq_i;
+        }, x, q.main, q.variation);
+        const S xj_minus = xj;
+        xj = xj_minus + h_j;
+        ode_.Rhs(y1, t, x);
+        xj = xj_minus - h_j;
+        ode_.Rhs(y2, t, x);
 
-                xj = qj - h_j;
-                ode_.Rhs(y2, t, x);
-
-                xj = qj; // x[j] restored
-                const T h_sq = h_j*h_j;
-                SD::for_each([&](S& col_i, const S& y1_i, const S& y2_i, const S& f0_i){
-                    // final value = delta_q[j] * d^2f^i/dx_j^2
-                    col_i += dq_k * (y1_i + y2_i - f0_i - f0_i) / h_sq;
-                }, col, y1, y2, f0);
-                return;
-            }
-
-            const T h_k = EPS_4TH * max_ref(atol_k, T(abs(qk)));
-
-            /*
-            f[j-1, k+1]     f[j+1, k+1]
-                ------------------
-                |        |       |
-                |        |       |
-                |-----f[j,k]-----|
-                |        |       |
-                |        |       |
-                ------------------
-            f[j-1, k-1]     f[j+1, k-1]
-            */
-
-            // Bottom left evaluation
-            xj = qj - h_j;
-            xk = qk - h_k;
-            ode_.Rhs(y1, t, x);
-
-            // Upper right evaluation
-            xj = qj + h_j;
-            xk = qk + h_k;
-            ode_.Rhs(y2, t, x);
-
-            // Combine them into one of the two temporaries
-            SD::for_each([](S& y1_i, const S& y2_i){
-                y1_i += y2_i;
-            }, y1, y2);
-
-            // Upper left evaluation
-            xj = qj - h_j;
-            ode_.Rhs(y2, t, x);
-            SD::for_each([](S& y1_i, const S& y2_i){
-                y1_i -= y2_i;
-            }, y1, y2);
-
-            // Lower right evaluation
-            xj = qj + h_j;
-            xk = qk - h_k;
-            ode_.Rhs(y2, t, x);
-            const T four_h_sq = 4*h_j*h_k;
-            SD::for_each([&](S& col_i, const S& y1_i, const S& y2_i){
-                // final value = delta_q[k] * df^i/(dx_j dx_k)
-                col_i += dq_k * (y1_i - y2_i) / four_h_sq;
-            }, col, y1, y2);
-
-            xj = qj; // reset x[j] and x[k] to their original values
-            xk = qk;
-        }, x, q.main, q.variation, atol_);
+        const T four_h_eps = 4*h_j*eps;
+        SD::for_each([&four_h_eps](S& col_i, const S& y1_i, const S& y2_i){
+            col_i = (col_i - y1_i + y2_i) / four_h_eps;
+        }, col, y1, y2);
 
         return std::tie(col);
     }, std::tie(mat), x, q.main, atol_);
