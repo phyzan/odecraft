@@ -7,10 +7,10 @@
 
 namespace ode{
 
-template<typename T, size_t N>
-template<hasRhsFunc<T> OdeType>
-ODE<T, N>::ODE(OdeType ode, T t0, View1D<T, N> q0, T rtol, T atol, T min_step, T max_step, T stepsize, int dir, EventList<T> events, Stepper method) : ODE(q0.size()){
-    init(ode, t0, q0, rtol, atol, min_step, max_step, stepsize, dir, std::move(events), method);
+template<typename T, typename SD>
+template<hasRhsFunc<T, state_t<T, SD>> OdeType>
+ODE<T, SD>::ODE(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> events, Stepper method) : ODE(q0.size()){
+    init(std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events), method);
 }
 
 } // namespace ode
