@@ -603,3 +603,6 @@ bool VariationalSolver<S, T, SD, OdeType, SP, Derived>::Adv_Impl(Args&&... args)
 }
 
 } // namespace ode
+
+
+// TODO Inlining seems to speedup some functions noticably
