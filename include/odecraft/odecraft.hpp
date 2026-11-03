@@ -23,7 +23,7 @@
 
 #include <odecraft/Steppers/Steppers_impl.hpp>
 
-// #include <odecraft/Chaos/VariationalSolvers_impl.hpp>
+#include <odecraft/Chaos/VariationalSolvers_impl.hpp>
 
 
 /**

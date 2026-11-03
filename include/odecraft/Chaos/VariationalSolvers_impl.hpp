@@ -69,8 +69,9 @@ const OdeType& VariationalOdeSys<T, SD, OdeType>::ode() const{
 // VariationalOdeSys Rhs
 // ----------------------------------------------------------------------------
 
+// inline: otherwise GCC keeps it out of line at -O3, and the steppers pay for the call on every evaluation
 template<typename T, typename SD, typename OdeType>
-void VariationalOdeSys<T, SD, OdeType>::Rhs(State& out, const T& t, const State& q) const{
+inline void VariationalOdeSys<T, SD, OdeType>::Rhs(State& out, const T& t, const State& q) const{
     using S = value_t<T, SD>;
     if constexpr (AD_DIR){
         // One main Rhs call with duals that carry a single derivative, along delta_q: for
