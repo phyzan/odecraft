@@ -11,6 +11,8 @@
 
 namespace ode::chaos{
 
+// ============================ VariationalODE ==============================
+
 template<typename T, typename SD, typename OdeType>
 VariationalOdeSys<T, SD, OdeType>::VariationalOdeSys(OdeType ode, const State& q0, const RealState& atol) : ode_(std::move(ode)), atol_(atol.main),
     x_scratch_(q0.main), y1_scratch_(q0.main), y2_scratch_(q0.main), col_scratch_(q0.main) {
@@ -363,9 +365,10 @@ void VariationalOdeSys<T, SD, OdeType>::delta_J(MainJacMat& mat, const T& t, con
         return std::tie(col);
     }, std::tie(mat), x, q.main, atol_);
 }
+// ==========================================================================
 
 
-
+// ============================ VariationalODE ==============================
 
 template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 VariationalSolver<S, T, SD, OdeType, SP, Derived>::VariationalSolver(OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> events) :
@@ -511,57 +514,6 @@ T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_stretching_number() con
 }
 
 
-
-// template<typename T, size_t N>
-// std::unique_ptr<ODE<T, N>> VariationalODE<T, N>::clone() const{
-//     return std::make_unique<VariationalODE<T, N>>(*this);
-// }
-
-// template<typename T, size_t N>
-// const std::vector<T>& VariationalODE<T, N>::renorm_times() const{
-//     return renorm_times_;
-// }
-
-// template<typename T, size_t N>
-// const std::vector<T>& VariationalODE<T, N>::lyap_values() const{
-//     return lyap_values_;
-// }
-
-// template<typename T, size_t N>
-// const std::vector<T>& VariationalODE<T, N>::kick_values() const{
-//     return kick_values_;
-// }
-
-// template<typename T, size_t N>
-// void VariationalODE<T, N>::clear(){
-//     Base::clear();
-//     renorm_times_ = std::vector<T>{};
-//     lyap_values_ = std::vector<T>{};
-//     kick_values_ = std::vector<T>{};
-// }
-
-// template<typename T, size_t N>
-// void VariationalODE<T, N>::reset(){
-//     Base::reset();
-//     renorm_times_ = std::vector<T>{};
-//     lyap_values_ = std::vector<T>{};
-//     kick_values_ = std::vector<T>{};
-// }
-
-// template<typename T, size_t N>
-// const ChaoticSolver<T, N, UtilPolicy::RichVirtual>* VariationalODE<T, N>::solver() const {
-//     return static_cast<const ChaoticSolver<T, N, UtilPolicy::RichVirtual>*>(Base::solver());
-// }
-
-// template<typename T, size_t N>
-// void VariationalODE<T, N>::register_state(){
-//     Base::register_state();
-//     renorm_times_.push_back(this->solver()->get_time());
-//     lyap_values_.push_back(this->solver()->get_lyapunov_exponent());
-//     kick_values_.push_back(this->solver()->get_kick());
-// }
-
-
 template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
 pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args){
 
@@ -606,8 +558,62 @@ bool VariationalSolver<S, T, SD, OdeType, SP, Derived>::Adv_Impl(Args&&... args)
         return false;
     }
 }
+// ==========================================================================
 
-} // namespace ode
+
+// ============================ VariationalODE ==============================
+
+template<typename T, typename SD>
+std::unique_ptr<ODE<T, VarSD<SD>>> VariationalODE<T, SD>::clone() const{
+    return std::make_unique<VariationalODE<T, SD>>(*this);
+}
+
+template<typename T, typename SD>
+const std::vector<T>& VariationalODE<T, SD>::renorm_times() const{
+    return renorm_times_;
+}
+
+template<typename T, typename SD>
+const std::vector<T>& VariationalODE<T, SD>::lyap_values() const{
+    return lyap_values_;
+}
+
+template<typename T, typename SD>
+const std::vector<T>& VariationalODE<T, SD>::kick_values() const{
+    return kick_values_;
+}
+
+template<typename T, typename SD>
+void VariationalODE<T, SD>::clear(){
+    Base::clear();
+    renorm_times_ = std::vector<T>{};
+    lyap_values_ = std::vector<T>{};
+    kick_values_ = std::vector<T>{};
+}
+
+template<typename T, typename SD>
+void VariationalODE<T, SD>::reset(){
+    Base::reset();
+    renorm_times_ = std::vector<T>{};
+    lyap_values_ = std::vector<T>{};
+    kick_values_ = std::vector<T>{};
+}
+
+template<typename T, typename SD>
+const ChaoticSolver<T, SD, UtilPolicy::RichVirtual>* VariationalODE<T, SD>::solver() const {
+    return static_cast<const ChaoticSolver<T, SD, UtilPolicy::RichVirtual>*>(Base::solver());
+}
+
+template<typename T, typename SD>
+void VariationalODE<T, SD>::register_state(){
+    Base::register_state();
+    renorm_times_.push_back(this->solver()->get_time());
+    lyap_values_.push_back(this->solver()->get_lyapunov_exponent());
+    kick_values_.push_back(this->solver()->get_kick());
+}
+// ==========================================================================
+
+} // namespace ode::chaos
 
 
 // TODO Inlining seems to speedup some functions noticably
