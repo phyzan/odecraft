@@ -21,7 +21,7 @@ using dense_state_base = std::conditional_t<(N > 0), xdiff::StaticState<N>, xdif
 /// @brief The State Descriptor of a real state held in a std::array<T, N>, or in a std::vector<T>
 /// with N = 0 for a runtime size, with a dense column-major Jacobian, FArray2D<T, N, N>.
 /// See State.hpp for the interface.
-template<size_t N = 0>
+template<size_t N>
 struct DenseDescriptor : public detail::dense_state_base<N>{
 
     using Base = detail::dense_state_base<N>;

@@ -11,6 +11,11 @@ namespace ode{
 //===========================================================================================
 
 template<typename T, typename SD>
+size_t OrbitData<T, SD>::size() const {
+    return t.size();
+}
+
+template<typename T, typename SD>
 void OrbitData<T, SD>::clear_all() {
     t = std::vector<T>();
     q = std::vector<State>();
@@ -41,7 +46,7 @@ EventData<T, SD>::EventData(const EventData& other, const std::vector<size_t>& s
         OrbitData<T, SD> data;
         const OrbitData<T, SD>& other_data = other.data(i);
         data.t = std::vector<T>(other_data.t.begin() + start_idx, other_data.t.end());
-        data.q = std::vector<T>(other_data.q.begin() + start_idx, other_data.q.end());
+        data.q = std::vector<State>(other_data.q.begin() + start_idx, other_data.q.end());
         event_data_.push_back(std::move(data));
     }
 }
@@ -136,7 +141,7 @@ OdeResult<T, SD>::OdeResult(const OrbitData<T, SD>& orbit_data, EventData<T, SD>
     assert(orb_idx_start <= orbit_data.t.size() && "Start index must be within the bounds of the provided data");
     // Copy only the relevant portion of the data based on the provided start indices
     orbit_data_.t = std::vector<T>(orbit_data.t.begin() + orb_idx_start, orbit_data.t.end());
-    orbit_data_.q = std::vector<T>(orbit_data.q.begin() + orb_idx_start, orbit_data.q.end());
+    orbit_data_.q = std::vector<State>(orbit_data.q.begin() + orb_idx_start, orbit_data.q.end());
 }
 
 template<typename T, typename SD>

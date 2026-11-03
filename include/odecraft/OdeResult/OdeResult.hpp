@@ -19,8 +19,8 @@ struct OrbitData{
     std::vector<T> t;
     std::vector<State> q;
 
+    size_t size() const;
     void clear_all();
-
     void add_point(T time, State state);
 };
 
