@@ -16,7 +16,7 @@ namespace detail{
  * @tparam SD The State Descriptor.
  * @tparam Callable The type of the callable object representing the function.
  * @param f The callable object representing the function.
- * @param out The Jacobian, written one column at a time with SD::JD::linalg::for_each_column
+ * @param out The Jacobian, written one column at a time with SD::JD::for_each_column
  * @param x, y1, y2 Three temporary scratch states for intermediate computations
  * @param t The current time.
  * @param q The current state vector (size n).
@@ -30,7 +30,7 @@ constexpr void jac_approx_impl(Callable&& func, StepCaller&& step_elem, jacmat_t
     copy_state<SD>(x, q);
 
     // Column j of the Jacobian, by central differences around q_j, into y2
-    SD::JD::linalg::for_each_column([](S& J_ij, const S& df_i){
+    SD::JD::for_each_column([](S& J_ij, const S& df_i){
         J_ij = df_i;
     }, [&](S& xj, const S& qj, const U& arg){
 

@@ -2,7 +2,6 @@
 
 #include <odecraft/Chaos/VariationalSolvers.hpp>
 #include <odecraft/DenseOde/OdeInt_mem_impl.hpp>
-#include <odecraft/Toolkit/Tools.hpp>
 
 
 namespace ode::chaos{

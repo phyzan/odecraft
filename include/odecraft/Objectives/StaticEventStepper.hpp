@@ -1,8 +1,6 @@
 #pragma once
 
-#include "odecraft/Toolkit/Tools.hpp"
 #include <odecraft/Core/BaseSolver/BaseSolver.hpp>
-#include <odecraft/Toolkit/Toolkit.hpp>
 
 namespace ode{
 

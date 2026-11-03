@@ -19,7 +19,6 @@
 #include "odecraft/Toolkit/Toolkit.hpp" // IWYU pragma: keep
 #include <odecraft/Core/VirtualTraits.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
-#include <ostream>
 
 
 
@@ -316,7 +315,7 @@ public:
      * @return True if ICs were valid and set successfully. Otherwise returns false and nothing happens. 
      * @throws std::domain_error if the direction is not any of [-1, 0, 1]
      */
-    bool                set_ics(T t0, const State& y0, T stepsize = 0, int direction = 0);
+    bool                SetIcs(T t0, State y0, T stepsize = 0, int direction = 0);
 
     /**
      * @brief Permanently terminate the solver.
@@ -404,7 +403,7 @@ public:
 
     void                do_reset() { THIS->Reset(); }
     void                do_kill() { kill(); }
-    bool                do_set_ics(T t0, const State& y0, T stepsize = 0, int direction = 0) { return set_ics(std::move(t0), std::move(y0), stepsize, direction); }
+    bool                do_set_ics(T t0, State y0, T stepsize = 0, int direction = 0) { return THIS->SetIcs(std::move(t0), std::move(y0), stepsize, direction); }
 
     // =================== STATIC OVERRIDES (NECESSARY) ===============================
     // Derived classes MUST implement these methods / attributes.

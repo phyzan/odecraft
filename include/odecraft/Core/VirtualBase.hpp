@@ -63,7 +63,7 @@ public:
     virtual BoxedInterp<T, SD>  do_interpolate_until(T time, const observer_t<T, State>& observer) = 0;
     virtual void                do_reset() = 0;
     virtual void                do_kill() = 0;
-    virtual bool                do_set_ics(T t0, const State& y0, T stepsize = 0, int direction = 0) = 0;
+    virtual bool                do_set_ics(T t0, State y0, T stepsize = 0, int direction = 0) = 0;
 
     virtual ~OdeSolver() = default;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <odecraft/Objectives/StaticEventStepper.hpp>
+#include "StaticEventStepper.hpp"
 
 namespace ode{
 
