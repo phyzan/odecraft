@@ -115,6 +115,24 @@ concept MainRhsSupportsDirDuals =
         { f.Rhs(out, t, q) } -> std::same_as<void>;
     };
 
+// A dual over the main state whose scalars are directional duals along delta_q: the gradient of
+// f_i holds row i of J in its values, and row i of dJ/dq*delta_q in their derivatives
+template<typename T, typename SD>
+using jac_dual_t = xdiff::Dual<dir_dual_t<T, SD>, SD, 1>;
+
+template<typename T, typename SD>
+using jac_state_t = SD::template state_type<jac_dual_t<T, SD>>;
+
+template<typename T, typename SD>
+using jac_seed_state_t = xdiff::SeedState<dir_dual_t<T, SD>, SD, 1>;
+
+// Whether the main Rhs takes states of such duals
+template<typename OdeType, typename T, typename SD>
+concept MainRhsSupportsJacDuals =
+    requires(OdeType f, jac_state_t<T, SD>& out, T t, const jac_seed_state_t<T, SD>& q) {
+        { f.Rhs(out, t, q) } -> std::same_as<void>;
+    };
+
 } // namespace ode::chaos::detail
 
 
@@ -170,8 +188,11 @@ private:
     static constexpr bool AD_DIR = AD_RHS && detail::MainRhsSupportsDirDuals<OdeType, T, SD>;
     // An explicit Jacobian gives J*delta_q as J times delta_q
     static constexpr bool JAC_RHS = (JP_MAIN == JacPolicy::Exact || JP_MAIN == JacPolicy::Nullable);
-    // 2nd order duals give both blocks of the full Jacobian
-    static constexpr bool AD_JAC = detail::MainRhsSupportsDuals<2, OdeType, T, SD>;
+    // Duals over the main state with directional duals as scalars give both blocks of the full
+    // Jacobian, carrying 2(n+1) numbers per element instead of the (n+1)^2 of 2nd order duals
+    static constexpr bool AD_JAC_DIR = detail::MainRhsSupportsJacDuals<OdeType, T, SD>;
+    // 2nd order duals do the same otherwise
+    static constexpr bool AD_JAC = !AD_JAC_DIR && detail::MainRhsSupportsDuals<2, OdeType, T, SD>;
 
     void    jacmat_findiffs(MainJacMat& mat, const T& t, const MainState& q) const;
 
@@ -180,16 +201,18 @@ private:
 
     // Computes the bottom left matrix of the full jacobian matrix,
     // which is d(J)/dq * delta_q, of dims = (N x N)
-    // by performing central finite differences of 2nd diff order
+    // by mixed central differences along each axis and along delta_q: 4 main Rhs calls per column
     void    delta_J(MainJacMat& mat, const T& t, const State& q) const;
 
     OdeType ode_;
     MainRealState atol_;
     [[no_unique_address]] ::ode::detail::scratch_if<JAC_RHS, MainJacMat> jm_scratch_;  // J, for J*delta_q
     worker_t<MainState> x_scratch_, y1_scratch_, y2_scratch_;                   // finite differences
-    worker_t<MainState> f0_scratch_, col_scratch_;                               // delta_J
-    [[no_unique_address]] ::ode::detail::scratch_if<AD_DIR, detail::dir_state_t<T, SD>> dir_in_scratch_;
+    worker_t<MainState> col_scratch_;                                            // delta_J
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_DIR || AD_JAC_DIR, detail::dir_state_t<T, SD>> dir_in_scratch_;
     [[no_unique_address]] ::ode::detail::scratch_if<AD_DIR, detail::dir_state_t<T, SD>> dir_out_scratch_;
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_JAC_DIR, detail::jac_state_t<T, SD>> jac_out_scratch_;
+    [[no_unique_address]] ::ode::detail::scratch_if<AD_JAC_DIR, detail::jac_seed_state_t<T, SD>> jac_seed_scratch_;
     [[no_unique_address]] ::ode::detail::scratch_if<AD_RHS, dual_state_t<T, SD, 1>> dual1_scratch_;
     [[no_unique_address]] ::ode::detail::scratch_if<AD_RHS, seed_state_t<T, SD, 1>> seed1_scratch_;
     [[no_unique_address]] ::ode::detail::scratch_if<AD_JAC, dual_state_t<T, SD, 2>> dual2_scratch_;
