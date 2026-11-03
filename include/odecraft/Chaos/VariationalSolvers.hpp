@@ -8,6 +8,7 @@
 #include <odecraft/Steppers/Steppers.hpp>
 #include <odecraft/Toolkit/Toolkit.hpp>
 #include "VariationalContract.hpp"
+#include "odecraft/Toolkit/Tools.hpp"
 
 namespace ode::chaos {
 
@@ -98,9 +99,6 @@ sequence, so the definition no longer matches the declaration.
 template<int Order, typename OdeType, typename T, typename SD>
 inline constexpr bool MainRhsSupportsDuals = supportsDualRhs<OdeType, Order, T, SD>;
 
-template<int Order, typename OdeType, typename T, typename SD>
-inline constexpr bool MainJacSupportsDuals = supportsDualJac<OdeType, Order, T, SD>;
-
 // A dual with a single derivative component: the derivative along one direction
 template<typename T, typename SD>
 using dir_dual_t = xdiff::Dual<value_t<T, SD>, xdiff::StaticState<1>, 1>;
@@ -157,8 +155,6 @@ public:
     // are free to use these.
     template<int Order>
     static constexpr bool MainRhsSupportsDuals = detail::MainRhsSupportsDuals<Order, OdeType, T, SD>;
-    template<int Order>
-    static constexpr bool MainJacSupportsDuals = detail::MainJacSupportsDuals<Order, OdeType, T, SD>;
 
     /*
     For the variational part, J*delta_q, the derivative of f along delta_q:
@@ -228,7 +224,7 @@ class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, SP, T, VarSD
     template<typename, typename, typename, typename, SolverPolicy> friend class ::ode::RichSolver;
 
     /**
-    This solvers integrates the coupled / augmented ODE system consisting of the original system and the variational equations. The state vector is of size 2*N, where the first N entries correspond to the state of the original system and the last N entries correspond to the deviation vector. The deviation vector is renormalized every "period" time units, and log_ksi keeps track of the logarithm of the stretching factor since the last renormalization. The user can retrieve the current value of the largest Lyapunov exponent using lyapunov_exponent(), which is computed as log_ksi divided by the elapsed time since the beginning of the integration.
+    This solvers integrates the coupled / augmented ODE system consisting of the original system and the variational equations. The state vector has shape {main_vector, main_vector}, where the first entry corresponds to the state of the original system and the second corresponds to the deviation vector. The deviation vector is renormalized every "period" time units, and log_ksi keeps track of the logarithm of the stretching factor since the last renormalization. The user can retrieve the current value of the largest Lyapunov exponent using lyapunov_exponent(), which is computed as log_ksi divided by the elapsed time since the beginning of the integration.
 
     The augmented system is:
 
@@ -237,7 +233,9 @@ class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, SP, T, VarSD
 
     The Jacobian of the original system is required to construct the variational equations.
     For implicit solvers, the Jacobian of the full system (original + variational) is also required.
-    If the solver is provided with a templated Rhs function, then all jacobians are computed using autodiff. Otherwise, the solver must provide an exact jacobian for the original system, and finite differences are used to compute the jacobian of the full system, which schematically looks like:
+    If the solver is provided with a generic Rhs function, then the Jacobian is computed using optimized automatic directional differentiation. If not, then if the original ODE system provides a jacobian function, it will be used to compute the Rhs of the augmented system. If the Rhs is not generic enough or the Jacobian is not provided, there are efficient fallbacks to compute the augmented Rhs and Jacobian using first and second order finite differences, respectively.
+    
+    The Jacobian of the augmented system schematically looks like:
 
     [           J            0  ]
     [ d(J)/dq * delta_q      J  ]
@@ -285,7 +283,6 @@ protected:
     bool Adv_Impl(Args&&... args);
 
 private:
-    struct private_tag{};
 
     // q0 with its variation normalized
     static State normalized_ics(State q0);
@@ -302,43 +299,46 @@ private:
 };
 
 
-// template<typename T, size_t N>
-// class VariationalODE : public ODE<T, N>{
+template<typename T, typename SD>
+class VariationalODE : public ODE<T, VarSD<SD>>{
 
-// public:
+public:
 
-//     using Base = ODE<T, N>;
+    using Base = ODE<T, VarSD<SD>>;
 
-//     template<hasRhsFunc<T> OdeType>
-//     VariationalODE(OdeType ode, T t0, View1D<T, N> q0, View1D<T, N> delta_q0, T period, T rtol, T atol, T min_step=0, T max_step=0, T stepsize=0, int dir = 1, EventList<T> events = {}, Stepper method = Stepper::RK45);
+    using State = state_t<T, VarSD<SD>>;
+    using RealState = real_state_t<T, VarSD<SD>>;
 
-//     std::unique_ptr<ODE<T, N>> clone() const override;
+    template<hasRhsFunc<T, state_t<T, SD>> OdeType>
+    VariationalODE(OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step = 0, T max_step = 0, T stepsize = 0, int dir = 1, EventList<T, State> events = {}, Stepper method = Stepper::RK45);
 
-//     const std::vector<T>& renorm_times() const;
+    std::unique_ptr<ODE<T, VarSD<SD>>> clone() const override;
 
-//     const std::vector<T>& lyap_values() const;
+    const std::vector<T>& renorm_times() const;
 
-//     const std::vector<T>& kick_values() const;
+    const std::vector<T>& lyap_values() const;
 
-//     DEFAULT_RULE_OF_FOUR(VariationalODE)
+    const std::vector<T>& kick_values() const;
 
-//     void clear() override;
+    DEFAULT_RULE_OF_FOUR(VariationalODE)
 
-//     void reset() override;
+    void clear() override;
 
-//     const ChaoticSolver<T, N, UtilPolicy::RichVirtual>* solver() const;
+    void reset() override;
 
-// protected:
+    const ChaoticSolver<T, SD, UtilPolicy::RichVirtual>* solver() const;
 
-//     void register_state() override;
+protected:
 
-// private:
+    void register_state() override;
 
-//     std::vector<T> renorm_times_ = {};
-//     std::vector<T> lyap_values_ = {};
-//     std::vector<T> kick_values_ = {};
+private:
 
-// };
+    std::vector<T> renorm_times_ = {};
+    std::vector<T> lyap_values_ = {};
+    std::vector<T> kick_values_ = {};
+
+};
 
 
 
