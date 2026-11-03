@@ -25,6 +25,9 @@
 
 #include <odecraft/Chaos/VariationalSolvers_impl.hpp>
 
+// Contracts
+
+#include <odecraft/Contracts/DenseDescriptor.hpp>
 
 /**
  * @file odecraft.hpp

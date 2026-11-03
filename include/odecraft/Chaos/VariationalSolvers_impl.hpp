@@ -1,11 +1,6 @@
 #pragma once
 
 #include <odecraft/Chaos/VariationalSolvers.hpp>
-#include <odecraft/Toolkit/Tools.hpp>
-#include <odecraft/Toolkit/FinDiff.hpp>
-#include <limits>
-#include <stdexcept>
-#include <tuple>
 #include "VariationalSolvers_mem_impl.hpp" // IWYU pragma: keep
 
 
@@ -158,11 +153,11 @@ void VariationalOdeSys<T, SD, OdeType>::Jac(JacMat& out, const T& t, const State
         const auto row_i = [](const detail::jac_dual_t<T, SD>& fi){
             return std::tie(fi.grad());
         };
-        SD::JD::linalg::for_each_row([](S& J_ij, const D& dfi_dqj){
+        SD::JD::for_each_row([](S& J_ij, const D& dfi_dqj){
             J_ij = dfi_dqj.value();
         }, row_i, std::tie(out[0]), out_duals);
 
-        SD::JD::linalg::for_each_row([](S& B_ij, const D& dfi_dqj){
+        SD::JD::for_each_row([](S& B_ij, const D& dfi_dqj){
             B_ij = dfi_dqj.grad()[0];
         }, row_i, std::tie(out[1]), out_duals);
     } else if constexpr (AD_JAC){
@@ -176,11 +171,11 @@ void VariationalOdeSys<T, SD, OdeType>::Jac(JacMat& out, const T& t, const State
         const auto row_i = [](const dual_t<T, SD, 2>& fi){
             return std::tie(fi.grad());
         };
-        SD::JD::linalg::for_each_row([](S& J_ij, const dual_t<T, SD, 1>& dfi_dqj){
+        SD::JD::for_each_row([](S& J_ij, const dual_t<T, SD, 1>& dfi_dqj){
             J_ij = dfi_dqj.value();
         }, row_i, std::tie(out[0]), out_duals);
 
-        SD::JD::linalg::for_each_row([&q](S& B_ij, const dual_t<T, SD, 1>& dfi_dqj){
+        SD::JD::for_each_row([&q](S& B_ij, const dual_t<T, SD, 1>& dfi_dqj){
             B_ij = 0;
             SD::for_each([&B_ij](const S& d2fi_dqj_dqk, const S& dq_k){
                 B_ij += d2fi_dqj_dqk * dq_k;
@@ -210,7 +205,7 @@ void VariationalOdeSys<T, SD, OdeType>::JacMain(MainJacMat& out, const T& t, con
         ode_.Rhs(out_duals, t, seeds);
 
         // Row i of the Jacobian is the gradient of f_i
-        SD::JD::linalg::for_each_row([](S& out_ij, const S& dfi_dqj){
+        SD::JD::for_each_row([](S& out_ij, const S& dfi_dqj){
             out_ij = dfi_dqj;
         }, [](const dual_t<T, SD, 1>& fi){
             return std::tie(fi.grad());
@@ -316,7 +311,7 @@ void VariationalOdeSys<T, SD, OdeType>::delta_J(MainJacMat& mat, const T& t, con
         SD::for_each([](S& col_i){
             col_i = 0;
         }, col);
-        SD::JD::linalg::for_each_column([](S& mat_ij, const S& col_i){
+        SD::JD::for_each_column([](S& mat_ij, const S& col_i){
             mat_ij = col_i;
         }, [&col](const S& /*qj*/){
             return std::tie(col);
@@ -328,7 +323,7 @@ void VariationalOdeSys<T, SD, OdeType>::delta_J(MainJacMat& mat, const T& t, con
 
     // Column j: [f(+h, +eps) - f(-h, +eps) - f(+h, -eps) + f(-h, -eps)] / (4*h*eps),
     // with f(a, b) evaluated at q + a*e_j + b*delta_q
-    SD::JD::linalg::for_each_column([](S& mat_ij, const S& col_i){
+    SD::JD::for_each_column([](S& mat_ij, const S& col_i){
         mat_ij = col_i;
     }, [&](S& xj, const S& qj, const T& atol_j){
 
@@ -390,7 +385,7 @@ VariationalSolver<S, T, SD, OdeType, SP, Derived>::VariationalSolver(OdeType ode
 }
 
 template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-auto VariationalSolver<S, T, SD, OdeType, SP, Derived>::normalized_ics(State q0) -> State{
+auto VariationalSolver<S, T, SD, OdeType, SP, Derived>::normalized_ics(State q0) -> State {
     detail::normalized<T, SD>(q0.variation, q0.variation);
     return q0;
 }
@@ -446,6 +441,19 @@ void VariationalSolver<S, T, SD, OdeType, SP, Derived>::Reset(){
     flagged = false;
     logksi_ =  0;
     logksi_last_ = 0;
+}
+
+template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+bool VariationalSolver<S, T, SD, OdeType, SP, Derived>::SetIcs(T t0, State y0, T stepsize, int direction){
+    // The norm of y0 must be non-zero
+    if (SD::all_true([](const value_t<T, SD>& v){
+        // value_t itself is not guaranteed to be comparable to T
+        return SD::norm_sqr(v) == 0;
+    }, y0.variation)){
+        return false;
+    } else {
+        return Base::SetIcs(std::move(t0), normalized_ics(std::move(y0)), std::move(stepsize), direction);
+    }
 }
 
 template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>

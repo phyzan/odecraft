@@ -36,7 +36,7 @@ void BaseSolver<Derived, T, SD, OdeType, SP>::Jac(JacMat& out, const T& t, const
         ode_.Rhs(out_duals, t, dual_seeds);
 
         // Row i of the Jacobian is the gradient of f_i
-        SD::JD::linalg::for_each_row([](value_t<T, SD>& out_ij, const value_t<T, SD>& dfi_dxj){
+        SD::JD::for_each_row([](value_t<T, SD>& out_ij, const value_t<T, SD>& dfi_dxj){
             out_ij = dfi_dxj;
         }, [](const dual_t<T, SD, 1>& fi){
             return std::tie(fi.grad());
@@ -276,7 +276,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::advance_by(T interval){
 
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, OdeType, SP>::set_ics(T t0, const State& y0, T stepsize, int direction){
+bool BaseSolver<Derived, T, SD, OdeType, SP>::SetIcs(T t0, State y0, T stepsize, int direction){
     
     if (direction != 1 && direction != -1 && direction != 0){
         throw std::domain_error("Integration direction must be 1, -1, or 0");
@@ -296,7 +296,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::set_ics(T t0, const State& y0, T s
 
         t_ics_ = std::move(t0);
         habs_ics_ = stepsize;
-        q_ics_ = y0;
+        q_ics_ = std::move(y0);
         status_ = StepperStatus::NewStep;
         THIS->Reset();
         return true;
@@ -610,7 +610,7 @@ StepResult BaseSolver<Derived, T, SD, OdeType, SP>::adapt_it(State& q_out, T& t_
         // A callback that throws abandons the step midway: q_old_ may hold part of it (see
         // take_step), and the stepper's caches may too. So the solver ends up as after a failed
         // step: stopped at the last accepted step with the interpolation interval closed, until
-        // set_ics() or Reset() rebuilds everything.
+        // SetIcs() or Reset() rebuilds everything.
         try {
             return this->adapt_impl(
                 t_out,

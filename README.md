@@ -375,7 +375,7 @@ StepperStatus       status() const; // Get the solver's status
 bool                advance(); // Advance the solver by one step (automatic step size control)
 bool                advance_until(const T& time); // Advance the solver until a specified time is reached
 bool                advance_until(const T& time, Callable&& observer); // Advance the solver until a specified time is reached, calling an observer function at each step
-bool                set_ics(T t0, const T* y0, T stepsize, int direction); // Set new initial conditions and reset the solver in-place (no memory reallocation happens)
+bool                SetIcs(T t0, const T* y0, T stepsize, int direction); // Set new initial conditions and reset the solver in-place (no memory reallocation happens)
 void                Reset(); // Reset the solver to its initial state
 BoxedInterp<T, N>   interpolate_until(const T& time, Callable&& observer); // Advance the solver until a specified time is reached, returning an interpolator over the integration interval
 ```

@@ -1,36 +1,39 @@
 #pragma once
 
-#include "Tools.hpp"
-#include <cstddef>
-#include <ostream>
-#include <tuple>
-#include <type_traits>
-#include <utility>
+#include "ndspan/core/arrays.hpp"
+#include "ndspan/core/layoutmap.hpp"
+#include <odecraft/Toolkit/Toolkit.hpp>
 
 
-namespace ode{
+namespace ode::contracts{
 
 namespace detail{
 
-template<size_t N>
-using dense_state_base = std::conditional_t<(N > 0), xdiff::StaticState<N>, xdiff::DynamicState>;
+template<ndspan::Layout LY, size_t... Shape>
+struct TensorState{
 
-} // namespace ode::detail
-
-
-/// @brief The State Descriptor of a real state held in a std::array<T, N>, or in a std::vector<T>
-/// with N = 0 for a runtime size, with a dense column-major Jacobian, FArray2D<T, N, N>.
-/// See State.hpp for the interface.
-template<size_t N>
-struct DenseDescriptor : public detail::dense_state_base<N>{
-
-    using Base = detail::dense_state_base<N>;
+    static constexpr size_t SIZE = (Shape*...*1);
 
     template<typename T>
     using value_type = T;
 
-    template<typename S>
-    using state_type = Base::template state_type<S>;
+    template<typename U>
+    using state_type = ndspan::Array<U, ndspan::Allocation::Auto, LY, Shape...>;
+
+    template<typename F, typename U, typename... Rest>
+    static void for_each(F&& f, U&& proto, Rest&&... rest){
+        for (size_t i = 0; i < proto.size(); i++){
+            f(proto[i], rest[i]...);
+        }
+    }
+
+    template<typename To, typename From>
+    static void resize_like(state_type<To>& dst, const state_type<From>& ref){
+        if constexpr (SIZE == 0){
+            dst.resize(ref.shape(), ref.ndim());
+        }
+    }
+
 
     template<typename T>
     static T norm_sqr(const value_type<T>& s){
@@ -58,56 +61,64 @@ struct DenseDescriptor : public detail::dense_state_base<N>{
     struct JD{
 
         template<typename S>
-        using jacobian_matrix = FArray2D<S, N, N>;
+        using jacobian_matrix = FArray2D<S, SIZE, SIZE>;
 
         template<typename S, typename From>
         static void resize_like(jacobian_matrix<S>& J, const state_type<From>& ref){
-            if constexpr (N == 0){
+            if constexpr (SIZE == 0){
                 J.resize(ref.size(), ref.size());
             }
         }
 
         template<typename F, typename V>
         static bool all_true(F&& f, const jacobian_matrix<V>& J){
-            const V* a = J.data();
-            for (size_t k = 0; k < J.size(); ++k){
-                if (!f(a[k])){
+            for (const V& Jij : J){
+                if (!f(Jij)){
                     return false;
                 }
             }
             return true;
         }
 
+        // out = std::tie(J_0, J_1, ...): g returns column j of every J_k as a tuple
+        template<typename Prim, typename Sec, typename... J, typename... Q>
+        static void for_each_column(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
+            // Q... are state_type<something>, such that g(states[j]...) -> tuple of state_type<something_else>
+            const size_t n = rows(std::get<0>(out));
+            for (size_t j = 0; j < n; ++j){
+                decltype(auto) cols_j = g(states[j]...);
+                static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(cols_j)>> == sizeof...(J), "g must return one column per matrix");
+                [&]<size_t... k>(std::index_sequence<k...>){
+                    (fill_column(f, std::get<k>(out), j, std::get<k>(cols_j)), ...);
+                }(std::index_sequence_for<J...>{});
+            }
+        }
+
+        template<typename Prim, typename Sec, typename... J, typename... Q>
+        static void for_each_row(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
+            const size_t n = rows(std::get<0>(out));
+            for (size_t i = 0; i < n; ++i){
+                decltype(auto) rows_i = g(states[i]...);
+                static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(rows_i)>> == sizeof...(J), "g must return one row per matrix");
+                [&]<size_t... k>(std::index_sequence<k...>){
+                    (fill_row(f, std::get<k>(out), i, std::get<k>(rows_i)), ...);
+                }(std::index_sequence_for<J...>{});
+            }
+        }
+
+        // out = c*src. out may be src.
+        template<typename T>
+        static void scale(jacobian_matrix<value_type<T>>& out, const T& c, const jacobian_matrix<value_type<T>>& src){
+            const size_t n = src.size();
+            for (size_t k = 0; k < n; ++k){
+                out[k] = c * src[k];
+            }
+        }
+
         // The loops run down the columns, which are contiguous
         struct linalg{
 
-            using pivots_type = state_type<size_t>;
-
-            // out = std::tie(J_0, J_1, ...): g returns column j of every J_k as a tuple
-            template<typename Prim, typename Sec, typename... J, typename... Q>
-            static void for_each_column(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
-                // Q... are state_type<something>, such that g(states[j]...) -> tuple of state_type<something_else>
-                const size_t n = rows(std::get<0>(out));
-                for (size_t j = 0; j < n; ++j){
-                    decltype(auto) cols_j = g(states[j]...);
-                    static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(cols_j)>> == sizeof...(J), "g must return one column per matrix");
-                    [&]<size_t... k>(std::index_sequence<k...>){
-                        (fill_column(f, std::get<k>(out), j, std::get<k>(cols_j)), ...);
-                    }(std::index_sequence_for<J...>{});
-                }
-            }
-
-            template<typename Prim, typename Sec, typename... J, typename... Q>
-            static void for_each_row(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
-                const size_t n = rows(std::get<0>(out));
-                for (size_t i = 0; i < n; ++i){
-                    decltype(auto) rows_i = g(states[i]...);
-                    static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(rows_i)>> == sizeof...(J), "g must return one row per matrix");
-                    [&]<size_t... k>(std::index_sequence<k...>){
-                        (fill_row(f, std::get<k>(out), i, std::get<k>(rows_i)), ...);
-                    }(std::index_sequence_for<J...>{});
-                }
-            }
+            using pivots_type = ndspan::Array1D<size_t, SIZE>;
 
             // out = J * v, a sum of the columns of J. out must not be v.
             template<typename T>
@@ -154,17 +165,6 @@ struct DenseDescriptor : public detail::dense_state_base<N>{
                 }
             }
 
-            // out = c*src. out may be src.
-            template<typename T>
-            static void scale(jacobian_matrix<value_type<T>>& out, const T& c, const jacobian_matrix<value_type<T>>& src){
-                const size_t n = rows(src);
-                for (size_t j = 0; j < n; ++j){
-                    for (size_t i = 0; i < n; ++i){
-                        out(i, j) = c*src(i, j);
-                    }
-                }
-            }
-
             // LU factorization with partial pivoting, P*A = L*U, in place: A is overwritten with L below
             // the diagonal (its unit diagonal implied) and U on and above it. Step k of the elimination
             // swaps row k with row piv[k] >= k. Returns false if A is (nearly) singular.
@@ -172,7 +172,7 @@ struct DenseDescriptor : public detail::dense_state_base<N>{
             static bool lu_factor(jacobian_matrix<value_type<T>>& A, pivots_type& piv){
                 using S = value_type<T>;
                 const size_t n = rows(A);
-                if constexpr (N == 0){
+                if constexpr (SIZE == 0){
                     piv.resize(n);
                 }
                 S* a = A.data();
@@ -257,40 +257,50 @@ struct DenseDescriptor : public detail::dense_state_base<N>{
                 }
             }
 
-        private:
-
-            // f(J(i, j), col[i]) down column j
-            template<typename Prim, typename S, typename V>
-            static void fill_column(Prim& f, jacobian_matrix<S>& J, size_t j, const V& col){
-                const size_t n = rows(J);
-                for (size_t i = 0; i < n; ++i){
-                    f(J(i, j), col[i]);
-                }
-            }
-
-            // f(J(i, j), row[j]) along row i
-            template<typename Prim, typename S, typename V>
-            static void fill_row(Prim& f, jacobian_matrix<S>& J, size_t i, const V& row){
-                const size_t n = rows(J);
-                for (size_t j = 0; j < n; ++j){
-                    f(J(i, j), row[j]);
-                }
-            }
-
-            // The number of rows (and columns), a compile time constant for a static size
-            template<typename T>
-            static size_t rows(const jacobian_matrix<value_type<T>>& A){
-                if constexpr (N > 0){
-                    return N;
-                } else {
-                    return A.shape(0);
-                }
-            }
-
         };
+
+    private:
+
+        // f(J(i, j), col[i]) down column j
+        template<typename Prim, typename S, typename V>
+        static void fill_column(Prim& f, jacobian_matrix<S>& J, size_t j, const V& col){
+            const size_t n = rows(J);
+            for (size_t i = 0; i < n; ++i){
+                f(J(i, j), col[i]);
+            }
+        }
+
+        // f(J(i, j), row[j]) along row i
+        template<typename Prim, typename S, typename V>
+        static void fill_row(Prim& f, jacobian_matrix<S>& J, size_t i, const V& row){
+            const size_t n = rows(J);
+            for (size_t j = 0; j < n; ++j){
+                f(J(i, j), row[j]);
+            }
+        }
+
+        // The number of rows (and columns), a compile time constant for a static size
+        template<typename T>
+        static size_t rows(const jacobian_matrix<value_type<T>>& A){
+            if constexpr (SIZE > 0){
+                return SIZE;
+            } else {
+                return A.shape(0);
+            }
+        }
 
     };
 
-};
 
-} // namespace ode
+}; // struct TensorState
+
+} // namespace ode::contracts::detail
+
+
+template<size_t... Shape>
+using CArrayDescriptor = detail::TensorState<ndspan::Layout::C, Shape...>;
+
+template<size_t... Shape>
+using FArrayDescriptor = detail::TensorState<ndspan::Layout::F, Shape...>;
+
+} // namespace ode::contracts

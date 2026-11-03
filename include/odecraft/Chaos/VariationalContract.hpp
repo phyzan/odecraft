@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../Toolkit/Toolkit.hpp"
 #include "odecraft/Toolkit/Tools.hpp"
 #include <tuple>
 #include <type_traits>
 
-namespace ode::chaos{
+// ode::chaos::contracts explicitly different from ode::contracts
+namespace ode::chaos::contracts{
 
 namespace detail{
 
@@ -16,7 +16,7 @@ inline constexpr bool holds_references = false;
 template<typename... E>
 inline constexpr bool holds_references<std::tuple<E...>> = (std::is_lvalue_reference_v<E> && ...);
 
-} // namespace ode::chaos::detail
+} // namespace ode::chaos::contracts::detail
 
 template<typename State>
 struct VarState{
@@ -87,33 +87,40 @@ struct VarSD{
             return SD::JD::all_true(f, jacmat[0]) && SD::JD::all_true(f, jacmat[1]);
         }
 
+        // Only the columns by the elements of main: each is that column of both blocks,
+        // [J; dJ/dq*delta_q]. The columns by variation are [0; J], already in block 0.
+        template<typename Prim, typename Sec, typename... J, typename... Q>
+        static void for_each_column(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
+            SD::JD::for_each_column(std::forward<Prim>(f), [&g](auto&&... elems){
+                decltype(auto) cols = g(std::forward<decltype(elems)>(elems)...);
+                static_assert(detail::holds_references<std::remove_cvref_t<decltype(cols)>>, "g must return references, e.g. std::tie");
+                return std::apply([](auto&... col){
+                    return std::tuple_cat(std::tie(col.main, col.variation)...);
+                }, cols);
+            }, blocks(out), states.main...);
+        }
+
+        // Only the rows of the outputs of variation: each gradient is that row of both blocks,
+        // [dJ/dq*delta_q, J]. The rows of main are [J, 0], nothing new.
+        template<typename Prim, typename Sec, typename... J, typename... Q>
+        static void for_each_row(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
+            SD::JD::for_each_row(std::forward<Prim>(f), [&g](auto&&... elems){
+                decltype(auto) rows = g(std::forward<decltype(elems)>(elems)...);
+                static_assert(detail::holds_references<std::remove_cvref_t<decltype(rows)>>, "g must return references, e.g. std::tie");
+                return std::apply([](auto&... row){
+                    return std::tuple_cat(std::tie(row.variation, row.main)...);
+                }, rows);
+            }, blocks(out), states.variation...);
+        }
+
+        // out = c*src, block by block. out may be src.
+        template<typename T>
+        static void scale(jacobian_matrix<value_type<T>>& out, const T& c, const jacobian_matrix<value_type<T>>& src){
+            SD::JD::scale(out[0], c, src[0]);
+            SD::JD::scale(out[1], c, src[1]);
+        }
+
         struct linalg{
-
-            // Only the columns by the elements of main: each is that column of both blocks,
-            // [J; dJ/dq*delta_q]. The columns by variation are [0; J], already in block 0.
-            template<typename Prim, typename Sec, typename... J, typename... Q>
-            static void for_each_column(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
-                SD::JD::linalg::for_each_column(std::forward<Prim>(f), [&g](auto&&... elems){
-                    decltype(auto) cols = g(std::forward<decltype(elems)>(elems)...);
-                    static_assert(detail::holds_references<std::remove_cvref_t<decltype(cols)>>, "g must return references, e.g. std::tie");
-                    return std::apply([](auto&... col){
-                        return std::tuple_cat(std::tie(col.main, col.variation)...);
-                    }, cols);
-                }, blocks(out), states.main...);
-            }
-
-            // Only the rows of the outputs of variation: each gradient is that row of both blocks,
-            // [dJ/dq*delta_q, J]. The rows of main are [J, 0], nothing new.
-            template<typename Prim, typename Sec, typename... J, typename... Q>
-            static void for_each_row(Prim&& f, Sec&& g, std::tuple<J&...> out, Q&&... states){
-                SD::JD::linalg::for_each_row(std::forward<Prim>(f), [&g](auto&&... elems){
-                    decltype(auto) rows = g(std::forward<decltype(elems)>(elems)...);
-                    static_assert(detail::holds_references<std::remove_cvref_t<decltype(rows)>>, "g must return references, e.g. std::tie");
-                    return std::apply([](auto&... row){
-                        return std::tuple_cat(std::tie(row.variation, row.main)...);
-                    }, rows);
-                }, blocks(out), states.variation...);
-            }
 
             // out = J*v: out.main = J*v.main, out.variation = dJ/dq*delta_q*v.main + J*v.variation.
             // out must not be v.
@@ -129,14 +136,7 @@ struct VarSD{
             template<typename T>
             static void identity_minus(jacobian_matrix<value_type<T>>& out, const T& c, const jacobian_matrix<value_type<T>>& J){
                 SD::JD::linalg::identity_minus(out[0], c, J[0]);
-                SD::JD::linalg::scale(out[1], -c, J[1]);
-            }
-
-            // out = c*src, block by block. out may be src.
-            template<typename T>
-            static void scale(jacobian_matrix<value_type<T>>& out, const T& c, const jacobian_matrix<value_type<T>>& src){
-                SD::JD::linalg::scale(out[0], c, src[0]);
-                SD::JD::linalg::scale(out[1], c, src[1]);
+                SD::JD::scale(out[1], -c, J[1]);
             }
 
             // The pivots of block 0, the only block factored
@@ -161,20 +161,20 @@ struct VarSD{
                 SD::JD::linalg::lu_solve(x.variation, LU[0], piv, x.variation);
             }
 
-        private:
-
-            // Both blocks of every matrix: std::tie(J_0[0], J_0[1], J_1[0], J_1[1], ...)
-            template<typename... J>
-            static auto blocks(std::tuple<J&...> out){
-                return std::apply([](auto&... Jk){
-                    return std::tuple_cat(std::tie(Jk[0], Jk[1])...);
-                }, out);
-            }
-
         };
+
+    private:
+
+        // Both blocks of every matrix: std::tie(J_0[0], J_0[1], J_1[0], J_1[1], ...)
+        template<typename... J>
+        static auto blocks(std::tuple<J&...> out){
+            return std::apply([](auto&... Jk){
+                return std::tuple_cat(std::tie(Jk[0], Jk[1])...);
+            }, out);
+        }
 
     };
 
 };
 
-} // namespace ode::chaos
+} // namespace ode::chaos::contracts

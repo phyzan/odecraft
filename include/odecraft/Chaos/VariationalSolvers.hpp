@@ -15,7 +15,7 @@ namespace ode::chaos {
 // ============================================================================
 // DECLARATIONS
 // ============================================================================
-
+using contracts::VarSD;
 
 namespace detail{
 
@@ -245,8 +245,8 @@ class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, SP, T, VarSD
     using Base = ::ode::detail::SolverTypeGetter<S, SP, T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, GetDerived<VariationalSolver<S, T, SD, OdeType, SP, Derived>, Derived>>::type;
 
 public:
-    using State = state_t<T, VarSD<SD>>;
-    using RealState = real_state_t<T, VarSD<SD>>;
+    using State = contracts::VarState<state_t<T, SD>>; //same as state_t<T, VarSD<SD>>;
+    using RealState = contracts::VarState<real_state_t<T, SD>>; // //same as real_state_t<T, VarSD<SD>>;
     using JacMat = jacmat_t<T, VarSD<SD>>;
     using MainState = state_t<T, SD>;
     using MainJacMat = jacmat_t<T, SD>;
@@ -264,6 +264,7 @@ public:
     T       log_ksi() const;
     T       lyapunov_exponent() const;
     void    Reset();
+    bool    SetIcs(T t0, State y0, T stepsize, int direction = 0);
 
     // VIRTUAL INTERFACE ALIASES (overrides that forward to the non-virtual accessors)
     void    get_rhs_main(MainState& out, const T& t, const MainState& q) const;
