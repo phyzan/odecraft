@@ -1,13 +1,15 @@
-#include <odecraft/Compiled/ODE.hpp>
+#include <odecraft/DenseOde/CraftedODE.hpp>
 #include <odecraft/DenseOde/OdeInt_impl.hpp>
 
 namespace ode{
 
 #define ODECRAFT_INSTANTIATE_ODE(T)                                                     \
-    template class EventCounter<T, 0>;                                                  \
-    template class ODE<T, 0>;                                                           \
-    template void ODE<T, 0>::init<crafted::ode_t<T>>(                                   \
-        crafted::ode_t<T>, T, View1D<T, 0>, T, T, T, T, T, int, EventList<T>, Stepper);
+    template class EventCounter<T, crafted::SD>;                                        \
+    template class EventCounter<T, crafted::VarSD>;                                     \
+    template class ODE<T, crafted::SD>;                                                 \
+    template class ODE<T, crafted::VarSD>;                                              \
+    template void ODE<T, crafted::SD>::init<crafted::ode_t<T>>(                         \
+        crafted::ode_t<T>, T, crafted::State<T>, crafted::State<T>, crafted::State<T>, T, T, T, int, crafted::EventList<T>, Stepper);
 
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_INSTANTIATE_ODE)
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "odecraft/Toolkit/Tools.hpp"
-#include <odecraft/Interpolation/Univariate/StateInterp.hpp>
+#include "StateInterp.hpp"
 #include <stdexcept>
 
 

@@ -58,7 +58,7 @@ if(PROJECT_IS_TOP_LEVEL AND NOT ODECRAFT_BUILD_CRAFTED)
 endif()
 
 # ----------- Pre-compiled interface (namespace ode::crafted) ---------------
-# Each unit explicitly instantiates the Compiled/ headers for the supported scalar types, in
+# Each unit explicitly instantiates the Crafted*.hpp headers for the supported scalar types, in
 # dependency order; the headers' `extern template` declarations let later units and consumers
 # reuse those instantiations.
 
@@ -103,7 +103,7 @@ if(ODECRAFT_BUILD_CRAFTED)
     find_library(MPFR_LIBRARY mpfr REQUIRED)
     find_library(GMP_LIBRARY gmp REQUIRED)
 
-    # PUBLIC: <odecraft/Compiled/odecraft.hpp> is all a consumer needs to include
+    # PUBLIC: <odecraft/Crafted.hpp> is all a consumer needs to include
     target_link_libraries(odecraft_crafted PUBLIC odecraft::odecraft ${MPFR_LIBRARY} ${GMP_LIBRARY})
 
     # -fopenmp-simd enables `#pragma omp simd` without the OpenMP runtime; PUBLIC so that consumers

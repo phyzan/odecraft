@@ -25,12 +25,12 @@ endif()
 file(GLOB ODECRAFT_TUTORIAL_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
 # Most tutorials use only the header-only `ode` interface, so the compiled library is not built
-# unless one of them actually includes <odecraft/Compiled/...>. Detected here rather than listed
+# unless one of them actually includes <odecraft/Crafted.hpp> or a Crafted*.hpp header. Detected here rather than listed
 # by hand, so dropping in a new ode::crafted tutorial needs no edit to this file -- and it has to
 # happen before odecraft is added below, since that is when the option is read.
 set(ODECRAFT_TUTORIALS_NEED_CRAFTED OFF)
 foreach(tutorial_src IN LISTS ODECRAFT_TUTORIAL_SOURCES)
-    file(STRINGS ${tutorial_src} ODECRAFT_CRAFTED_HIT REGEX "odecraft/Compiled/")
+    file(STRINGS ${tutorial_src} ODECRAFT_CRAFTED_HIT REGEX "odecraft/(.*/)?Crafted")
     if(ODECRAFT_CRAFTED_HIT)
         set(ODECRAFT_TUTORIALS_NEED_CRAFTED ON)
     endif()
@@ -68,7 +68,7 @@ foreach(tutorial_src IN LISTS ODECRAFT_TUTORIAL_SOURCES)
     # ode::crafted tutorials additionally link the compiled library. Linking through CMake is
     # also what keeps ODECRAFT_USE_LAZY_MPREAL consistent between the library and the tutorial:
     # mpreal_t is a different type on each setting, so a mismatch is an undefined reference.
-    file(STRINGS ${tutorial_src} ODECRAFT_CRAFTED_HIT REGEX "odecraft/Compiled/")
+    file(STRINGS ${tutorial_src} ODECRAFT_CRAFTED_HIT REGEX "odecraft/(.*/)?Crafted")
     if(ODECRAFT_CRAFTED_HIT AND TARGET odecraft::crafted)
         target_link_libraries(${tutorial_name} PRIVATE odecraft::crafted)
     endif()

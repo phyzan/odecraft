@@ -99,7 +99,7 @@ add_subdirectory(path/to/odecraft)
 target_link_libraries(your_target PRIVATE odecraft::crafted)
 ```
 
-`odecraft::crafted` links `odecraft::odecraft` publicly, so `<odecraft/Compiled/odecraft.hpp>` is
+`odecraft::crafted` links `odecraft::odecraft` publicly, so `<odecraft/Crafted.hpp>` is
 all you need to include.
 
 Guard the link with `if(TARGET odecraft::crafted)` if the build is conditional in your project.
@@ -178,9 +178,9 @@ system size is dynamic (`N = 0`), every callable is type-erased, and every solve
 `SolverPolicy::RichVirtual`. There is no policy to choose — a rich solver already *is* an
 `OdeSolver`, so if you do not need events, pass none and hold the result by `OdeSolver<T>`.
 
-Include `<odecraft/Compiled/odecraft.hpp>` for all of it, or a single header for one piece.
+Include `<odecraft/Crafted.hpp>` for all of it, or a single header for one piece.
 
-**Vocabulary** — `Compiled/Toolkit.hpp`
+**Vocabulary** — `Toolkit/CraftedToolkit.hpp`
 
 | Type | Signature |
 |------|-----------|
@@ -208,7 +208,7 @@ precision at construction, so raising it afterwards leaves existing values behin
 **Warning**: `set_mpreal_prec` only affects the current thread (as the `mpfr` library does).
 
 
-**Solvers and stepping** — `Compiled/SolverBase.hpp`, `Compiled/Steppers.hpp`
+**Solvers and stepping** — `Core/CraftedBase.hpp`, `Steppers/CraftedSteppers.hpp`
 
 | Name | Purpose |
 |------|---------|
@@ -217,7 +217,7 @@ precision at construction, so raising it afterwards leaves existing values behin
 | `make_rich_vsolver<T>(method, ode, t0, q0, rtol, atol, ...)` | Build a solver of any method |
 | `Euler<T>`, `RK4<T>`, `RK23<T>`, `RK45<T>`, `DOP853<T>`, `BDF<T>` | The concrete steppers, if you want one by name |
 
-**Integration front end** — `Compiled/ODE.hpp`, `Compiled/OdeHistory.hpp`
+**Integration front end** — `DenseOde/CraftedODE.hpp`, `OdeResult/CraftedOdeResult.hpp`
 
 | Name | Purpose |
 |------|---------|
@@ -225,18 +225,20 @@ precision at construction, so raising it afterwards leaves existing values behin
 | `OdeResult<T>` | Sampled points, event hits and status of a finished run |
 | `OdeSolution<T>` | An `OdeResult` that also answers `operator()(t)` anywhere in range |
 
-**Events** — `Compiled/Events.hpp`
+**Events** — `Events/CraftedEvents.hpp`
 
 | Name | Purpose |
 |------|---------|
 | `make_precise_event<T>(name, obj_fun, tol, dir, mask, delay_mask)` | Fires where `obj_fun` crosses zero |
 | `make_periodic_event<T>(name, period, mask, delay_mask)` | Fires every `period` time units |
+| `make_variational_precise_event<T>(name, obj_fun, tol, dir, mask, delay_mask)` | `make_precise_event` for a variational solver: acts on a `VarState<T>` |
+| `make_variational_periodic_event<T>(name, period, mask, delay_mask)` | `make_periodic_event` for a variational solver |
 | `PreciseEvent<T>`, `PeriodicEvent<T>`, `EventList<T>`, `EventOptions` | The underlying types |
 
-**Dense output** — `Compiled/Interpolators.hpp`: `Interpolator<T>`, `LocalInterpolator<T>`,
+**Dense output** — `Interpolation/Univariate/CraftedStateInterp.hpp`: `Interpolator<T>`, `LocalInterpolator<T>`,
 `LinkedInterpolator<T>`, `InterpObj<T>`.
 
-**Field interpolation** — `Compiled/NdInterpolators.hpp`
+**Field interpolation** — `Interpolation/MultiDim/CraftedNdInterp.hpp`
 
 Unlike everything above, this family is not parameterised on the scalar type: values are
 `double` throughout and the free parameter is the dimension, pinned at `0` (dynamic, decided
@@ -256,7 +258,7 @@ instantiation is compiled. Build a `field_values_t` (a dynamic-rank `View<double
 reshape it to the layout the constructor documents; passing any other container instantiates
 the constructor in your own translation unit instead of linking it.
 
-**Chaos** — `Compiled/Chaos.hpp`
+**Chaos** — `Chaos/CraftedChaos.hpp`
 
 | Name | Purpose |
 |------|---------|

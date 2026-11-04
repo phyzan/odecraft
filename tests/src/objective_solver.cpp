@@ -3,9 +3,12 @@
 using T = double;
 using namespace ode;
 
+using SD = contracts::common::SD<2>;
+using State = common::State<T, 2>;
+
 // Harmonic oscillator: q0' = q1, q1' = -q0
 // Solution from (1, 0): q0 = cos(t), q1 = -sin(t)
-static void rhs(T* out, T /*t*/, const T* q){
+static void rhs(State& out, T /*t*/, const State& q){
     out[0] = q[1];
     out[1] = -q[0];
 }
@@ -15,20 +18,21 @@ static void rhs(T* out, T /*t*/, const T* q){
 void test_single_objective(){
     std::cout << "=== test_single_objective ===\n";
 
-    auto obj = [](const T& /*t*/, const T* q) -> T { return q[0]; };
+    auto obj = [](const T& /*t*/, const State& q) -> T { return q[0]; };
     using ObjFun = decltype(obj);
 
     ObjFunData<T, ObjFun> obj_data{.func=obj, .dir=-1};  // decreasing crossing
 
-    T y0[2] = {1.0, 0.0};
+    State y0 = {1.0, 0.0};
+    State tol = {1e-10, 1e-10};
 
-    auto solver = getEventStepper<Stepper::RK45, T, 2>(
+    auto solver = getEventStepper<Stepper::RK45, SolverPolicy::Static, T, SD>(
         std::tuple{obj_data},
         OdeData{.Rhs = rhs},
         0.0,              // t0
-        View1D<T, 2>{y0}, // q0
-        1e-10,            // rtol
-        1e-10,            // atol
+        y0,               // q0
+        tol,              // rtol
+        tol,              // atol
         0.0,              // min_step
         0.0,              // max_step (0.0 translates to unbounded for max_step)
         0.0,              // stepsize (auto)
@@ -39,7 +43,7 @@ void test_single_objective(){
 
     T t_expected = period / 4.0;
     int crossings_found = 0;
-    std::array<T, 2> q;
+    State q;
     while (
         solver.is_running()
         && solver.t() < 5.0 * period
@@ -47,7 +51,7 @@ void test_single_objective(){
         solver.advance();
         if (solver.is_at_objective()){
             crossings_found++;
-            solver.fill_current_vector(q.data());
+            solver.fill_current_vector(q);
             if (std::abs(solver.t() - t_expected) >= 1e-8){
                 std::cerr << "Error: crossing time inaccurate!" << std::endl;
             } else if (std::abs(q[0]) >= 1e-8){
@@ -77,22 +81,23 @@ void test_single_objective(){
 void test_two_objectives(){
     std::cout << "=== test_two_objectives ===\n";
 
-    auto obj0 = [](const T& /*t*/, const T* q) -> T { return q[0]; };  // position
-    auto obj1 = [](const T& /*t*/, const T* q) -> T { return q[1]; };  // velocity
+    auto obj0 = [](const T& /*t*/, const State& q) -> T { return q[0]; };  // position
+    auto obj1 = [](const T& /*t*/, const State& q) -> T { return q[1]; };  // velocity
     using ObjFun0 = decltype(obj0);
     using ObjFun1 = decltype(obj1);
 
     ObjFunData<T, ObjFun0> data0{.func=obj0, .dir=-1};  // q[0]=sin(t) decreasing through 0 at t=pi
     ObjFunData<T, ObjFun1> data1{.func=obj1, .dir=1};   // q[1]=cos(t) increasing through 0 at t=3pi/2
 
-    T y0[2] = {0.0, 1.0};
+    State y0 = {0.0, 1.0};
+    State tol = {1e-10, 1e-10};
 
-    auto solver = getEventStepper<Stepper::RK45, T, 2>(
+    auto solver = getEventStepper<Stepper::RK45, SolverPolicy::Static, T, SD>(
         std::tuple{data0, data1},
         OdeData{.Rhs = rhs},
         T{0.0},              // t0
-        View1D<T, 2>{y0}, // q0
-        1e-10, 1e-10,  // rtol, atol
+        y0,                  // q0
+        tol, tol,            // rtol, atol
         T{0.0}, T{0.0}, T{0.0}, // min_step, max_step, first step
         1             // direction
     );
@@ -103,14 +108,14 @@ void test_two_objectives(){
     T t1_expected = 3.0 * M_PI / 2.0;  // next expected obj1 (q[1]=0) crossing
     int crossings0_found = 0;
     int crossings1_found = 0;
-    std::array<T, 2> q;
+    State q;
     while (
         solver.is_running()
         && solver.t() < 5.0 * period
     ){
         solver.advance();
         if (solver.is_at_objective()){
-            solver.fill_current_vector(q.data());
+            solver.fill_current_vector(q);
             if (solver.current_objective() == 0){
                 crossings0_found++;
                 if (std::abs(solver.t() - t0_expected) >= 1e-8){

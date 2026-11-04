@@ -1,6 +1,6 @@
 #pragma once
 
-#include <odecraft/Chaos/VariationalSolvers.hpp>
+#include "VariationalSolvers.hpp"
 #include "VariationalSolvers_mem_impl.hpp" // IWYU pragma: keep
 
 
