@@ -45,7 +45,7 @@ RK23<T, SD, OdeType, SP, Derived>::RK23(OdeType ode, T t0, State q0, RealState r
     // the arrays of states take the shape of q0 too
     K_.fill(q0);
     coef_mat.fill(q0);
-    THIS->Rhs(K_[Nstages], t0, q0);
+    this->Rhs(K_[Nstages], t0, q0);
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
@@ -56,14 +56,14 @@ Stepper RK23<T, SD, OdeType, SP, Derived>::method() const{
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 void RK23<T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    THIS->Rhs(K_[Nstages], this->t_new(), this->vector_new());
+    this->Rhs(K_[Nstages], this->t_new(), this->vector_new());
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 void RK23<T, SD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
     // the first stage of the next step (FSAL)
-    THIS->Rhs(K_[Nstages], this->t(), new_vector);
+    this->Rhs(K_[Nstages], this->t(), new_vector);
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
@@ -93,7 +93,7 @@ T RK23<T, SD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T& 
         this->atol(),
         A, B, C, E,
         [this](State& out, const T& time, const State& y){
-            THIS->Rhs(out, time, y);
+            this->Rhs(out, time, y);
         }
     );
 }

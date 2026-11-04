@@ -67,7 +67,7 @@ void BaseSolver<Derived, T, SD, OdeType, SP>::JacApprox(JacMat& out, const T& t,
     decltype(auto) w_y2 = scratch_2.get();
 
     ode::jac_approx_autostep<T, SD>([this](State& out_, const T& t_, const State& q_){
-        THIS->Rhs(out_, t_, q_);
+        this->Rhs(out_, t_, q_);
     }, out, w_x, w_y1, w_y2, t, q, this->atol());
 }
 
@@ -78,7 +78,7 @@ void BaseSolver<Derived, T, SD, OdeType, SP>::JacApprox(JacMat& out, const T& t,
     decltype(auto) w_y2 = scratch_2.get();
 
     ode::jac_approx_explicit<T, SD>([this](State& out_, const T& t_, const State& q_){
-        THIS->Rhs(out_, t_, q_);
+        this->Rhs(out_, t_, q_);
     }, out, w_x, w_y1, w_y2, t, q, dq);
 }
 
@@ -203,7 +203,7 @@ T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step(const T& t, const State& q)
         s_i = atol_i + rtol_i * abs(q_i);
     }, scale, this->rtol(), this->atol(), q);
 
-    THIS->Rhs(f0, t, q);
+    this->Rhs(f0, t, q);
     T d0 = rms_norm<SD, T>(q, scale);
     T d1 = rms_norm<SD, T>(f0, scale);
     if (d0 * 1e5 < 1 || d1 * 1e5 < 1){
@@ -215,7 +215,7 @@ T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step(const T& t, const State& q)
         y1_i = q_i + h0 * dir * f0_i;
     }, y1, q, f0);
 
-    THIS->Rhs(f1, t+h0*dir, y1);
+    this->Rhs(f1, t+h0*dir, y1);
 
     State& tmp = y1;//y1 can be recycled, its not used anymore below
     SD::for_each([](value_t<T, SD>& tmp_i, const value_t<T, SD>& f0_i, const value_t<T, SD>& f1_i){
@@ -474,7 +474,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::validate_ics_impl(const T& t0, con
     }
     decltype(auto) worker = this->scratch_0.get();
     
-    THIS->Rhs(worker, t0, q0);
+    this->Rhs(worker, t0, q0);
 
     return all_are_finite<T, SD>(worker);
 }

@@ -23,7 +23,7 @@ StepResult Euler<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new,
     t_new = t + h;
     habs_new = habs;
 
-    THIS->Rhs(q_new, t, q);
+    this->Rhs(q_new, t, q);
     SD::for_each([&h](value_t<T, SD>& qi_new, const value_t<T, SD>& qi){
         qi_new = qi + qi_new * h;
     }, q_new, q);

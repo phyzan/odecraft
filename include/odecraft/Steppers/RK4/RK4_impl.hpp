@@ -85,9 +85,9 @@ StepResult RK4<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, S
 
     decltype(auto) rhs_scratch = r_scratch_.get();
 
-    THIS->Rhs(K_[0], t, q);
+    this->Rhs(K_[0], t, q);
     detail::rk4_step<T, SD>(q_new, t, h, q, K_, rhs_scratch, [this](State& out, const T& time, const State& y){
-        THIS->Rhs(out, time, y);
+        this->Rhs(out, time, y);
     });
 
     if (!all_are_finite<T, SD>(q_new)){
@@ -122,7 +122,7 @@ void RK4<T, SD, OdeType, SP, Derived>::cache_interp_data() const{
     if (interp_data_is_cached_){
         return;
     }
-    THIS->Rhs(K_[Nstages], this->t_new(), this->vector_new());
+    this->Rhs(K_[Nstages], this->t_new(), this->vector_new());
     interp_data_is_cached_ = true;
 }
 
