@@ -13,13 +13,14 @@
 
 #include <odecraft/OdeResult/OdeResult_impl.hpp>
 
-// #include <odecraft/Interpolation/NdInterpolator_impl.hpp>
-// #include <odecraft/Interpolation/VectorFields_impl.hpp>
-// #include <odecraft/Interpolation/Regular/Grids_impl.hpp>
-// #include <odecraft/Interpolation/Regular/RegularGridInterpolator_impl.hpp>
-// #include <odecraft/Interpolation/Scattered/Delaunay_impl.hpp>
-// #include <odecraft/Interpolation/Scattered/ScatteredNdInterpolator_impl.hpp>
+#include <odecraft/Interpolation/NdInterpolator_impl.hpp>
+#include <odecraft/Interpolation/Regular/Grids_impl.hpp>
+#include <odecraft/Interpolation/Regular/RegularGridInterpolator_impl.hpp>
+#include <odecraft/Interpolation/Scattered/Delaunay_impl.hpp>
+#include <odecraft/Interpolation/Scattered/ScatteredNdInterpolator_impl.hpp>
 #include <odecraft/Interpolation/Univariate/StateInterp_impl.hpp>
+
+// #include <odecraft/Interpolation/VectorFields_impl.hpp>
 
 #include <odecraft/Steppers/Steppers_impl.hpp>
 

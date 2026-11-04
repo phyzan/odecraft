@@ -12,7 +12,7 @@ RegularGrid<T, NDIM>::RegularGrid(const AxisData& axes) : data_(axes.size()), sh
     for (int i=0; i<n_axes; i++){
         const auto& axis = axes[i];
         assert(axis.size() >= 2 && "Each axis must have at least 2 grid points");
-        data_[i] = Array1D<T>(axis.data(), axis.size());
+        data_[i] = Array1D<T, 0>(axis.data(), axis.size());
         shape_[i] = axis.size();
     }
 }
@@ -34,7 +34,7 @@ T RegularGrid<T, NDIM>::length(int axis) const {
 }
 
 template<typename T, int NDIM>
-const Array1D<T>& RegularGrid<T, NDIM>::x(int i) const {
+const Array1D<T, 0>& RegularGrid<T, NDIM>::x(int i) const {
     assert((i >= 0 && i < ndim()) && "Axis index out of bounds");
     return data_[i];
 }

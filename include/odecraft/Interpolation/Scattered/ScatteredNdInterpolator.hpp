@@ -31,7 +31,7 @@ public:
     TriPtr<NDIM> tri() const;
 
     // shape (n_points, ndim)
-    const Array2D<double, 0, NDIM>& points() const;
+    const CArray2D<double, 0, NDIM>& points() const;
 
 private:
 

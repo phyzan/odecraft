@@ -3,6 +3,7 @@
 
 #include <odecraft/Interpolation/Scattered/Delaunay.hpp>
 #include <odecraft/Toolkit/Tools.hpp>
+#include <odecraft/Toolkit/Linalg.hpp>
 
 extern "C" {
 #include <libqhull_r/qhull_ra.h>
@@ -19,7 +20,8 @@ DelaunayTri<NDIM>::DelaunayTri(const double* points, size_t n_points, size_t ndi
     invT_.resize(nsimplices(), nd, nd);
 
     constexpr Allocation Alloc = (NDIM == 0 ? Allocation::Heap : Allocation::Stack);
-    Array2D<double, NDIM, NDIM, Alloc> A(nd, nd);
+    CArray2D<double, NDIM, NDIM, Alloc> A(nd, nd);
+    CArray2D<double, NDIM, NDIM, Alloc> lu(nd, nd);
 
     Array1D<double, NDIM, Alloc> work(nd);
     Array1D<size_t, NDIM, Alloc> pivot(nd);
@@ -39,7 +41,7 @@ DelaunayTri<NDIM>::DelaunayTri(const double* points, size_t n_points, size_t ndi
             }
         }
 
-        inv_mat_row_major(invT_.ptr(s, 0, 0), A.data(), nd, work.data(), pivot.data());
+        inv_mat_row_major(invT_.ptr(s, 0, 0), A.data(), nd, work.data(), lu.data(), pivot.data());
 
     }
 
@@ -53,17 +55,17 @@ template<size_t NDIM>
 int DelaunayTri<NDIM>::npoints() const { return points_.Nrows(); }
 
 template<size_t NDIM>
-const Array2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_points() const { return points_; }
+const CArray2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_points() const { return points_; }
 
 template<size_t NDIM>
-const Array2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_simplices() const { return simplices_; }
+const CArray2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_simplices() const { return simplices_; }
 
-template<size_t NDIM> const Array2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_neighbors() const { return neighbors_; }
+template<size_t NDIM> const CArray2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_neighbors() const { return neighbors_; }
 
 template<size_t NDIM>
-const Array2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_v0() const { return v0_; }
+const CArray2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_v0() const { return v0_; }
 
-template<size_t NDIM> const Array3D<double, 0, NDIM, NDIM>& DelaunayTri<NDIM>::get_invT() const {
+template<size_t NDIM> const CArray3D<double, 0, NDIM, NDIM>& DelaunayTri<NDIM>::get_invT() const {
     return invT_; 
 }
 
@@ -86,7 +88,8 @@ template<size_t NDIM>
 int DelaunayTri<NDIM>::find_simplex(const double* point) const {
     int num_simplices = nsimplices();    
     int nd = ndim();
-    if (num_simplices == 0 || !all_are_finite(point, nd)) {
+    auto is_finite = [](double x) { return std::isfinite(x); };
+    if (num_simplices == 0 || !std::all_of(point, point + nd, is_finite)) {
         return -1;
     }
 
@@ -220,7 +223,7 @@ bool DelaunayTri<NDIM>::compute_barycentric(double* out, int simplex_idx, const 
     }
     out[nd] = sumb;
 
-    return all_are_finite(out, nd + 1);
+    return std::all_of(out, out + nd + 1, [](double x) { return std::isfinite(x); });
 
 };
 
@@ -344,7 +347,7 @@ void DelaunayTri<NDIM>::compute_delaunay_nd() {
     int n = int(ndim());
     int num_points = npoints();
 
-    const Array2D<double, 0, NDIM>& coords = get_points();
+    const CArray2D<double, 0, NDIM>& coords = get_points();
 
     // Initialize Qhull
     qhT qh_qh;
@@ -399,7 +402,7 @@ void DelaunayTri<NDIM>::compute_delaunay_nd() {
     }
 
     int num_simplices = int(facet_list.size());
-    simplices_ = Array2D<int, 0, DIM_SPX>(simplex_array.data(), num_simplices, n + 1);
+    simplices_ = CArray2D<int, 0, DIM_SPX>(simplex_array.data(), num_simplices, n + 1);
 
     // Second pass: extract neighbors
     neighbors_.resize(num_simplices, n + 1);
@@ -454,18 +457,18 @@ int& DelaunayTri<NDIM>::thread_cache() const {
 }
 
 template<size_t NDIM>
-Array2D<double, NDIM, NDIM>& DelaunayTri<NDIM>::mat_cache() const {
+CArray2D<double, NDIM, NDIM>& DelaunayTri<NDIM>::mat_cache() const {
     // cache for temporary matrices used in barycentric coordinate computation, to avoid repeated allocations
     // this is also per-object, per-thread cache
-    thread_local std::unordered_map<const DelaunayTri*, Array2D<double, NDIM, NDIM>> cache;
+    thread_local std::unordered_map<const DelaunayTri*, CArray2D<double, NDIM, NDIM>> cache;
     if (cache.find(this) == cache.end()) {
-        cache[this] = Array2D<double, NDIM, NDIM>(this->ndim(), this->ndim());
+        cache[this] = CArray2D<double, NDIM, NDIM>(this->ndim(), this->ndim());
     }
     return cache[this];
 }
 
 template<size_t NDIM>
-void DelaunayTri<NDIM>::set_state(const View2D<double, 0, NDIM>& points, const View2D<int, 0, DIM_SPX>& simplices, const View2D<int, 0, DIM_SPX>& neighbors, const View2D<double, 0, NDIM>& v0, const View3D<double, 0, NDIM, NDIM>& invT){
+void DelaunayTri<NDIM>::set_state(const CView2D<double, 0, NDIM>& points, const CView2D<int, 0, DIM_SPX>& simplices, const CView2D<int, 0, DIM_SPX>& neighbors, const CView2D<double, 0, NDIM>& v0, const CView3D<double, 0, NDIM, NDIM>& invT){
     points_.resize(points.shape(), points.ndim());
     std::copy(points.data(), points.data() + points.size(), points_.data());
 
