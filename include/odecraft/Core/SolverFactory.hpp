@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <odecraft/Events/Events.hpp>
+#include <odecraft/Contracts/DenseDescriptor.hpp>
 
 
 namespace ode {
@@ -194,5 +195,33 @@ template<typename T, typename SD, typename OdeType, typename... Args>
 inline BoxedSolver<T, SD, UtilPolicy::RichVirtual> make_rich_vsolver(Stepper method, OdeType ode, T t0, state_t<T, SD> q0, Args&&... args){
     return make_solver<UtilPolicy::RichVirtual, T, SD>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
 }
+
+namespace common{
+
+
+template<typename T, size_t... Shape>
+using State = ::ode::contracts::common::State<T, Shape...>;
+
+template<Stepper S, SolverPolicy SP, typename T, typename OdeType, size_t... Shape>
+inline auto getSolver(OdeType ode, T t0, State<T, Shape...> q0, State<T, Shape...> rtol, State<T, Shape...> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State<T, Shape...>> events = {}){
+    return ::ode::getSolver<S, SP, T, ::ode::contracts::common::SD<Shape...>>(std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
+}
+
+template<UtilPolicy UP, typename T, typename OdeType, size_t... Shape, typename... Args>
+inline BoxedSolver<T, ::ode::contracts::common::SD<Shape...>, UP> make_solver(Stepper method, OdeType ode, T t0, State<T, Shape...> q0, Args&&... args){
+    return ::ode::make_solver<UP, T, ::ode::contracts::common::SD<Shape...>>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
+}
+
+template<typename T, typename OdeType, size_t... Shape, typename... Args>
+inline BoxedSolver<T, ::ode::contracts::common::SD<Shape...>, UtilPolicy::Virtual> make_vsolver(Stepper method, OdeType ode, T t0, State<T, Shape...> q0, Args&&... args){
+    return ::ode::make_vsolver<T, ::ode::contracts::common::SD<Shape...>>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
+}
+
+template<typename T, typename OdeType, size_t... Shape, typename... Args>
+inline BoxedSolver<T, ::ode::contracts::common::SD<Shape...>, UtilPolicy::RichVirtual> make_rich_vsolver(Stepper method, OdeType ode, T t0, State<T, Shape...> q0, Args&&... args){
+    return ::ode::make_rich_vsolver<T, ::ode::contracts::common::SD<Shape...>>(method, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
+}
+
+} // namespace ode::common
 
 } // namespace ode

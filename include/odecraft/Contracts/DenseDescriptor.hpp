@@ -303,4 +303,14 @@ using CArrayDescriptor = detail::TensorState<ndspan::Layout::C, Shape...>;
 template<size_t... Shape>
 using FArrayDescriptor = detail::TensorState<ndspan::Layout::F, Shape...>;
 
+namespace common{
+    
+template<size_t... Shape>
+using SD = CArrayDescriptor<Shape...>;
+
+template<typename T, size_t... Shape>
+using State = ndspan::Array<T, ndspan::Allocation::Auto, ndspan::Layout::C, Shape...>;
+
+} // namespace ode::contracts::common
+
 } // namespace ode::contracts

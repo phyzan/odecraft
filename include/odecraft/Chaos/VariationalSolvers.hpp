@@ -9,6 +9,7 @@
 #include <odecraft/Toolkit/Toolkit.hpp>
 #include "VariationalContract.hpp"
 #include "odecraft/Toolkit/Tools.hpp"
+#include <odecraft/Contracts/DenseDescriptor.hpp>
 
 namespace ode::chaos {
 
@@ -349,6 +350,24 @@ pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeT
 
 template<SolverPolicy SP, Stepper S, typename T, typename SD, typename OdeType>
 auto getVariationalSolver(OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, real_state_t<T, VarSD<SD>> rtol, real_state_t<T, VarSD<SD>> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, state_t<T, VarSD<SD>>> events = {});
+
+namespace common{
+
+
+template<typename T, size_t... Shape>
+using VarState = contracts::VarState<::ode::contracts::common::State<T, Shape...>>;
+
+template<SolverPolicy SP, Stepper S, typename T, typename OdeType, size_t... Shape>
+auto getVariationalSolver(OdeType ode, T t0, VarState<T, Shape...> q0, T period, VarState<T, Shape...> rtol, VarState<T, Shape...> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, VarState<T, Shape...>> events = {}){
+    return ::ode::chaos::getVariationalSolver<SP, S, T, ::ode::contracts::common::SD<Shape...>>(std::move(ode), std::move(t0), std::move(q0), std::move(period), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
+}
+
+template<UtilPolicy UP, typename T, typename OdeType, size_t... Shape, typename... Args>
+pbox::Box<ChaoticSolver<T, ::ode::contracts::common::SD<Shape...>, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, VarState<T, Shape...> q0, T period, Args&&... args){
+    return ::ode::chaos::make_variational_solver<UP, T, ::ode::contracts::common::SD<Shape...>>(method, std::move(ode), std::move(t0), std::move(q0), std::move(period), std::forward<Args>(args)...);
+}
+
+} // namespace ode::chaos::common
 
 } // namespace ode::chaos
 
