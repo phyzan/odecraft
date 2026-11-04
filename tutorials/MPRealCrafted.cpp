@@ -4,7 +4,7 @@
 using namespace ode::crafted;
 
 template<typename T>
-void solution_exact(T* out, const T& t, const T* q0){
+void solution_exact(State<T>& out, const T& t, const State<T>& q0){
     // q0 = [x(0), x'(0)]
     out[0] = q0[0]*mpfr::cos(mpfr::mpreal(t)) + q0[1]*mpfr::sin(mpfr::mpreal(t));
     out[1] = -q0[0]*mpfr::sin(mpfr::mpreal(t)) + q0[1]*mpfr::cos(mpfr::mpreal(t));
@@ -23,7 +23,7 @@ int main(){
     // Next, define the event
     pbox::Box<Event<mpreal_t>> event = make_precise_event<mpreal_t>(
         "crossing",
-        [](const mpreal_t& /*t*/, const mpreal_t* q) -> mpreal_t {
+        [](const mpreal_t& /*t*/, const State<mpreal_t>& q) -> mpreal_t {
             return q[0] - 1;
         },
         mpreal_t{0}, // machine precision tolerance
@@ -32,22 +32,22 @@ int main(){
 
     // The initial state: q[0] = 2, q[1] = 0, 
     // i.e. x'' = -x with x(0) = 2, x'(0) = 0
-    std::array<mpreal_t, 2> q0_array = {mpreal_t{2}, mpreal_t{0}};
-    View1D<mpreal_t> q0{q0_array.data(), q0_array.size()};
+    State<mpreal_t> q0 = {mpreal_t{2}, mpreal_t{0}};
+    State<mpreal_t> tol = {mpreal_t{1e-30}, mpreal_t{1e-30}};
 
     // Now the integrator
     BoxedRichSolver<mpreal_t> solver = make_rich_vsolver<mpreal_t>(
         Stepper::RK45,
         ode_t<mpreal_t>{
-            .Rhs=[](mpreal_t* out, const mpreal_t& /*t*/, const mpreal_t* q){
+            .Rhs=[](State<mpreal_t>& out, const mpreal_t& /*t*/, const State<mpreal_t>& q){
                 out[0] = q[1];
                 out[1] = -q[0];
             }
         },
         mpreal_t{0}, // t0
         q0, // [2, 0]
-        mpreal_t{1e-30}, // rtol
-        mpreal_t{1e-30}, // atol
+        tol, // rtol
+        tol, // atol
         mpreal_t{0}, // min_step
         mpreal_t{0}, // max_step
         mpreal_t{0}, // first step
@@ -67,11 +67,11 @@ int main(){
     // is rising. The event was built with dir = +1, so the solver reports the rising one.
 
     
-    std::array<mpreal_t, 2> q_start_array;
-    solution_exact(q_start_array.data(), t_start, q0_array.data());
+    State<mpreal_t> q_start = q0;
+    solution_exact(q_start, t_start, q0);
 
     // We could have set t0 to t_start when constructing the solver, but let's do it now to show how to set new initial conditions in an already initialized solver.
-    solver->do_set_ics(t_start, q_start_array.data());
+    solver->do_set_ics(t_start, q_start);
 
     // We advance until the event is detected, and time the integration duration.
     auto start = std::chrono::high_resolution_clock::now();

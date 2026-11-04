@@ -14,14 +14,14 @@ Assuming that the solution of a 2D ODE system is accessed via q[0] and q[1], we 
 // the compiler to inline the calls by passing the structs as template parameters to the solver class.
 template<typename T>
 struct Obj1{
-    inline T operator()(T t, const T* q) const{
+    inline T operator()(T t, const auto& q) const{
         return q[0] - 1;
     }
 };
 
 template<typename T>
 struct Obj2{
-    inline T operator()(const T& t, const T* q) const{
+    inline T operator()(const T& t, const auto& q) const{
         return q[1] - 2;
     }
 };
@@ -30,7 +30,7 @@ struct Obj2{
 struct MyOdeRhs{
 
     // Declare parameters as `auto` to allow for automatic differentiation with dual numbers
-    inline static void Rhs(auto* out, const auto& t, const auto* q){
+    inline static void Rhs(auto& out, const auto& t, const auto& q){
         out[0] = q[1];
         out[1] = -q[0];
     }
@@ -41,12 +41,12 @@ struct MyOdeRhs{
 
 // Class that hardcodes the ODE system and the **two** objective functions,
 // and uses the StaticEventStepper to handle events.
-template<Stepper S, typename T, size_t N, SolverPolicy SP = SolverPolicy::Static>
-class MySolver : public StaticEventStepper<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>{
+template<Stepper S, typename T, typename SD, SolverPolicy SP = SolverPolicy::Static>
+class MySolver : public StaticEventStepper<S, T, SD, MyOdeRhs, SP, Obj1<T>, Obj2<T>>{
 
 public:
 
-    using Base = StaticEventStepper<S, T, N, SP, MyOdeRhs, Obj1<T>, Obj2<T>>;
+    using Base = StaticEventStepper<S, T, SD, MyOdeRhs, SP, Obj1<T>, Obj2<T>>;
 
     // Following the convention that the first argument of solvers is the ODE system, we pass MyOdeRhs as the first argument to the base class constructor.
     // The rest of the arguments are forwarded to the base class constructor.
@@ -60,7 +60,7 @@ public:
         : Base(
             std::tuple{ // forward {objective_function, accuracy, direction} for each objective
                 ObjFunData{Obj1<T>{}, std::get<0>(data1), std::get<1>(data1)},
-                ObjFunData{Obj2<T>{}, std::get<0>(data2), std::get<1>(data2)}
+                ObjFunData{Obj2<T>{}, std::get<0>(data2), std::get<1>(data2)},
             },
             MyOdeRhs{}, // ODE to be forwarded into `Solver`
             std::forward<Args>(args)... // the rest of the arguments to be forwarded into `Solver`
@@ -72,23 +72,26 @@ public:
 int main(){
 
     using T = double;
+    using SD = contracts::common::SD<2>;
+    using State = common::State<T, 2>;
 
     const size_t count = 4;
     // Now advance each solver until `count` encounters with any objective functions have been detected.
 
-    std::array<T, 2> q0 = {T{0.0}, T{5.0}}; // initial conditions
+    State q0 = {T{0.0}, T{5.0}}; // initial conditions
+    State tol = {T{1e-6}, T{1e-6}}; // per component error tolerance
 
 
     // Using the `MySolver` class
     {
         std::cout << "---------- Using MySolver class ----------" << std::endl;
-        auto solver = MySolver<Stepper::RK45, T, 2>{
+        auto solver = MySolver<Stepper::RK45, T, SD>{
             {T{0.0}, 1},
             {T{0.0}, 1},
             T{0.0}, // initial time
-            View1D<T, 2>{q0.data()}, // initial state
-            T{1e-6}, // relative tolerance
-            T{1e-6}, // absolute tolerance
+            q0, // initial state
+            tol, // relative tolerance
+            tol, // absolute tolerance
             T{1e-6}, // minimum step size
             T{0.1}, // maximum step size
             T{0.01}, // initial step size
@@ -109,23 +112,23 @@ int main(){
     {
         std::cout << "\n---------- Using getEventStepper with lambdas ----------" << std::endl;
 
-        auto solver = getEventStepper<Stepper::RK45, T, 2>(
+        auto solver = getEventStepper<Stepper::RK45, ode::SolverPolicy::Static, T, SD>(
             std::tuple{
                 ObjFunData{
                     // passing the lambda and ftol automatically deduces the template
                     // parameters for ObjFunData, so we don't need to explicitly specify them.
-                    .func=[](T t, const T* q){
+                    .func=[](T t, const State& q){
                         return q[0] - 1;
                     },
                     .ftol=T{0.0},
-                    .dir=1
+                    .dir=1,
                 },
                 ObjFunData{
-                    .func=[](T t, const T* q){
+                    .func=[](T t, const State& q){
                         return q[0] - 2;
                     },
                     .ftol=T{0.0},
-                    .dir=1
+                    .dir=1,
                 },
             },
             OdeData{
@@ -134,12 +137,12 @@ int main(){
                         out[0] = q[1];
                         out[1] = -q[0];
                     },
-                    .Jac=nullptr // for clarity (default is nullptr anyway)
+                    .Jac=nullptr, // for clarity (default is nullptr anyway)
                 },
             T{0.0}, // initial time
-            View1D<T, 2>{q0.data()}, // initial state
-            T{1e-6}, // relative tolerance
-            T{1e-6}, // absolute tolerance
+            q0, // initial state
+            tol, // relative tolerance
+            tol, // absolute tolerance
             T{1e-6}, // minimum step size
             T{0.1}, // maximum step size
             T{0.01}, // initial step size
@@ -160,17 +163,17 @@ int main(){
     {
         std::cout << "\n---------- Using SingleStaticEventStepper class ----------" << std::endl;
 
-        SingleStaticEventStepper<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
+        SingleStaticEventStepper<Stepper::RK45, T, SD, MyOdeRhs, ode::SolverPolicy::Static, Obj1<T>> solver(
             ObjFunData{
                 .func=Obj1<T>{},
                 .ftol=T{0.0},
-                .dir=1
+                .dir=1,
             },
         MyOdeRhs{},
             T{0.0}, // initial time
-            View1D<T, 2>{q0.data()}, // initial state
-            T{1e-6}, // relative tolerance
-            T{1e-6}, // absolute tolerance
+            q0, // initial state
+            tol, // relative tolerance
+            tol, // absolute tolerance
             T{1e-6}, // minimum step size
             T{0.1}, // maximum step size
             T{0.01}, // initial step size
@@ -189,13 +192,13 @@ int main(){
     // or if direction does not matter, and maximum accuracy is desired, you can use the following constructor:
     {
         std::cout << "\n---------- Using SingleStaticEventStepper class with simpler constructor ----------" << std::endl;
-        SingleStaticEventStepper<Stepper::RK45, T, 2, ode::SolverPolicy::Static, MyOdeRhs, Obj1<T>> solver(
+        SingleStaticEventStepper<Stepper::RK45, T, SD, MyOdeRhs, ode::SolverPolicy::Static, Obj1<T>> solver(
             Obj1<T>{},
             MyOdeRhs{},
             T{0.0}, // initial time
-            View1D<T, 2>{q0.data()}, // initial state
-            T{1e-6}, // relative tolerance
-            T{1e-6}, // absolute tolerance
+            q0, // initial state
+            tol, // relative tolerance
+            tol, // absolute tolerance
             T{1e-6}, // minimum step size
             T{0.1}, // maximum step size
             T{0.01}, // initial step size
