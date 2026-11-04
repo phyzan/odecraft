@@ -1,6 +1,6 @@
 #pragma once
 
-#include <odecraft/Chaos/VariationalSolvers.hpp>
+#include "VariationalSolvers.hpp"
 #include <odecraft/DenseOde/OdeInt_mem_impl.hpp>
 
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "odecraft/Core/SolverFactory.hpp"
-#include <odecraft/OdeResult/OdeResult.hpp>
+#include "OdeResult.hpp"
 #include <sstream>
 
 namespace ode{

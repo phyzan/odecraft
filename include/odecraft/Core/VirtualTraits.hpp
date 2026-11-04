@@ -1,6 +1,6 @@
 #pragma once
 
-#include <odecraft/Core/SolverFactory.hpp> // IWYU pragma: keep
+#include "SolverFactory.hpp" // IWYU pragma: keep
 
 namespace ode{
 

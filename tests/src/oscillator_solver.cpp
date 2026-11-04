@@ -6,49 +6,51 @@
 using namespace ode;
 
 template<typename T>
-T crossing(const T& /*t*/, const T* y) {
+T crossing(const T& /*t*/, const common::State<T, 2>& y) {
     return y[1] - 1;
 }
 
 
 template<typename Scalar>
 void crossing_test(Stepper method) {
+    using SD = contracts::common::SD<2>;
+    using State = common::State<Scalar, 2>;
+
     // Initial conditions
-    std::array<Scalar, 2> y0 = {3, 0};
+    State y0 = {3, 0};
 
 
     // Define the y' = 1 crossing
-    pbox::Box<Event<Scalar>> event = make_precise_event("event", crossing<Scalar>, Scalar(0));
+    BoxedEvent<Scalar, State> event = make_precise_event<Scalar, State>("event", crossing<Scalar>, Scalar(0));
 
     // Create solver
     Scalar t = 0;
-    Scalar rtol = 1e-6;
-    Scalar atol = 1e-9;
+    State rtol = {1e-6, 1e-6};
+    State atol = {1e-9, 1e-9};
     Scalar min_step = 0;
     Scalar max_step = 1;
     Scalar stepsize = 0;
-    constexpr size_t nsys = 2;
     int dir = 1;
 
 
-    pbox::Box<OdeRichSolver<Scalar, nsys>> solver = make_solver<UtilPolicy::RichVirtual>(
+    pbox::Box<OdeRichSolver<Scalar, SD>> solver = common::make_solver<UtilPolicy::RichVirtual>(
         method,
         OdeData{.Rhs=
             ODECRAFT_LAMBDA(out, /*t*/, q) {
                 const Scalar omega{1}; // angular frequency
                 out[0] = q[1];
                 out[1] = - omega*omega*q[0];
-            }
+            },
         },
         t,
-        View1D<Scalar, 2>{y0.data()}, // q0
+        y0, // q0
         rtol,
         atol,
         min_step,
         max_step,
         stepsize,
         dir,
-        make_event_list<Scalar>(std::move(event))
+        make_event_list<Scalar, State>(std::move(event))
     );
 
     // Advance until event is detected
@@ -59,7 +61,7 @@ void crossing_test(Stepper method) {
     std::cout << "Event detected at t = " << solver->get_time() << "\n";
     std::cout << "State at event: ";
     auto yf = y0;
-    solver->get_current_vector(yf.data());
+    solver->get_current_vector(yf);
     for (size_t i = 0; i < 2; ++i) {
         std::cout << yf[i] << " ";
     }

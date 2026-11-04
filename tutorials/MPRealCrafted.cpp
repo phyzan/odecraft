@@ -1,4 +1,4 @@
-#include <odecraft/Compiled/odecraft.hpp>
+#include <odecraft/Crafted.hpp>
 
 
 using namespace ode::crafted;
@@ -42,7 +42,7 @@ int main(){
             .Rhs=[](State<mpreal_t>& out, const mpreal_t& /*t*/, const State<mpreal_t>& q){
                 out[0] = q[1];
                 out[1] = -q[0];
-            }
+            },
         },
         mpreal_t{0}, // t0
         q0, // [2, 0]

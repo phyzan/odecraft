@@ -21,7 +21,7 @@ struct MyODE{
 using namespace ode;
 
 
-int main(){
+void test_variational_solver(){
 
     std::cout << "\n---------- Testing VariationalSolver ------------------\n" << std::endl;
 

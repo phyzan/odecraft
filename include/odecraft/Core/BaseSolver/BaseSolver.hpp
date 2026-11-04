@@ -17,8 +17,8 @@
  */
 
 #include "odecraft/Toolkit/Toolkit.hpp" // IWYU pragma: keep
-#include <odecraft/Core/VirtualTraits.hpp>
-#include <odecraft/Core/VirtualBase.hpp>
+#include "../VirtualTraits.hpp"
+#include "../VirtualBase.hpp" // IWYU pragma: keep
 
 
 

@@ -3,7 +3,7 @@
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
 #include <odecraft/Events/Events.hpp>
 #include <polybox/polybox.hpp>
-#include <odecraft/Core/SolverFactory.hpp>
+#include "SolverFactory.hpp"
 #include <ostream>
 #include <span>
 
