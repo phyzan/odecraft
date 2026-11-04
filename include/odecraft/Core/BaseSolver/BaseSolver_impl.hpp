@@ -163,13 +163,13 @@ void BaseSolver<Derived, T, SD, OdeType, SP>::show_state(std::ostream& out, int 
 
     out << std::setprecision(prec) << "\n" << 
     "OdeSolver current state:\n---------------------------\n"
-    "\ttime       : " << this->t() << "\n" <<
-    "\tq          : ";
+    "\ttime      : " << this->t() << "\n" <<
+    "\tq         : ";
     
     SD::console(out, worker) << "\n" <<
-    "\tstepsize   : " << this->stepsize() << "\n" <<
-    "\tUpdates    : " << this->step_count() << "\n" <<
-    "\tStatus     : " << this->message() << std::endl;
+    "\tstepsize  : " << this->stepsize() << "\n" <<
+    "\tUpdates   : " << this->step_count() << "\n" <<
+    "\tStatus    : " << this->message() << std::endl;
 }
 
 
