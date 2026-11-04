@@ -6,36 +6,39 @@ using namespace ode;
 int main(){
 
     using T = double;
+    using State = common::State<T, 2>;
 
     // Most common case: PreciseEvent class (zero - crossing event):
 
     /**
      * @class
-        template<typename T, isObjFun<T> Target, OptionalRhsFunc<T> MaskFunc = std::nullptr_t>
+        template<typename T, typename State, isObjFun<T, State> Target, typename MaskFunc = std::nullptr_t>
         class PreciseEvent;
      * 
      * @tparam T : Numeric type
-     * @tparam Target : satisfies isObjFun<T> concept:
-        func(T t, const T* q) -> T
+     * @tparam State : The state type of the solver the event is used with
+     * @tparam Target : satisfies isObjFun<T, State> concept:
+        func(T t, const State& q) -> T
         when `func` crosses zero, the event is triggered
      * @tparam MaskFunc 
         Optionally modify the solver's state when the event is detected.
         Signature:
-            mask(T* out, T t, const T* q) -> void
+            mask(State& out, T t, const State& q) -> void
             or `nullptr` to *not* use the feature
      */
 
     // --------------- Directly declare events -----------------
     
     
-    // Explicitly pass the `event_tol` as the required type (e.g. T{1e-15})
-    // so that all template parameters are automatically deduced
-    // and avoid writing PreciseEvent<...>
-    PreciseEvent event{
+    // `State` cannot be deduced from the objective function, so
+    // the template parameters of PreciseEvent are written explicitly
+    auto objective = [](const T& t, const State& q){
+        return q[1] - 1; // Event triggered when q[1] = 1
+    };
+
+    PreciseEvent<T, State, decltype(objective)> event{
         "my_event", // name
-        [](const T& t, const T* q){
-            return q[1] - 1; // Event triggered when q[1] = 1
-        },
+        objective,
         T{1e-15}, // or 0.0 for maximum precision
         -1 // only trigger when the `Target` crosses from positive to negative
     };
@@ -44,12 +47,10 @@ int main(){
 
     // ---------------- Polymorphic nature of Events -------------------
 
-    // We want to allocate all events as Event<T>* for type-erasure
-    Event<T>* raw_event = new PreciseEvent{
+    // We want to allocate all events as Event<T, State>* for type-erasure
+    Event<T, State>* raw_event = new PreciseEvent<T, State, decltype(objective)>{
         "raw_event_pointer", // name
-        [](const T& t, const T* q){
-            return q[1] - 1; // Event triggered when q[1] = 1
-        },
+        objective,
         T{1e-15}, // or 0.0 for maximum precision
         -1 // only trigger when the `Target` crosses from positive to negative
     };
@@ -62,22 +63,22 @@ int main(){
     // ------------------ Safely allocate events ----------------------
 
     // The safe and provided way to do this is by allocating an Event
-    // in a wrapper that holds unique ownership of the allocated Event<T>*
+    // in a wrapper that holds unique ownership of the allocated Event<T, State>*
     // and works similarly to std::unique_ptr (cannot be copied, only moved)
     // See external/polybox/README.md for more details
 
-    pbox::Box<Event<T>> event_1 = make_precise_event(
+    pbox::Box<Event<T, State>> event_1 = make_precise_event<T, State>(
         "boxed_event_1",
-        [](const T& t, const T* q){
+        [](const T& t, const State& q){
             return q[1] - 1; // Event triggered when q[1] = 1
         },
         T{1e-15}, // or 0.0 for maximum precision
         -1 // only trigger when the `Target` crosses from positive to negative
     );
 
-    pbox::Box<Event<T>> event_2 = make_precise_event(
+    pbox::Box<Event<T, State>> event_2 = make_precise_event<T, State>(
         "boxed_event_2",
-        [](const T& t, const T* q){
+        [](const T& t, const State& q){
             return q[0] - 1.25; // Event triggered when q[0] = 1.25
         },
         T{0.0}
@@ -90,7 +91,7 @@ int main(){
     // `event_1` and `event_2` go out of scope. To transfer ownership,
     // call std::move, e.g.:
 
-    Vector<pbox::Box<Event<T>>> event_list = xdiff::make_vector<pbox::Box<Event<T>>>(
+    Vector<pbox::Box<Event<T, State>>> event_list = make_vector<pbox::Box<Event<T, State>>>(
         std::move(event_1),
         std::move(event_2)
     );
@@ -114,38 +115,38 @@ int main(){
 
     // Now we can declare a solver with these events in a simple manner:
 
-    std::array<T, 2> y0{3, 0};
+    State y0 = {3, 0};
     T t{0};
-    T rtol{1e-10};
-    T atol{1e-10};
+    State rtol = {1e-10, 1e-10};
+    State atol = {1e-10, 1e-10};
     T min_step{0.0};
     T max_step{100};
     T stepsize{0};
     int dir = 1;
 
-    auto solver = getSolver<Stepper::RK45, ode::SolverPolicy::RichStatic>(
+    auto solver = common::getSolver<Stepper::RK45, ode::SolverPolicy::RichStatic>(
         OdeData{.Rhs=
             ODECRAFT_LAMBDA(out, /*t*/, q) {
                 const T omega{1}; // angular frequency
                 out[0] = q[1];
                 out[1] = - omega*omega*q[0];
-            }
+            },
         },
         t,
-        View1D<T, 2>{y0.data()}, // q0
+        y0, // q0
         rtol,
         atol,
         min_step,
         max_step,
         stepsize,
         dir,
-        make_event_list<T>(std::move(event_1), std::move(event_2))
+        make_event_list<T, State>(std::move(event_1), std::move(event_2))
     );
 
     auto yf = y0;
     while (solver.advance() && solver.t() < 20){
         if (solver.at_event()){
-            solver.fill_current_vector(yf.data());
+            solver.fill_current_vector(yf);
             std::cout << "\n----------- EVENT DETECTED -----------" << std::endl;
             std::cout << "Event detected at t = " << solver.t() << ", event name = " << solver.current_event().event->name() << std::endl;
             std::cout << "State at event: ";

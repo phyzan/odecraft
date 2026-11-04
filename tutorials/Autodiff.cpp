@@ -3,10 +3,14 @@
 
 using namespace ode;
 
+using SD = contracts::common::SD<3>;
+using State = common::State<double, 3>;
+using JacMat = jacmat_t<double, SD>;
+
 struct LorenzSimple{
 
     // Simple Rhs, using the plainest signature available for the solvers
-    static void Rhs(double* dy_dt, double /*t*/, const double* q) {
+    static void Rhs(State& dy_dt, double /*t*/, const State& q) {
         //3D lorenz system, args = {sigma, rho, beta}
         const double sigma = 10.0;
         const double rho = 28.0;
@@ -23,12 +27,12 @@ struct LorenzJacobian : public LorenzSimple {
 
 
     // Providing both the Rhs (from inheritance) and the Jacobian for the Lorenz system
-    static void Jac(double* J, double /*t*/, const double* q) {
+    static void Jac(JacMat& J, double /*t*/, const State& q) {
         constexpr double sigma = 10.0, rho = 28.0, beta = 8.0/3.0;
-        // column-major: J[i + 3*j] = df_i/dq_j
-        J[0] = -sigma;   J[1] = rho - q[2];  J[2] = q[1];   // d/dx
-        J[3] = sigma;    J[4] = -1.0;    J[5] = q[0];   // d/dy
-        J[6] = 0.0;  J[7] = -q[0];       J[8] = -beta;  // d/dz
+        // J(i, j) = df_i/dq_j, written column by column: J is column-major
+        J(0, 0) = -sigma;  J(1, 0) = rho - q[2];  J(2, 0) = q[1];   // d/dx
+        J(0, 1) = sigma;   J(1, 1) = -1.0;        J(2, 1) = q[0];   // d/dy
+        J(0, 2) = 0.0;     J(1, 2) = -q[0];       J(2, 2) = -beta;  // d/dz
     }
 
 };
@@ -37,7 +41,7 @@ struct LorenzAutodiff{
 
     // This generic Rhs function supports automatic differentiation via dual numbers if needed
     // Significantly speeds up the BDF solver when compared to using finite-difference approximation for the Jacobian
-    static void Rhs(auto* dy_dt, const auto& /*t*/, auto q) {
+    static void Rhs(auto& dy_dt, const auto& /*t*/, const auto& q) {
         //3D lorenz system, args = {sigma, rho, beta}
         const double sigma = 10.0;
         const double rho = 28.0;
@@ -52,21 +56,24 @@ struct LorenzAutodiff{
 template<typename OdeType>
 void test_solver(const char* label) {
 
-    static constexpr size_t NSYS = 3;
-
     using T = double;
 
-    std::array<T, 3> y0 = {1.0, 1.0, 1.0};
-    std::array<T, 3> y0_var = {1.0, 1.0, 1.0};
+    State y0 = {1.0, 1.0, 1.0};
+    State y0_var = {1.0, 1.0, 1.0};
+    State rtol = {1e-9, 1e-9, 1e-9};
+    State atol = {1e-12, 1e-12, 1e-12};
 
-    chaos::VariationalSolver<Stepper::BDF, T, NSYS, ode::SolverPolicy::Static, OdeType> solver(
+    chaos::common::VarState<T, 3> q0{.main=y0, .variation=y0_var};
+    chaos::common::VarState<T, 3> var_rtol{.main=rtol, .variation=rtol};
+    chaos::common::VarState<T, 3> var_atol{.main=atol, .variation=atol};
+
+    auto solver = chaos::common::getVariationalSolver<ode::SolverPolicy::Static, Stepper::BDF>(
         OdeType{},
         0.0,
-        View1D<T, NSYS>{y0.data()},
-        View1D<T, NSYS>{y0_var.data()},
+        q0,
         0.1,
-        1e-9,
-        1e-12,
+        var_rtol,
+        var_atol,
         0.0,
         0.0,
         0.0,
@@ -78,8 +85,8 @@ void test_solver(const char* label) {
     auto t_start = std::chrono::high_resolution_clock::now();
     solver.advance_until(100);
     auto t_end = std::chrono::high_resolution_clock::now();
-    print("Expected Lyapunov exponent: ~0.905");
-    print("Computed Lyapunov exponent: ", solver.lyapunov_exponent());
+    std::cout << "Expected Lyapunov exponent: ~0.905\n";
+    std::cout << "Computed Lyapunov exponent: " << solver.lyapunov_exponent() << "\n";
     std::cout << "Computation completed in " << "\033[1m"
               << std::chrono::duration_cast<std::chrono::duration<double>>(t_end - t_start).count()*1000
               << " ms\033[0m\n\n";

@@ -9,21 +9,25 @@ using pbox::Box;
 template<typename T>
 void run(const char* label){
 
-    std::array<T, 2> q0 = {10, 0};
+    using SD = contracts::common::SD<2>;
+    using State = common::State<T, 2>;
+
+    State q0 = {10, 0};
+    State tol = {T{1e-10}, T{1e-10}};
     
     // Let's create a solver for the simple harmonic oscillator using the RK45 method
-    Box<OdeSolver<T, 2>> solver = make_vsolver(
+    Box<OdeSolver<T, SD>> solver = common::make_vsolver(
         Stepper::RK45,
         OdeData{
-            .Rhs=[](auto* dq_dt, const auto& t, const auto* q){
+            .Rhs=[](auto& dq_dt, const auto& t, const auto& q){
                 dq_dt[0] = q[1];
                 dq_dt[1] = -q[0];
             },
         },
         T{0},
-        View1D<T, 2>{q0.data()},
-        T{1e-10},
-        T{1e-10}
+        q0,
+        tol,
+        tol
     );
 
     // Compute the total runtime for integrating up to t=1000
@@ -34,7 +38,7 @@ void run(const char* label){
     std::cout << "\n\n========== Using " << "\033[1m" << label << "\033[0m" << " precision ==========\n" <<
     "Total runtime: " << "\033[1m" << runtime << " ms\033[0m\n";
     std::cout << "Final state: ";
-    solver->show_state(10);
+    solver->show_state(std::cout, 10);
     std::cout << "\n";
 }
 
