@@ -4,6 +4,8 @@
 
 namespace ode::interp {
 
+using namespace ndspan;
+
 struct VirtualNdInterpolator {
 
     virtual ~VirtualNdInterpolator() = default;

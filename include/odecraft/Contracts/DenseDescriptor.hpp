@@ -12,7 +12,8 @@ namespace detail{
 template<ndspan::Layout LY, size_t... Shape>
 struct TensorState{
 
-    static constexpr size_t SIZE = (Shape*...*1);
+    // 0 for a runtime size: a 0 in Shape, or no Shape at all (the dims are then runtime too)
+    static constexpr size_t SIZE = (sizeof...(Shape) == 0) ? 0 : (Shape*...*1);
 
     template<typename T>
     using value_type = T;
@@ -160,7 +161,11 @@ struct TensorState{
                 const size_t n = rows(J);
                 for (size_t j = 0; j < n; ++j){
                     for (size_t i = 0; i < n; ++i){
-                        out(i, j) = (i == j) ? S(1) - c*J(i, j) : -c*J(i, j);
+                        if (i == j){
+                            out(i, j) = S(1) - c*J(i, j);
+                        } else {
+                            out(i, j) = -c*J(i, j);
+                        }
                     }
                 }
             }

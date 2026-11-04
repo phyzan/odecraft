@@ -27,7 +27,7 @@ public:
 
     T                   length(int axis) const;
 
-    const Array1D<T>&   x(int i) const;
+    const Array1D<T, 0>&   x(int i) const;
 
     bool                contains(const T& x, int axis) const;
 
@@ -41,7 +41,7 @@ public:
 
 private:
 
-    std::vector<Array1D<T>> data_;
+    std::vector<Array1D<T, 0>> data_;
     std::vector<int> shape_;
 };
 

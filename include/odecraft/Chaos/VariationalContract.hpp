@@ -136,7 +136,7 @@ struct VarSD{
             template<typename T>
             static void identity_minus(jacobian_matrix<value_type<T>>& out, const T& c, const jacobian_matrix<value_type<T>>& J){
                 SD::JD::linalg::identity_minus(out[0], c, J[0]);
-                SD::JD::scale(out[1], -c, J[1]);
+                SD::JD::scale(out[1], T(-c), J[1]);
             }
 
             // The pivots of block 0, the only block factored

@@ -570,7 +570,7 @@ inline BoxedEvent<T, State> make_periodic_event(std::string name, T period){
 
 template<typename T, typename State, isRhsFunc<T, State> MaskFunc>
 inline BoxedEvent<T, State> make_periodic_event(std::string name, T period, MaskFunc mask, bool delay_mask=false){
-    return pbox::make_box<PeriodicEvent<T, MaskFunc>>(
+    return pbox::make_box<PeriodicEvent<T, State, MaskFunc>>(
         std::move(name),
         std::move(period),
         std::move(mask),

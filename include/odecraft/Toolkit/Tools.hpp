@@ -406,17 +406,6 @@ bool jac_all_are_finite(const jacmat_t<T, SD>& J){
 }
 
 template<typename T, typename SD>
-bool allEqual(const state_t<T, SD>& a, const state_t<T, SD>& b){
-    // TODO optimize so that SD::for_each does not unnecessarily call all
-    // items when the first `false` is encountered.
-    bool res;
-    SD::for_each([&res](const value_t<T, SD>& x, const value_t<T, SD>& y){
-        res = res ? x == y : false;
-    }, a, b);
-    return res;
-}
-
-template<typename T, typename SD>
 T max_elem(const real_state_t<T, SD>& err){
     T res{0};
     SD::for_each([&res](const T& xi){
