@@ -32,7 +32,7 @@ public:
     // wihtout having to recompute the triangulation.
     DelaunayTri() = default;
 
-    void set_state(const CView2D<double, 0, NDIM>& points, const CView2D<int, 0, DIM_SPX>& simplices, const CView2D<int, 0, DIM_SPX>& neighbors, const CView2D<double, 0, NDIM>& v0, const CView3D<double, 0, NDIM, NDIM>& invT);
+    void set_state(const CView2D<const double, 0, NDIM>& points, const CView2D<const int, 0, DIM_SPX>& simplices, const CView2D<const int, 0, DIM_SPX>& neighbors, const CView2D<const double, 0, NDIM>& v0, const CView3D<const double, 0, NDIM, NDIM>& invT);
 
     // Member variable accessors
     const CArray2D<double, 0, NDIM>& get_points() const; // (n_points, ndim)
