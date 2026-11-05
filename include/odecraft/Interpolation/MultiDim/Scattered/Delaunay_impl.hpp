@@ -49,10 +49,10 @@ DelaunayTri<NDIM>::DelaunayTri(const double* points, size_t n_points, size_t ndi
 
 
 template<size_t NDIM>
-int DelaunayTri<NDIM>::ndim() const { return points_.Ncols(); }
+int DelaunayTri<NDIM>::ndim() const { return points_.shape(1); }
 
 template<size_t NDIM>
-int DelaunayTri<NDIM>::npoints() const { return points_.Nrows(); }
+int DelaunayTri<NDIM>::npoints() const { return points_.shape(0); }
 
 template<size_t NDIM>
 const CArray2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_points() const { return points_; }
@@ -70,7 +70,7 @@ template<size_t NDIM> const CArray3D<double, 0, NDIM, NDIM>& DelaunayTri<NDIM>::
 }
 
 template<size_t NDIM>
-int DelaunayTri<NDIM>::nsimplices() const { return simplices_.Nrows(); }
+int DelaunayTri<NDIM>::nsimplices() const { return simplices_.shape(0); }
 
 template<size_t NDIM>
 const int* DelaunayTri<NDIM>::get_simplex(int simplex_idx) const {
@@ -241,7 +241,7 @@ bool DelaunayTri<NDIM>::interpolate(double* out, const double* point, const doub
     compute_barycentric(bary.data(), simplex_idx, point);
     const int* vertices = get_simplex(simplex_idx);
 
-    View<double, Layout::C, 0, 0> field_view(field, npoints(), n_fields);
+    View<const double, Layout::C, 0, 0> field_view(field, npoints(), n_fields);
     std::fill(out, out + n_fields, 0.0);
     for (int i=0; i <= ndim(); ++i){
         for (int f = 0; f < n_fields; ++f) {
@@ -468,7 +468,7 @@ CArray2D<double, NDIM, NDIM>& DelaunayTri<NDIM>::mat_cache() const {
 }
 
 template<size_t NDIM>
-void DelaunayTri<NDIM>::set_state(const CView2D<double, 0, NDIM>& points, const CView2D<int, 0, DIM_SPX>& simplices, const CView2D<int, 0, DIM_SPX>& neighbors, const CView2D<double, 0, NDIM>& v0, const CView3D<double, 0, NDIM, NDIM>& invT){
+void DelaunayTri<NDIM>::set_state(const CView2D<const double, 0, NDIM>& points, const CView2D<const int, 0, DIM_SPX>& simplices, const CView2D<const int, 0, DIM_SPX>& neighbors, const CView2D<const double, 0, NDIM>& v0, const CView3D<const double, 0, NDIM, NDIM>& invT){
     points_.resize(points.shape(), points.ndim());
     std::copy(points.data(), points.data() + points.size(), points_.data());
 

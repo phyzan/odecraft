@@ -45,7 +45,7 @@ namespace ode::crafted{
  * instead of linked. Wrap your data in one of these and reshape it to the layout the
  * constructor documents.
  */
-using field_values_t = View<double>;
+using field_values_t = View<const double>;
 
 /// @brief The grid container the regular constructors take: the points along each axis.
 using grid_axes_t = std::vector<Array1D<double, 0>>;
