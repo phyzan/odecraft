@@ -6,7 +6,7 @@
  *
  * Everything in `ode::crafted` is the header-only `ode` interface with every template
  * parameter but the scalar type `T` pinned down: the state has a dynamic shape and dims
- * (contracts::common::SD<>) and every callable is type-erased into a std::function (rhs_t,
+ * (contracts::TensorDescriptor<ndspan::Layout::C>) and every callable is type-erased into a std::function (rhs_t,
  * objfun_t, observer_t, ...).
  * That leaves `T` as the only parameter left to instantiate, and the library ships those
  * instantiations for specific scalar types, so a translation unit that only uses
@@ -19,6 +19,7 @@
  */
 
 #include "Tools.hpp"
+#include "ndspan/core/layoutmap.hpp"
 #include <odecraft/Contracts/DenseDescriptor.hpp>
 #include <odecraft/Chaos/VariationalContract.hpp>
 #include <lazex/apps/lazex_mpreal.hpp>
@@ -58,10 +59,10 @@ mpfr_prec_t get_default_prec();
 // ---------------------------------------------------------------------------
 
 /// @brief The State Descriptor of the compiled interface: dynamic shape and dims.
-using SD = ::ode::contracts::common::SD<>;
+using SD = ::ode::contracts::TensorDescriptor<ndspan::Layout::C>;
 
 /// @brief The State Descriptor of the variational solvers built on SD.
-using VarSD = ::ode::chaos::contracts::VarSD<SD>;
+using VarSD = ::ode::contracts::VarSD<SD>;
 
 /// @brief A state: contiguous, and both its shape and its number of dims are runtime values.
 template<typename T>

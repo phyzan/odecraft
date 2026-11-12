@@ -74,6 +74,20 @@ CMake options that toggle preprocessor macros across the library and its bundled
 | `ODECRAFT_RHS_THROWS` | Allow `Rhs` and `Jac` to throw: the exception then propagates out of the stepping call. **Off by default**. See the [`OdeType`](#odetype-template-parameter) section. |
 | `ODECRAFT_USE_LAZY_MPREAL` | Compile `ode::crafted`'s `mpreal_t` as `lazex::LazyType<mpfr::mpreal>` instead of plain `mpfr::mpreal`. The lazy wrapper elides temporaries in compound expressions, a large win for MPFR where every temporary is a heap allocation. **On by default**; turn it off for plain `mpfr::mpreal`. Either way the type is spelled `mpreal_t`, so nothing else in your code changes. |
 
+For example, the `ode::crafted` namespace can be built with the following command:
+
+```bash
+cmake -S . -B build \
+  -DLAZEX_MPFR_RND=MPFR_RNDN \
+  -DODECRAFT_RK4_DENSE=OFF \
+  -DODECRAFT_NO_WARN=ON \
+  -DODECRAFT_NO_NAN_CHECK=ON \
+  -DODECRAFT_USE_LAZY_MPREAL=ON \
+  -DODECRAFT_RHS_THROWS=OFF \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+
 See useful [options](https://github.com/phyzan/lazex#cmake-options) for the `lazex` submodule.
 
 ## Calling math functions: `ODECRAFT_USING_MATH`
@@ -108,9 +122,8 @@ struct MyOdeSystem{
 
 int main(){
 
-    using State = ode::common::State<T, 3>; // Simplest state-vector for 3D systems
-
-
+    using SD = ode::contracts::VectorDescriptor<3>;// Simplest (S)tate (D)escriptor for 3D systems
+    using State = std::array<T, 3>; // This SD's state type
 
     State y0 = {1.0, 1.0, 1.0};
     State rtol = {1e-9, 1e-9, 1e-9};
@@ -132,7 +145,7 @@ int main(){
 
         ode::EventList<T, State> event_list = ode::make_event_list<T, State>(std::move(event));
 
-        auto solver = ode::common::make_rich_vsolver(
+        auto solver = ode::make_rich_vsolver<T, SD>(
             ode::Stepper::RK45,
             MyOdeSystem{},
             T{0.0},
@@ -160,13 +173,13 @@ int main(){
     */
 
     {
-        using FullState = ode::chaos::common::VarState<T, 3>;
+        using FullState = ode::contracts::VarState<State>;
 
         FullState full_q0{.main = y0, .variation = {1, 0, 0}};
         FullState full_rtol{.main = rtol, .variation = rtol};
         FullState full_atol{.main = atol, .variation = atol};
 
-        auto solver = ode::chaos::common::make_variational_solver<ode::UtilPolicy::Virtual, T>(
+        auto solver = ode::chaos::make_variational_solver<ode::UtilPolicy::Virtual, T, SD>(
             ode::Stepper::RK45,
             MyOdeSystem{},
             T{0.0},
@@ -185,4 +198,5 @@ int main(){
     }
 
     return 0;
-}```
+}
+```

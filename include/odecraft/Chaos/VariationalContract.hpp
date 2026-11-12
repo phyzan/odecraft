@@ -4,8 +4,7 @@
 #include <tuple>
 #include <type_traits>
 
-// ode::chaos::contracts explicitly different from ode::contracts
-namespace ode::chaos::contracts{
+namespace ode::contracts{
 
 namespace detail{
 
@@ -16,7 +15,7 @@ inline constexpr bool holds_references = false;
 template<typename... E>
 inline constexpr bool holds_references<std::tuple<E...>> = (std::is_lvalue_reference_v<E> && ...);
 
-} // namespace ode::chaos::contracts::detail
+} // namespace ode::contracts::detail
 
 template<typename State>
 struct VarState{
@@ -177,4 +176,4 @@ struct VarSD{
 
 };
 
-} // namespace ode::chaos::contracts
+} // namespace ode::contracts

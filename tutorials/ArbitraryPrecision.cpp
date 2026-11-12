@@ -1,3 +1,4 @@
+#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 #include <lazex/apps/lazex_mpreal.hpp>
 
@@ -9,14 +10,14 @@ using pbox::Box;
 template<typename T>
 void run(const char* label){
 
-    using SD = contracts::common::SD<2>;
-    using State = common::State<T, 2>;
+    using SD = contracts::VectorDescriptor<2>;
+    using State = std::array<T, 2>;
 
     State q0 = {10, 0};
     State tol = {T{1e-10}, T{1e-10}};
     
     // Let's create a solver for the simple harmonic oscillator using the RK45 method
-    Box<OdeSolver<T, SD>> solver = common::make_vsolver(
+    Box<OdeSolver<T, SD>> solver = make_vsolver<T, SD>(
         Stepper::RK45,
         OdeData{
             .Rhs=[](auto& dq_dt, const auto& t, const auto& q){

@@ -243,8 +243,13 @@ void VariationalOdeSys<T, SD, OdeType>::jvp_findiffs(MainState& out, const T& t,
     T scale_sqr = 0;
     T dq_sqr = 0;
     SD::for_each([&scale_sqr, &dq_sqr](const S& q_i, const S& dq_i, const T& atol_i){
-        const T w_i = max_ref(atol_i, T(abs(q_i)));
-        scale_sqr += w_i*w_i;
+        const auto atol_sqr = atol_i*atol_i;
+        const auto qi_sqr = SD::norm_sqr(q_i);
+        if (atol_sqr > qi_sqr){
+            scale_sqr += atol_sqr;
+        } else {
+            scale_sqr += qi_sqr;
+        }
         dq_sqr += SD::norm_sqr(dq_i);
     }, q.main, q.variation, atol_);
 

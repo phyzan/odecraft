@@ -1,3 +1,4 @@
+#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 #include <lazex/apps/lazex_mpreal.hpp>
 
@@ -6,14 +7,15 @@ using namespace ode;
 void test_lazy_scalar(){
     using A = mpfr::mpreal;
     using T = lazex::LazyType<A>; //set T = A for performance comparison.
-    using State = common::State<T, 2>;
+    using State = std::array<T, 2>;
+    using SD = contracts::VectorDescriptor<2>;
 
     // mpfr::mpreal::set_default_prec(256);
     lazex::set_default_mpreal_prec(256);
     State y0 = {1, -3};
     State tol = {T{1e-40}, T{1e-40}};
 
-    auto solver = common::getSolver<Stepper::BDF, SolverPolicy::Static>(
+    auto solver = getSolver<Stepper::BDF, SolverPolicy::Static, T, SD>(
         OdeData{
             .Rhs=ODECRAFT_LAMBDA(out, t, y){ 
                 out[0] = y[1];

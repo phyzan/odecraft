@@ -29,7 +29,7 @@ void test_variational_solver(){
 
     using T = double;
 
-    using SD = contracts::CArrayDescriptor<3>;
+    using SD = contracts::VectorDescriptor<3>;
     using State = SD::state_type<T>;
 
 

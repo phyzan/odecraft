@@ -1,3 +1,4 @@
+#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 
 
@@ -6,7 +7,8 @@ using namespace ode;
 int main(){
 
     using T = double;
-    using State = common::State<T, 2>;
+    using SD = contracts::VectorDescriptor<2>;
+    using State = std::array<T, 2>;
 
     // Most common case: PreciseEvent class (zero - crossing event):
 
@@ -124,7 +126,7 @@ int main(){
     T stepsize{0};
     int dir = 1;
 
-    auto solver = common::getSolver<Stepper::RK45, ode::SolverPolicy::RichStatic>(
+    auto solver = getSolver<Stepper::RK45, ode::SolverPolicy::RichStatic, T, SD>(
         OdeData{.Rhs=
             ODECRAFT_LAMBDA(out, /*t*/, q) {
                 const T omega{1}; // angular frequency

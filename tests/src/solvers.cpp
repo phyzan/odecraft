@@ -1,3 +1,5 @@
+#include "odecraft/Contracts/DenseDescriptor.hpp"
+#include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/odecraft.hpp>
 
 using namespace ode;
@@ -5,6 +7,12 @@ using namespace ode;
 /*
 Testing a simple non-virtual solver, using all available methods
 */
+
+template<size_t N>
+using SD = contracts::VectorDescriptor<N>;
+
+template<typename T, size_t N>
+using State = state_t<T, SD<N>>;
 
 static constexpr auto rhs = [](auto& out, double /*t*/, const auto& q) -> void {
     const double mu = 300.;
@@ -26,15 +34,15 @@ void run(const char* label){
     std::cout << "\n---------- Testing " << label << " method------------------\n" << std::endl;
 
     // Stack allocated solver (the size is a compile-time parameter)
-    common::State<double, 2> q0_stack = {1, 0};
-    common::State<double, 2> tol_stack = {1e-10, 1e-10};
-    auto solver_1 = common::getSolver<S, SolverPolicy::Static>(
+    State<double, 2> q0_stack = {1, 0};
+    State<double, 2> tol_stack = {1e-10, 1e-10};
+    auto solver_1 = getSolver<S, SolverPolicy::Static, double, SD<2>>(
         OdeData{.Rhs=rhs}, t0, q0_stack, tol_stack, tol_stack, min_step, max_step, stepsize, 1);
 
     // Heap allocated solver (the size is a runtime parameter)
-    common::State<double, 0> q0_heap = {1, 0};
-    common::State<double, 0> tol_heap = {1e-10, 1e-10};
-    auto solver_2 = common::getSolver<S, SolverPolicy::Static>(
+    State<double, 0> q0_heap = {1, 0};
+    State<double, 0> tol_heap = {1e-10, 1e-10};
+    auto solver_2 = getSolver<S, SolverPolicy::Static, double, SD<0>>(
         OdeData{.Rhs=rhs}, t0, q0_heap, tol_heap, tol_heap, min_step, max_step, stepsize, 1);
 
     
@@ -43,8 +51,8 @@ void run(const char* label){
     solver_2.advance_until(tmax);
 
 
-    common::State<double, 2> q1;
-    common::State<double, 0> q2 = q0_heap; // the current vector is copied into q2, so it must have the size of the state
+    State<double, 2> q1;
+    State<double, 0> q2 = q0_heap; // the current vector is copied into q2, so it must have the size of the state
     solver_1.fill_current_vector(q1);
     solver_2.fill_current_vector(q2);
     if (q1[0] != q2[0] || q1[1] != q2[1]){
@@ -52,7 +60,7 @@ void run(const char* label){
     } else {
         std::cout << "Result ( t = " << tmax << " ): x = " << q1[0] << ", xdot = " << q1[1] << std::endl;
 
-        common::State<double, 2> arr;
+        State<double, 2> arr;
         solver_1.Rhs(arr, tmax, q1);
         
         std::cout << "xdotdot = " << arr[0] << " " << arr[1] << std::endl;

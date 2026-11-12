@@ -1,3 +1,4 @@
+#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 
 using namespace ode;
@@ -72,8 +73,8 @@ public:
 int main(){
 
     using T = double;
-    using SD = contracts::common::SD<2>;
-    using State = common::State<T, 2>;
+    using SD = contracts::VectorDescriptor<2>;
+    using State = std::array<T, 2>;
 
     const size_t count = 4;
     // Now advance each solver until `count` encounters with any objective functions have been detected.
