@@ -237,13 +237,13 @@ static void run_vector_fields(){
 static void run_other_scalars(){
     std::cout << "\n-- float and long double --" << std::endl;
 
-    State<float> qf = {1.0f, 0.0f};
-    State<float> tol_f = {1e-6f, 1e-6f};
+    State<float> qf = {1.0F, 0.0F};
+    State<float> tol_f = {1e-6F, 1e-6F};
     ODE<float> ode_f(ode_t<float>{.Rhs = [](State<float>& out, float, const State<float>& q){
                          out[0] = q[1]; out[1] = -q[0];
-                     }}, 0.0f, qf, tol_f, tol_f, 0, 0, 0, 1, {}, Stepper::RK45);
+                     }}, 0.0F, qf, tol_f, tol_f, 0, 0, 0, 1, {}, Stepper::RK45);
     OdeResult<float> rf;
-    ode_f.integrate_until(&rf, 2.0f);
+    ode_f.integrate_until(&rf, 2.0F);
     check_close(rf.q().back()[0], std::cos(2.0), 1e-3, "float x(2)");
 
     State<long double> ql = {1.0L, 0.0L};

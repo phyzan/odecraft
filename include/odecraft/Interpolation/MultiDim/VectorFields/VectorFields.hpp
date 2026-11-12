@@ -1,13 +1,15 @@
 #pragma once
 
 
+#include "ndspan/core/layoutmap.hpp"
+#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/DenseOde/OdeInt.hpp>
 
 namespace ode::interp {
 
 // The state of a streamline: one axis, of size NDIM, or a runtime size if NDIM = 0
 template<size_t NDIM>
-using FieldSD = ::ode::contracts::common::SD<NDIM>;
+using FieldSD = ::ode::contracts::TensorDescriptor<ndspan::Layout::C, NDIM>;
 
 template<size_t NDIM>
 using FieldState = state_t<double, FieldSD<NDIM>>;

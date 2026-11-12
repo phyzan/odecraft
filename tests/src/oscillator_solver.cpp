@@ -1,3 +1,4 @@
+#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/Events/Events.hpp>
 #include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/odecraft.hpp>
@@ -5,16 +6,20 @@
 
 using namespace ode;
 
+using SD = contracts::VectorDescriptor<2>;
+
 template<typename T>
-T crossing(const T& /*t*/, const common::State<T, 2>& y) {
+using State = std::array<T, 2>;
+
+template<typename T>
+T crossing(const T& /*t*/, const State<T>& y) {
     return y[1] - 1;
 }
 
 
 template<typename Scalar>
 void crossing_test(Stepper method) {
-    using SD = contracts::common::SD<2>;
-    using State = common::State<Scalar, 2>;
+    using State = State<Scalar>;
 
     // Initial conditions
     State y0 = {3, 0};
@@ -33,7 +38,7 @@ void crossing_test(Stepper method) {
     int dir = 1;
 
 
-    pbox::Box<OdeRichSolver<Scalar, SD>> solver = common::make_solver<UtilPolicy::RichVirtual>(
+    pbox::Box<OdeRichSolver<Scalar, SD>> solver = make_solver<UtilPolicy::RichVirtual, Scalar, SD>(
         method,
         OdeData{.Rhs=
             ODECRAFT_LAMBDA(out, /*t*/, q) {

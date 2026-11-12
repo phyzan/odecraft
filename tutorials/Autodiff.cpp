@@ -1,10 +1,12 @@
+#include "odecraft/Chaos/VariationalContract.hpp"
+#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <iostream>
 #include <odecraft/odecraft.hpp>
 
 using namespace ode;
 
-using SD = contracts::common::SD<3>;
-using State = common::State<double, 3>;
+using SD = contracts::VectorDescriptor<3>;
+using State = std::array<double, 3>;
 using JacMat = jacmat_t<double, SD>;
 
 struct LorenzSimple{
@@ -63,11 +65,11 @@ void test_solver(const char* label) {
     State rtol = {1e-9, 1e-9, 1e-9};
     State atol = {1e-12, 1e-12, 1e-12};
 
-    chaos::common::VarState<T, 3> q0{.main=y0, .variation=y0_var};
-    chaos::common::VarState<T, 3> var_rtol{.main=rtol, .variation=rtol};
-    chaos::common::VarState<T, 3> var_atol{.main=atol, .variation=atol};
+    contracts::VarState<State> q0{.main=y0, .variation=y0_var};
+    contracts::VarState<State> var_rtol{.main=rtol, .variation=rtol};
+    contracts::VarState<State> var_atol{.main=atol, .variation=atol};
 
-    auto solver = chaos::common::getVariationalSolver<ode::SolverPolicy::Static, Stepper::BDF>(
+    auto solver = chaos::getVariationalSolver<ode::SolverPolicy::Static, Stepper::BDF, T, SD>(
         OdeType{},
         0.0,
         q0,

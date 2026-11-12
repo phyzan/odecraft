@@ -1,10 +1,12 @@
+#include "odecraft/Contracts/DenseDescriptor.hpp"
+#include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/odecraft.hpp>
 
 using T = double;
 using namespace ode;
 
-using SD = contracts::common::SD<2>;
-using State = common::State<T, 2>;
+using SD = contracts::VectorDescriptor<2>;
+using State = std::array<T, 2>; // state_t<SD, T>
 
 // Harmonic oscillator: q0' = q1, q1' = -q0
 // Solution from (1, 0): q0 = cos(t), q1 = -sin(t)
