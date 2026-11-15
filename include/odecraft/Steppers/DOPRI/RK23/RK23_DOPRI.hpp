@@ -29,7 +29,7 @@ T rk23_step_impl(T& t_new, state_t<T, SD>& q_new, cache_t<T> t, cache_t<T> h, co
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class RK23 : public detail::BaseDispatcher<GetDerived<RK23<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>{
 
-    ODECRAFT_DECLARE_STEPPER;
+    ODECRAFT_DERIVED_STEPPER;
 
     using Base = detail::BaseDispatcher<GetDerived<RK23<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>;
 
@@ -46,8 +46,6 @@ public:
     RK23(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events = {});
 
     DEFAULT_RULE_OF_FOUR(RK23)
-
-    Stepper method() const;
 
     void        Reset();
 
@@ -137,13 +135,6 @@ constexpr RK23<T, SD, OdeType, SP, Derived>::Ptype RK23<T, SD, OdeType, SP, Deri
             T(0),  -T(1),       T(1),};
 }
 
-namespace detail{
-
-template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-struct SolverTypeGetter<Stepper::RK23, SP, T, SD, OdeType, Derived>{
-    using type = RK23<T, SD, OdeType, SP, Derived>;
-};
-
-} // namespace ode::detail
-
 } // namespace ode
+
+ODECRAFT_DECLARE_STEPPER(RK23, ode::RK23)

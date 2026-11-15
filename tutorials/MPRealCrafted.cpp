@@ -37,7 +37,7 @@ int main(){
 
     // Now the integrator
     BoxedRichSolver<mpreal_t> solver = make_rich_vsolver<mpreal_t>(
-        Stepper::RK45,
+        Steppers::id<tags::RK45>, // the compiled interface chooses the stepper at runtime
         ode_t<mpreal_t>{
             .Rhs=[](State<mpreal_t>& out, const mpreal_t& /*t*/, const State<mpreal_t>& q){
                 out[0] = q[1];

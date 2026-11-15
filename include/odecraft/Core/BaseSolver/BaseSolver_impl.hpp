@@ -237,7 +237,7 @@ T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step() const{
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-std::unique_ptr<typename BaseSolver<Derived, T, SD, OdeType, SP>::CloneType> BaseSolver<Derived, T, SD, OdeType, SP>::clone() const {
+std::unique_ptr<typename BaseSolver<Derived, T, SD, OdeType, SP>::clone_type> BaseSolver<Derived, T, SD, OdeType, SP>::clone() const {
     return std::make_unique<Derived>(*THIS);
 }
 

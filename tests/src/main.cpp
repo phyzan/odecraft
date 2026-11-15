@@ -3,6 +3,7 @@
 #include "objective_solver.hpp"
 #include "variational_test.hpp"
 #include "lazy_scalar.hpp"
+#include "catalog.hpp"
 #ifdef ODECRAFT_HAS_CRAFTED
 #include "compiled_interface.hpp"
 #endif
@@ -25,9 +26,12 @@ int main(){
     test_lazy_scalar();
     std::cout << " Test 5 completed\n" << std::endl;
 
+    test_catalog();
+    std::cout << " Test 6 completed\n" << std::endl;
+
 #ifdef ODECRAFT_HAS_CRAFTED
     test_compiled_interface();
-    std::cout << " Test 6 completed\n" << std::endl;
+    std::cout << " Test 7 completed\n" << std::endl;
 #endif
     return 0;
 }

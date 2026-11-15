@@ -69,11 +69,12 @@ void test_solver(const char* label) {
     contracts::VarState<State> var_rtol{.main=rtol, .variation=rtol};
     contracts::VarState<State> var_atol{.main=atol, .variation=atol};
 
-    auto solver = chaos::getVariationalSolver<ode::SolverPolicy::Static, Stepper::BDF, T, SD>(
+    auto solver = chaos::getVariationalSolver<ode::SolverPolicy::Static, SD>(
+        tags::BDF{},
         OdeType{},
-        0.0,
+        T{0.0}, // the scalar type is deduced from the times
         q0,
-        0.1,
+        T{0.1},
         var_rtol,
         var_atol,
         0.0,

@@ -19,6 +19,15 @@
 #include <odecraft/Core/BaseSolver/BaseSolver.hpp>
 
 
+// Befriends the solver bases, which call the protected overrides of the class it is used in.
+// Qualified, so that it works in any namespace: an unqualified friend class template would
+// declare a new template in the enclosing namespace instead (e.g. ode::chaos::BaseSolver).
+// It is defined here, after both bases, because a qualified friend must name a declared template.
+#define ODECRAFT_DERIVED_STEPPER \
+    template<typename, typename, typename, typename, ::ode::SolverPolicy> friend class ::ode::BaseSolver; \
+    template<typename, typename, typename, typename, ::ode::SolverPolicy> friend class ::ode::RichSolver
+
+
 namespace ode{
 
 /**

@@ -45,11 +45,11 @@ state_t<T, SD>& normalized(state_t<T, SD>& out, const state_t<T, SD>& src){
 template<typename T, typename SD, UtilPolicy UP>
 class ChaoticSolver;
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class VariationalSolver;
 
-template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args);
+template<UtilPolicy UP, typename SD, typename Stepper, typename T, typename OdeType, typename... Args>
+pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args);
 
 
 // The solver integrates states of VarSD<SD>, the main state and its variation. MainState and
@@ -217,12 +217,10 @@ private:
 };
 
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, SP, T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, GetDerived<VariationalSolver<S, T, SD, OdeType, SP, Derived>, Derived>>::type {
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+class VariationalSolver : public Stepper::template type<T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, SP, GetDerived<VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>, Derived>> {
 
-    // As ODECRAFT_DECLARE_STEPPER, qualified: the unqualified names would declare new templates in ode::chaos
-    template<typename, typename, typename, typename, SolverPolicy> friend class ::ode::BaseSolver;
-    template<typename, typename, typename, typename, SolverPolicy> friend class ::ode::RichSolver;
+    ODECRAFT_DERIVED_STEPPER;
 
     /**
     This solvers integrates the coupled / augmented ODE system consisting of the original system and the variational equations. The state vector has shape {main_vector, main_vector}, where the first entry corresponds to the state of the original system and the second corresponds to the deviation vector. The deviation vector is renormalized every "period" time units, and log_ksi keeps track of the logarithm of the stretching factor since the last renormalization. The user can retrieve the current value of the largest Lyapunov exponent using lyapunov_exponent(), which is computed as log_ksi divided by the elapsed time since the beginning of the integration.
@@ -243,9 +241,12 @@ class VariationalSolver : public ::ode::detail::SolverTypeGetter<S, SP, T, VarSD
 
     */
 
-    using Base = ::ode::detail::SolverTypeGetter<S, SP, T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, GetDerived<VariationalSolver<S, T, SD, OdeType, SP, Derived>, Derived>>::type;
+    using Base = Stepper::template type<T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, SP, GetDerived<VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>, Derived>>;
 
 public:
+    // ChaoticSolver<T, SD, UP> for the virtual policies, through the SolverVirtualTypeTraits
+    // specializations at the end of this file, and void for the static ones.
+    using virtual_base = Base::virtual_base;
     using State = contracts::VarState<state_t<T, SD>>; //same as state_t<T, VarSD<SD>>;
     using RealState = contracts::VarState<real_state_t<T, SD>>; // //same as real_state_t<T, VarSD<SD>>;
     using JacMat = jacmat_t<T, VarSD<SD>>;
@@ -311,8 +312,8 @@ public:
     using State = state_t<T, VarSD<SD>>;
     using RealState = real_state_t<T, VarSD<SD>>;
 
-    template<hasRhsFunc<T, state_t<T, SD>> OdeType>
-    VariationalODE(OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step = 0, T max_step = 0, T stepsize = 0, int dir = 1, EventList<T, State> events = {}, Stepper method = Stepper::RK45);
+    template<typename Stepper, hasRhsFunc<T, state_t<T, SD>> OdeType>
+    VariationalODE(Stepper /*stepper*/, OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step = 0, T max_step = 0, T stepsize = 0, int dir = 1, EventList<T, State> events = {});
 
     std::unique_ptr<ODE<T, VarSD<SD>>> clone() const override;
 
@@ -343,13 +344,12 @@ private:
 };
 
 
+template<UtilPolicy UP, typename SD, typename Stepper, typename T, typename OdeType, typename... Args>
+pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args);
 
-template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args);
 
-
-template<SolverPolicy SP, Stepper S, typename T, typename SD, typename OdeType>
-auto getVariationalSolver(OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, real_state_t<T, VarSD<SD>> rtol, real_state_t<T, VarSD<SD>> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, state_t<T, VarSD<SD>>> events = {});
+template<SolverPolicy SP, typename SD, typename Stepper, typename T, typename OdeType>
+auto getVariationalSolver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, real_state_t<T, VarSD<SD>> rtol, real_state_t<T, VarSD<SD>> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, state_t<T, VarSD<SD>>> events = {});
 
 } // namespace ode::chaos
 
@@ -357,14 +357,14 @@ auto getVariationalSolver(OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period,
 namespace ode::traits{
 
 // The base solver asks with the SD it integrates, VarSD<SD>
-template<Stepper S, typename T, typename SD, typename OdeType, typename DerivedVS>
-struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, SD, OdeType, SolverPolicy::Virtual, DerivedVS>, T, chaos::VarSD<SD>, SolverPolicy::Virtual> {
+template<typename Stepper, typename T, typename SD, typename OdeType, typename DerivedVS>
+struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<Stepper, T, SD, OdeType, SolverPolicy::Virtual, DerivedVS>, T, chaos::VarSD<SD>, SolverPolicy::Virtual> {
     using type = chaos::ChaoticSolver<T, SD, UtilPolicy::Virtual>;
 };
 
 
-template<Stepper S, typename T, typename SD, typename OdeType, typename DerivedVS>
-struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<S, T, SD, OdeType, SolverPolicy::RichVirtual, DerivedVS>, T, chaos::VarSD<SD>, SolverPolicy::RichVirtual> {
+template<typename Stepper, typename T, typename SD, typename OdeType, typename DerivedVS>
+struct SolverVirtualTypeTraits<::ode::chaos::VariationalSolver<Stepper, T, SD, OdeType, SolverPolicy::RichVirtual, DerivedVS>, T, chaos::VarSD<SD>, SolverPolicy::RichVirtual> {
     using type = chaos::ChaoticSolver<T, SD, UtilPolicy::RichVirtual>;
 };
 

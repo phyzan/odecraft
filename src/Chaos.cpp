@@ -9,7 +9,7 @@ namespace ode::crafted{
 
 template<typename T>
 BoxedChaoticSolver<T> make_variational_solver(
-    Stepper method,
+    Steppers::Id method,
     ode_t<T> ode,
     T t0,
     VarState<T> q0,
@@ -22,13 +22,15 @@ BoxedChaoticSolver<T> make_variational_solver(
     int dir,
     EventList<T, VarState<T>> events
 ){
-    return ::ode::chaos::make_variational_solver<::ode::UtilPolicy::RichVirtual, T, SD>(
-        method, std::move(ode), std::move(t0), std::move(q0), std::move(period), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
+    return Steppers::from_stepper<BoxedChaoticSolver<T>>(method, [&]<typename S>(){
+        return ::ode::chaos::make_variational_solver<::ode::UtilPolicy::RichVirtual, SD>(
+            S{}, std::move(ode), std::move(t0), std::move(q0), std::move(period), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
+    });
 }
 
 #define ODECRAFT_INSTANTIATE_CHAOS_FACTORY(T)                           \
     template BoxedChaoticSolver<T> make_variational_solver<T>(          \
-        Stepper, ode_t<T>, T, VarState<T>, T, VarState<T>, VarState<T>, T, T, T, int, EventList<T, VarState<T>>);
+        Steppers::Id, ode_t<T>, T, VarState<T>, T, VarState<T>, VarState<T>, T, T, T, int, EventList<T, VarState<T>>);
 
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_INSTANTIATE_CHAOS_FACTORY)
 
@@ -41,8 +43,7 @@ namespace ode::chaos{
 
 #define ODECRAFT_INSTANTIATE_VARIATIONAL_ODE(T)                                     \
     template class VariationalODE<T, crafted::SD>;                                  \
-    template VariationalODE<T, crafted::SD>::VariationalODE(                        \
-        crafted::ode_t<T>, T, crafted::VarState<T>, T, crafted::VarState<T>, crafted::VarState<T>, T, T, T, int, crafted::EventList<T, crafted::VarState<T>>, Stepper);
+    ODECRAFT_FOR_EACH_STEPPER(ODECRAFT_VARIATIONAL_ODE_CTOR, template, T)
 
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_INSTANTIATE_VARIATIONAL_ODE)
 

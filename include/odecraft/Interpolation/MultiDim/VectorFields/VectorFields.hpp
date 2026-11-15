@@ -4,6 +4,7 @@
 #include "ndspan/core/layoutmap.hpp"
 #include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/DenseOde/OdeInt.hpp>
+#include <odecraft/Steppers/Steppers.hpp>
 
 namespace ode::interp {
 
@@ -29,6 +30,8 @@ inline FieldState<NDIM> uniform_state(size_t ndim, double value){
 } // namespace ode::interp::detail
 
 
+// The streamline functions are virtual, so they take the stepper by its id in the catalog of the
+// built-in ones, ode::Steppers, rather than by its tag: e.g. Steppers::id<tags::RK45>.
 template<size_t NDIM>
 struct VirtualVectorField {
 
@@ -47,7 +50,7 @@ struct VirtualVectorField {
         double max_step,
         double stepsize,
         int direction,
-        Stepper method,
+        Steppers::Id method,
         bool normalized,
         const std::vector<double>& t_eval
     ) const = 0;
@@ -61,7 +64,7 @@ struct VirtualVectorField {
         double max_step,
         double stepsize,
         int direction,
-        Stepper method,
+        Steppers::Id method,
         bool normalized
     ) const = 0;
 
@@ -73,7 +76,7 @@ struct VirtualVectorField {
         double max_step,
         double stepsize,
         int direction,
-        Stepper method,
+        Steppers::Id method,
         bool normalized
     ) const = 0;
 
@@ -106,7 +109,7 @@ public:
         double max_step,
         double stepsize,
         int direction,
-        Stepper method,
+        Steppers::Id method,
         bool normalized,
         const std::vector<double>& t_eval
     ) const;
@@ -120,7 +123,7 @@ public:
         double max_step,
         double stepsize,
         int direction,
-        Stepper method,
+        Steppers::Id method,
         bool normalized
     ) const;
 
@@ -132,7 +135,7 @@ public:
         double max_step,
         double stepsize,
         int direction,
-        Stepper method,
+        Steppers::Id method,
         bool normalized
     ) const;
 

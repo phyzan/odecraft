@@ -368,11 +368,6 @@ DOP853<T, SD, OdeType, SP, Derived>::DOP853(OdeType ode, T t0, State q0, RealSta
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper DOP853<T, SD, OdeType, SP, Derived>::method() const{
-    return Stepper::DOP853;
-}
-
-template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 void DOP853<T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
     this->Rhs(K_[N_STAGES], this->t_new(), this->vector_new());

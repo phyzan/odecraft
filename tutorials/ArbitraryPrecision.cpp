@@ -17,8 +17,8 @@ void run(const char* label){
     State tol = {T{1e-10}, T{1e-10}};
     
     // Let's create a solver for the simple harmonic oscillator using the RK45 method
-    Box<OdeSolver<T, SD>> solver = make_vsolver<T, SD>(
-        Stepper::RK45,
+    Box<OdeSolver<T, SD>> solver = make_vsolver<SD>(
+        tags::RK45{},
         OdeData{
             .Rhs=[](auto& dq_dt, const auto& t, const auto& q){
                 dq_dt[0] = q[1];

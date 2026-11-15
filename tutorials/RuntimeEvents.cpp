@@ -126,7 +126,7 @@ int main(){
     T stepsize{0};
     int dir = 1;
 
-    auto solver = getSolver<Stepper::RK45, ode::SolverPolicy::RichStatic, T, SD>(
+    auto solver = getSolver<tags::RK45, ode::SolverPolicy::RichStatic, T, SD>(
         OdeData{.Rhs=
             ODECRAFT_LAMBDA(out, /*t*/, q) {
                 const T omega{1}; // angular frequency

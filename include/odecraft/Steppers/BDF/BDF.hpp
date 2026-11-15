@@ -45,7 +45,7 @@ void bdf_interp(state_t<T, SD>& result, const T& t, const T& t2, const T& h, con
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived = void>
 class BDF : public detail::BaseDispatcher<GetDerived<BDF<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>{
 
-    ODECRAFT_DECLARE_STEPPER;
+    ODECRAFT_DERIVED_STEPPER;
     
     using Base = detail::BaseDispatcher<GetDerived<BDF<T, SD, OdeType, SP, Derived>, Derived>, T, SD, OdeType, SP>;
     
@@ -62,8 +62,6 @@ public:
     BDF(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events = {});
 
     DEFAULT_RULE_OF_FOUR(BDF)
-
-    Stepper method() const;
 
     void            Reset();
 
@@ -114,14 +112,6 @@ private:
 
 };
 
-namespace detail{
-
-template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-struct SolverTypeGetter<Stepper::BDF, SP, T, SD, OdeType, Derived>{
-    using type = BDF<T, SD, OdeType, SP, Derived>;
-};
-
-} // namespace ode::detail
-
-
 } // namespace ode
+
+ODECRAFT_DECLARE_STEPPER(BDF, ode::BDF)

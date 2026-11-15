@@ -49,8 +49,9 @@ public:
     using RealState = real_state_t<T, SD>;
     using JacMat = jacmat_t<T, SD>;
 
-    template<hasRhsFunc<T, State> OdeType>
-    ODE(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events={}, Stepper method=Stepper::RK45);
+    // Stepper is the tag of the stepper to integrate with, e.g. tags::RK45{}
+    template<typename Stepper, hasRhsFunc<T, State> OdeType>
+    ODE(Stepper /*stepper*/, OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events={});
 
     DEFAULT_RULE_OF_FOUR(ODE)
 
@@ -138,8 +139,8 @@ protected:
     std::vector<size_t> cached_idx_;
     double runtime_ = 0;
 
-    template<hasRhsFunc<T, State> OdeType>
-    void    init(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events={}, Stepper method = Stepper::RK45);
+    template<typename Stepper, hasRhsFunc<T, State> OdeType>
+    void    init(Stepper /*stepper*/, OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events={});
 
     virtual void    register_state();
 

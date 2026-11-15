@@ -22,8 +22,9 @@ static constexpr auto rhs = [](auto& out, double /*t*/, const auto& q) -> void {
     out[1] = mu * (1 - x*x) * xdot - x;
 };
 
-template<Stepper S>
-void run(const char* label){
+template<typename Stepper>
+void run(){
+    const std::string_view label = Stepper::name;
     // declare ics
     const double t0 = 0;
     const double min_step = 0;
@@ -36,17 +37,22 @@ void run(const char* label){
     // Stack allocated solver (the size is a compile-time parameter)
     State<double, 2> q0_stack = {1, 0};
     State<double, 2> tol_stack = {1e-10, 1e-10};
-    auto solver_1 = getSolver<S, SolverPolicy::Static, double, SD<2>>(
+    auto solver_1 = getSolver<Stepper, SolverPolicy::Static, double, SD<2>>(
         OdeData{.Rhs=rhs}, t0, q0_stack, tol_stack, tol_stack, min_step, max_step, stepsize, 1);
 
     // Heap allocated solver (the size is a runtime parameter)
     State<double, 0> q0_heap = {1, 0};
     State<double, 0> tol_heap = {1e-10, 1e-10};
-    auto solver_2 = getSolver<S, SolverPolicy::Static, double, SD<0>>(
+    auto solver_2 = getSolver<Stepper, SolverPolicy::Static, double, SD<0>>(
         OdeData{.Rhs=rhs}, t0, q0_heap, tol_heap, tol_heap, min_step, max_step, stepsize, 1);
 
     
     
+    // The solver knows its stepper through the tag
+    if (solver_1.method() != label){
+        std::cerr << "Error: method() is " << solver_1.method() << " instead of " << label << std::endl;
+    }
+
     solver_1.advance_until(tmax);
     solver_2.advance_until(tmax);
 
@@ -69,11 +75,11 @@ void run(const char* label){
 
 void test_solvers(){
 
-    run<Stepper::Euler>("Euler");
-    run<Stepper::RK23>("RK23");
-    run<Stepper::RK45>("RK45");
-    run<Stepper::DOP853>("DOP853");
-    run<Stepper::BDF>("BDF");
-    run<Stepper::RK4>("RK4");
+    run<tags::Euler>();
+    run<tags::RK23>();
+    run<tags::RK45>();
+    run<tags::DOP853>();
+    run<tags::BDF>();
+    run<tags::RK4>();
 
 }

@@ -51,7 +51,8 @@ static void check_close(double got, double expected, double tol, const std::stri
 }
 
 
-// Every stepper, through the runtime factory, against cos(t).
+// Every stepper, chosen at runtime by its name in the catalog, through the runtime factory,
+// against cos(t).
 static void run_steppers(){
     std::cout << "\n-- steppers via make_rich_vsolver --" << std::endl;
 
@@ -59,23 +60,18 @@ static void run_steppers(){
     State<double> q0 = {1.0, 0.0};
     State<double> tol_ = {1e-10, 1e-10};
 
-    const std::pair<Stepper, const char*> methods[] = {
-        {Stepper::Euler,  "Euler"},
-        {Stepper::RK4,    "RK4"},
-        {Stepper::RK23,   "RK23"},
-        {Stepper::RK45,   "RK45"},
-        {Stepper::DOP853, "DOP853"},
-        {Stepper::BDF,    "BDF"},
-    };
+    for (const std::string name : {"Euler", "RK4", "RK23", "RK45", "DOP853", "BDF"}){
+        const Steppers::Id method = Steppers::getID(name);
+        check(Steppers::getName(method) == name, name + " is found by its name in the catalog");
 
-    for (const auto& [method, name] : methods){
         // Euler and RK4 are fixed-step, so they need a small step rather than a tolerance.
-        const bool fixed_step = (method == Stepper::Euler || method == Stepper::RK4);
+        const bool fixed_step = (method == Steppers::id<tags::Euler> || method == Steppers::id<tags::RK4>);
         const double stepsize = fixed_step ? 1e-5 : 0.0;
         const double tol      = fixed_step ? 1e-3 : 1e-6;
 
         BoxedRichSolver<double> solver = make_rich_vsolver<double>(
             method, ode_t<double>{.Rhs = rhs, .Jac = jac}, t0, q0, tol_, tol_, 0, 0, stepsize, 1);
+        check(solver->get_method() == name, "the solver made for " + name + " reports it as its method");
 
         solver->do_advance_until(tmax);
         auto qf = q0;
@@ -91,7 +87,14 @@ static void run_ode_driver(){
 
     State<double> q0 = {1.0, 0.0};
     State<double> tol = {1e-12, 1e-12};
-    ODE<double> ode(ode_t<double>{.Rhs = rhs}, 0.0, q0, tol, tol, 0, 0, 0, 1, {}, Stepper::RK45);
+    ODE<double> ode(ode_t<double>{.Rhs = rhs}, 0.0, q0, tol, tol, 0, 0, 0, 1, {}, Steppers::id<tags::RK45>);
+    check(ode.solver()->get_method() == "RK45", "the driver integrates with the stepper it was given");
+
+    // The default stepper, and one chosen by name
+    ODE<double> ode_default(ode_t<double>{.Rhs = rhs}, 0.0, q0, tol, tol);
+    check(ode_default.solver()->get_method() == "RK45", "the driver defaults to RK45");
+    ODE<double> ode_bdf(ode_t<double>{.Rhs = rhs, .Jac = jac}, 0.0, q0, tol, tol, 0, 0, 0, 1, {}, Steppers::getID("BDF"));
+    check(ode_bdf.solver()->get_method() == "BDF", "the driver takes a stepper chosen by name");
 
     OdeResult<double> result;
     check(ode.integrate_until(&result, 10.0), "integrate_until reported success");
@@ -104,7 +107,7 @@ static void run_ode_driver(){
     // t=10: asking that one for dense output up to the same t=10 is a zero-length span, and
     // rich_integrate_until() then reports false instead of filling `solution`. Calling reset()
     // first would work too; a fresh object just keeps the two checks independent.
-    ODE<double> ode_dense(ode_t<double>{.Rhs = rhs}, 0.0, q0, tol, tol, 0, 0, 0, 1, {}, Stepper::RK45);
+    ODE<double> ode_dense(ode_t<double>{.Rhs = rhs}, 0.0, q0, tol, tol, 0, 0, 0, 1, {}, Steppers::id<tags::RK45>);
     OdeSolution<double> solution;
     check(ode_dense.rich_integrate_until(solution, 10.0), "rich_integrate_until reported success");
     State<double> q = q0;
@@ -128,7 +131,7 @@ static void run_events(){
         make_periodic_event<double>("every_2", 2.0)
     );
 
-    ODE<double> ode(ode_t<double>{.Rhs = rhs, .Jac = jac}, 0.0, q0, tol, tol, 0, 0, 0, 1, std::move(events), Stepper::RK45);
+    ODE<double> ode(ode_t<double>{.Rhs = rhs, .Jac = jac}, 0.0, q0, tol, tol, 0, 0, 0, 1, std::move(events), Steppers::id<tags::RK45>);
 
     OdeResult<double> result;
     ode.integrate_until(&result, 10.0);
@@ -154,7 +157,8 @@ static void run_variational(){
     VarState<double> q0{.main = {1.0, 0.0}, .variation = {1e-8, 0.0}};
     VarState<double> var_tol{.main = tol, .variation = tol};
 
-    VariationalODE<double> vode(ode_t<double>{.Rhs = rhs, .Jac = jac}, 0.0, q0, 1.0, var_tol, var_tol, 0, 0, 0, 1, {}, Stepper::RK45);
+    VariationalODE<double> vode(ode_t<double>{.Rhs = rhs, .Jac = jac}, 0.0, q0, 1.0, var_tol, var_tol, 0, 0, 0, 1, {}, Steppers::id<tags::RK45>);
+    check(vode.solver()->get_method() == "RK45", "a variational solver reports the stepper it is built on");
 
     OdeResult<double, VarSD> result;
     vode.integrate_until(&result, 200.0);
@@ -169,7 +173,7 @@ static void run_variational(){
         make_variational_periodic_event<double>("every_2", 2.0)
     );
 
-    VariationalODE<double> vode_events(ode_t<double>{.Rhs = rhs, .Jac = jac}, 0.0, q0, 1.0, var_tol, var_tol, 0, 0, 0, 1, std::move(events), Stepper::RK45);
+    VariationalODE<double> vode_events(ode_t<double>{.Rhs = rhs, .Jac = jac}, 0.0, q0, 1.0, var_tol, var_tol, 0, 0, 0, 1, std::move(events), Steppers::id<tags::RK45>);
 
     OdeResult<double, VarSD> result_events;
     vode_events.integrate_until(&result_events, 10.0);
@@ -220,7 +224,7 @@ static void run_vector_fields(){
     check_close(out[0], 0.71, 1e-12, "regular interpolation, first component");
 
     RegularVectorField regular_field(field, axes, CoordType::Cartesian, true);
-    auto regular_line = regular_field.streamline(x0, M_PI, 1e-9, 1e-9, 0, 0, 0, 1, Stepper::RK45, false);
+    auto regular_line = regular_field.streamline(x0, M_PI, 1e-9, 1e-9, 0, 0, 0, 1, Steppers::id<tags::RK45>, false);
     check_close(regular_line->q().back()[0], -1.0, 1e-6, "regular streamline after half a turn");
 
     ScatteredNdInterpolator scattered(points.data(), field, 2, true);
@@ -228,7 +232,7 @@ static void run_vector_fields(){
     check_close(out[0], 0.71, 1e-12, "scattered interpolation, first component");
 
     ScatteredVectorField scattered_field(points.data(), field, 2, true);
-    auto scattered_line = scattered_field.streamline(x0, M_PI, 1e-9, 1e-9, 0, 0, 0, 1, Stepper::RK45, false);
+    auto scattered_line = scattered_field.streamline(x0, M_PI, 1e-9, 1e-9, 0, 0, 0, 1, Steppers::id<tags::RK45>, false);
     check_close(scattered_line->q().back()[0], -1.0, 1e-6, "scattered streamline after half a turn");
 }
 
@@ -241,7 +245,7 @@ static void run_other_scalars(){
     State<float> tol_f = {1e-6F, 1e-6F};
     ODE<float> ode_f(ode_t<float>{.Rhs = [](State<float>& out, float, const State<float>& q){
                          out[0] = q[1]; out[1] = -q[0];
-                     }}, 0.0F, qf, tol_f, tol_f, 0, 0, 0, 1, {}, Stepper::RK45);
+                     }}, 0.0F, qf, tol_f, tol_f, 0, 0, 0, 1, {}, Steppers::id<tags::RK45>);
     OdeResult<float> rf;
     ode_f.integrate_until(&rf, 2.0F);
     check_close(rf.q().back()[0], std::cos(2.0), 1e-3, "float x(2)");
@@ -250,7 +254,7 @@ static void run_other_scalars(){
     State<long double> tol_l = {1e-15L, 1e-15L};
     ODE<long double> ode_l(ode_t<long double>{.Rhs = [](State<long double>& out, long double, const State<long double>& q){
                                out[0] = q[1]; out[1] = -q[0];
-                           }}, 0.0L, ql, tol_l, tol_l, 0, 0, 0, 1, {}, Stepper::RK45);
+                           }}, 0.0L, ql, tol_l, tol_l, 0, 0, 0, 1, {}, Steppers::id<tags::RK45>);
     OdeResult<long double> rl;
     ode_l.integrate_until(&rl, 2.0L);
     check_close(static_cast<double>(rl.q().back()[0]), std::cos(2.0), 1e-9, "long double x(2)");

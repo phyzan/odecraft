@@ -28,7 +28,7 @@ void test_single_objective(){
     State y0 = {1.0, 0.0};
     State tol = {1e-10, 1e-10};
 
-    auto solver = getEventStepper<Stepper::RK45, SolverPolicy::Static, T, SD>(
+    auto solver = getEventStepper<tags::RK45, SolverPolicy::Static, T, SD>(
         std::tuple{obj_data},
         OdeData{.Rhs = rhs},
         0.0,              // t0
@@ -94,7 +94,7 @@ void test_two_objectives(){
     State y0 = {0.0, 1.0};
     State tol = {1e-10, 1e-10};
 
-    auto solver = getEventStepper<Stepper::RK45, SolverPolicy::Static, T, SD>(
+    auto solver = getEventStepper<tags::RK45, SolverPolicy::Static, T, SD>(
         std::tuple{data0, data1},
         OdeData{.Rhs = rhs},
         T{0.0},              // t0

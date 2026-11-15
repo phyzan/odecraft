@@ -144,7 +144,7 @@ void RegularVectorField<NDIM, AS_VIRTUAL>::OdeFuncNorm(double* out, double t, co
 
 
 template<int NDIM, bool AS_VIRTUAL>
-std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Stepper method) const{
+std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method) const{
     return streamplot_data_core(max_length, ds, density, rtol, atol, min_step, max_step, stepsize, method, std::make_index_sequence<NDIM>{});
 }
 
@@ -152,7 +152,7 @@ std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::str
 
 template<int NDIM, bool AS_VIRTUAL>
 template<size_t... I>
-std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Stepper method, std::index_sequence<I...>) const{
+std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method, std::index_sequence<I...>) const{
     
     if (density <= 1){
         throw std::domain_error("Density must be greater than 1 in streamplot_data");
@@ -165,7 +165,7 @@ std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::str
 
     // Every integration sets its own initial conditions through do_set_ics
     EventList<double, State> events{};
-    pbox::Box<OdeRichSolver<double, FieldSD<NDIM>>> solver = make_solver<UtilPolicy::RichVirtual, double, FieldSD<NDIM>>(method,
+    pbox::Box<OdeRichSolver<double, FieldSD<NDIM>>> solver = Steppers::make<UtilPolicy::RichVirtual, double, FieldSD<NDIM>>(method,
         OdeData{
             .Rhs=[this](State& out, double t, const State& q){
                 this->OdeFuncNorm(out.data(), t, q.data());

@@ -370,8 +370,8 @@ void VariationalOdeSys<T, SD, OdeType>::delta_J(MainJacMat& mat, const T& t, con
 
 // ============================ VariationalODE ==============================
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-VariationalSolver<S, T, SD, OdeType, SP, Derived>::VariationalSolver(OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> events) :
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::VariationalSolver(OdeType ode, T t0, State q0, T period, RealState rtol, RealState atol, T min_step, T max_step, T stepsize, int dir, EventList<T, State> events) :
     Base(VariationalOdeSys<T, SD, OdeType>(std::move(ode), q0, atol), t0, normalized_ics(q0), std::move(rtol), atol, min_step, max_step, stepsize, dir, std::move(events)),
     flag_state_(this->vector_ics()), current_scratch_(this->vector_ics()), period_(period), t_next_(t0+period*dir), t_last_(t0) {
 
@@ -389,19 +389,19 @@ VariationalSolver<S, T, SD, OdeType, SP, Derived>::VariationalSolver(OdeType ode
     }
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-auto VariationalSolver<S, T, SD, OdeType, SP, Derived>::normalized_ics(State q0) -> State {
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+auto VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::normalized_ics(State q0) -> State {
     detail::normalized<T, SD>(q0.variation, q0.variation);
     return q0;
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::elapsed_time() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::elapsed_time() const{
     return this->t() - this->t_ics();
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::stretching_number() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::stretching_number() const{
     if (flagged){
         // The deviation vector was just renormalized, so the new period starts at unit norm.
         // The solver holds the old one until the next Adv_Impl applies it.
@@ -413,8 +413,8 @@ T VariationalSolver<S, T, SD, OdeType, SP, Derived>::stretching_number() const{
     return log(detail::state_norm<T, SD>(q.variation));
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::kick() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::kick() const{
     if (flagged){
         // At the renormalization time t() == t_last_: the kick of the period that just ended
         return (logksi_ - logksi_last_)/(period_*this->direction());
@@ -422,23 +422,23 @@ T VariationalSolver<S, T, SD, OdeType, SP, Derived>::kick() const{
     return stretching_number()/(this->t() - t_last_);
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::period() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::period() const{
     return period_;
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::log_ksi() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::log_ksi() const{
     return logksi_ + this->stretching_number();
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::lyapunov_exponent() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::lyapunov_exponent() const{
     return np == 0 ? T{0} : T(log_ksi()/elapsed_time());
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-void VariationalSolver<S, T, SD, OdeType, SP, Derived>::Reset(){
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
     t_last_ = this->t_ics();
     t_next_ = t_last_ + period_*this->direction();
@@ -448,8 +448,8 @@ void VariationalSolver<S, T, SD, OdeType, SP, Derived>::Reset(){
     logksi_last_ = 0;
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-bool VariationalSolver<S, T, SD, OdeType, SP, Derived>::SetIcs(T t0, State y0, T stepsize, int direction){
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+bool VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::SetIcs(T t0, State y0, T stepsize, int direction){
     // The norm of y0 must be non-zero
     if (SD::all_true([](const value_t<T, SD>& v){
         // value_t itself is not guaranteed to be comparable to T
@@ -461,21 +461,21 @@ bool VariationalSolver<S, T, SD, OdeType, SP, Derived>::SetIcs(T t0, State y0, T
     }
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-void VariationalSolver<S, T, SD, OdeType, SP, Derived>::RhsMain(MainState& out, const T& t, const MainState& q) const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::RhsMain(MainState& out, const T& t, const MainState& q) const{
     this->ode().ode().Rhs(out, t, q);
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-void VariationalSolver<S, T, SD, OdeType, SP, Derived>::JacMain(MainJacMat& out, const T& t, const MainState& q) const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::JacMain(MainJacMat& out, const T& t, const MainState& q) const{
     // The dispatch of VariationalOdeSys: an explicitly provided Jacobian is used
     // whenever it exists, and a Nullable one that is null at runtime falls back to
     // finite differences rather than being called.
     this->ode().JacMain(out, t, q);
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-void VariationalSolver<S, T, SD, OdeType, SP, Derived>::ReAdjust(const State& /*new_vector*/){
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::ReAdjust(const State& /*new_vector*/){
     // assertion, not an error, as the ReAdjust member function is restricted to the internal machinery and not intended for public use.
     assert(false && "ReAdjust is not supported in VariationalSolver because it would interfere with the renormalization process.");
 }
@@ -486,69 +486,65 @@ void VariationalSolver<S, T, SD, OdeType, SP, Derived>::ReAdjust(const State& /*
 // accessors above so that internal callers never pay for a virtual dispatch.
 // ----------------------------------------------------------------------------
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-void VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_rhs_main(MainState& out, const T& t, const MainState& q) const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_rhs_main(MainState& out, const T& t, const MainState& q) const{
     RhsMain(out, t, q);
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-void VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_jac_main(MainJacMat& out, const T& t, const MainState& q) const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+void VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_jac_main(MainJacMat& out, const T& t, const MainState& q) const{
     JacMain(out, t, q);
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_elapsed_time() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_elapsed_time() const{
     return elapsed_time();
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_kick() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_kick() const{
     return kick();
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_period() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_period() const{
     return period();
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_log_ksi() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_log_ksi() const{
     return log_ksi();
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_lyapunov_exponent() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_lyapunov_exponent() const{
     return lyapunov_exponent();
 }
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-T VariationalSolver<S, T, SD, OdeType, SP, Derived>::get_stretching_number() const{
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::get_stretching_number() const{
     return stretching_number();
 }
 
 
-template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
-pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper method, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args){
+template<UtilPolicy UP, typename SD, typename Stepper, typename T, typename OdeType, typename... Args>
+pbox::Box<ChaoticSolver<T, SD, UP>> make_variational_solver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, Args&&... args){
 
     constexpr SolverPolicy SP = UP == UtilPolicy::Virtual ? SolverPolicy::Virtual : SolverPolicy::RichVirtual;
 
-    return choose_integrator_case<pbox::Box<ChaoticSolver<T, SD, UP>>>(method,
-        [&]<Stepper S>(){
-            return pbox::make_box<VariationalSolver<S, T, SD, OdeType, SP>>(std::move(ode), std::move(t0), std::move(q0), std::move(period), std::forward<Args>(args)...);
-        }
-    );
+    return pbox::make_box<VariationalSolver<Stepper, T, SD, OdeType, SP>>(std::move(ode), std::move(t0), std::move(q0), std::move(period), std::forward<Args>(args)...);
 }
 
 
-template<SolverPolicy SP, Stepper S, typename T, typename SD, typename OdeType>
-auto getVariationalSolver(OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, real_state_t<T, VarSD<SD>> rtol, real_state_t<T, VarSD<SD>> atol, T min_step, T max_step, T stepsize, int direction, EventList<T, state_t<T, VarSD<SD>>> events){
-    return VariationalSolver<S, T, SD, OdeType, SP, void>(std::move(ode), std::move(t0), std::move(q0), std::move(period), std::move(rtol), std::move(atol), min_step, max_step, stepsize, direction, std::move(events));
+template<SolverPolicy SP, typename SD, typename Stepper, typename T, typename OdeType>
+auto getVariationalSolver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, VarSD<SD>> q0, T period, real_state_t<T, VarSD<SD>> rtol, real_state_t<T, VarSD<SD>> atol, T min_step, T max_step, T stepsize, int direction, EventList<T, state_t<T, VarSD<SD>>> events){
+    return VariationalSolver<Stepper, T, SD, OdeType, SP, void>(std::move(ode), std::move(t0), std::move(q0), std::move(period), std::move(rtol), std::move(atol), min_step, max_step, stepsize, direction, std::move(events));
 }
 
 
-template<Stepper S, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
+template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 template<typename... Args>
-bool VariationalSolver<S, T, SD, OdeType, SP, Derived>::Adv_Impl(Args&&... args) {
+bool VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::Adv_Impl(Args&&... args) {
     if (flagged){
         Base::ReAdjust(flag_state_);
         flagged = false;
