@@ -13,11 +13,6 @@ template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename De
 Euler<T, SD, OdeType, SP, Derived>::Euler(OdeType ode, T t0, State q0, RealState /*rtol*/, RealState /*atol*/, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T, State> events) : Euler(std::move(ode), std::move(t0), std::move(q0), std::move(stepsize), dir, std::move(events)) {}
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper Euler<T, SD, OdeType, SP, Derived>::method() const{
-    return Stepper::Euler;
-}
-
-template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 StepResult Euler<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     const T h = habs * this->direction();
     t_new = t + h;

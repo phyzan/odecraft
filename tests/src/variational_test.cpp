@@ -39,7 +39,7 @@ void test_variational_solver(){
     State rtol = {1e-9, 1e-9, 1e-9};
     State atol = {1e-12, 1e-12, 1e-12};
 
-    chaos::VariationalSolver<Stepper::BDF, T, SD, MyODE, ode::SolverPolicy::Static> solver(
+    chaos::VariationalSolver<tags::BDF, T, SD, MyODE, ode::SolverPolicy::Static> solver(
         MyODE{},
         0.0,
         {.main=y0, .variation=y0_var},

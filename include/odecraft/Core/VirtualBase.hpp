@@ -4,6 +4,7 @@
 #include <odecraft/Events/Events.hpp>
 #include <polybox/polybox.hpp>
 #include "SolverFactory.hpp"
+#include "Status.hpp"
 #include <ostream>
 #include <span>
 
@@ -46,7 +47,7 @@ public:
     virtual std::string_view    get_message() const = 0;
     virtual bool                get_validate_ics(const T& t0, const State& q0) const = 0;
     virtual bool                get_has_valid_ics() const = 0;
-    virtual Stepper             get_method() const = 0;
+    virtual std::string_view    get_method() const = 0;
     virtual BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const = 0;
     virtual T                   get_auto_step(const T& t, const State& q) const = 0;
     virtual T                   get_auto_step() const = 0;

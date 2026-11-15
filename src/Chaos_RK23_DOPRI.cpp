@@ -11,4 +11,4 @@
 #include <odecraft/Steppers/DOPRI/RK23/RK23_DOPRI_impl.hpp>
 #include <odecraft/Chaos/VariationalSolvers_impl.hpp>
 
-ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_DEFINE_VARIATIONAL, ::ode::Stepper::RK23, RK23)
+ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_DEFINE_VARIATIONAL, RK23)

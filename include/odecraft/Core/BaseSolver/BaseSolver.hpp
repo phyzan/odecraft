@@ -16,21 +16,33 @@
  * output interpolation, and event detection.
  */
 
+#include "odecraft/Core/SolverFactory.hpp"
 #include "odecraft/Toolkit/Toolkit.hpp" // IWYU pragma: keep
 #include "../VirtualTraits.hpp"
 #include "../VirtualBase.hpp" // IWYU pragma: keep
-
-
-
-#define ODECRAFT_DECLARE_STEPPER \
-    template<typename, typename, typename, typename, SolverPolicy> friend class BaseSolver; \
-    template<typename, typename, typename, typename, SolverPolicy> friend class RichSolver
+#include <string_view>
 
 
 
 namespace ode{
 
-namespace detail{
+namespace detail {
+
+struct adl_tag {};
+
+template<typename F>
+concept has_stepper_tag = requires(const F* p) { stepper_tag(p, adl_tag{}); };
+
+template<typename F>
+struct stepper_type_getter {
+    using type = void;
+};
+
+template<typename F> requires has_stepper_tag<F>
+struct stepper_type_getter<F> {
+    using type = decltype(stepper_tag(std::declval<const F*>(), adl_tag{}));
+};
+
 
 template<typename T>
 struct StaticSolverFactors{
@@ -78,9 +90,9 @@ using StepperFactors = std::conditional_t<
  *                 - static constexpr int ERR_EST_ORDER
  *                 - adapt_impl(), local_interp_impl()
  * @tparam T       Scalar type for computations (e.g., double, float).
- * @tparam N       System size at compile time. Use 0 for runtime-sized systems.
- * @tparam SP      Solver policy controlling behavior (see SolverPolicy enum).
+ * @tparam SD      The State Descriptor
  * @tparam OdeType class containing the Rhs and Jac members
+ * @tparam SP      Solver policy controlling behavior (see SolverPolicy enum).
  *
  * @note This class uses static polymorphism (CRTP). The derived class passes itself as the
  *       first template parameter.
@@ -90,12 +102,20 @@ template<typename Derived, typename T, typename SD, typename OdeType, SolverPoli
 class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type {
 
     static_assert(hasRhsFunc<OdeType, T, state_t<T, SD>>, "Invalid OdeType::Rhs signature");
-    using CloneType = traits::SolverCloneType<Derived, T, SD, SP>;
 
 public:
 
     using Base = traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type;
-    using value_type = T;
+    /// @brief The interface the solver is reached through (OdeSolver, OdeRichSolver, or one
+    /// a solver specializes SolverVirtualTypeTraits for), void for the static policies.
+    using virtual_base = std::conditional_t<std::is_same_v<Base, EmptySolver>, void, Base>;
+    /// @brief What clone() points to: the solver itself for the static policies, OdeSolver for
+    /// the virtual ones. Not virtual_base: clone() overrides OdeSolver::clone(), and a
+    /// std::unique_ptr return type cannot be covariant.
+    using clone_type = std::conditional_t<std::is_void_v<virtual_base>, Derived, OdeSolver<T, SD>>;
+    using state_descriptor = SD;
+    using real_type = T;
+    using value_type = value_t<T, SD>;
     using ode_type = OdeType;
     using State = state_t<T, SD>;
     using JacMat = jacmat_t<T, SD>;
@@ -237,7 +257,7 @@ public:
      * @brief Create a dynamically allocated copy of this solver.
      * @return Pointer to a new solver instance. Caller owns the memory.
      */
-    std::unique_ptr<CloneType> clone() const;
+    std::unique_ptr<clone_type> clone() const;
 
     // MODIFIERS
 
@@ -365,7 +385,7 @@ public:
     std::string_view    get_message() const { return message(); }
     bool                get_validate_ics(const T& t0, const State& q0) const { return validate_ics(t0, q0); }
     bool                get_has_valid_ics() const { return has_valid_ics(); }
-    Stepper             get_method() const { return method(); }
+    std::string_view    get_method() const { return method(); }
     BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
     T                   get_auto_step(const T& t, const State& q) const { return auto_step(t, q); }
     T                   get_auto_step() const { return auto_step(); }
@@ -405,17 +425,18 @@ public:
     void                do_kill() { kill(); }
     bool                do_set_ics(T t0, State y0, T stepsize = 0, int direction = 0) { return THIS->SetIcs(std::move(t0), std::move(y0), stepsize, direction); }
 
-    // =================== STATIC OVERRIDES (NECESSARY) ===============================
-    // Derived classes MUST implement these methods / attributes.
-
-    Stepper method() const {
-        return THIS->method();
+    /// @brief Name of the stepper
+    std::string_view method() const {
+        static_assert(detail::has_stepper_tag<Derived>, "No stepper tag found: declare the stepper with ODECRAFT_DECLARE_STEPPER");
+        return detail::stepper_type_getter<Derived>::type::name;
     }
 
 protected:
 
     using MainSolverType = BaseSolver;
 
+    // =================== STATIC OVERRIDES (NECESSARY) ===============================
+    // Derived classes MUST implement these methods / attributes.
 
     /// @brief Whether the method is implicit (must be defined in Derived).
     static constexpr bool       IS_IMPLICIT = Derived::IS_IMPLICIT;

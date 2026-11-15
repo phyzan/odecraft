@@ -146,11 +146,6 @@ bool BDF<T, SD, OdeType, SP, Derived>::validate_ics_impl(const T& t0, const Stat
     return jac_all_are_finite<T, SD>(J);
 }
 
-template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper BDF<T, SD, OdeType, SP, Derived>::method() const {
-    return Stepper::BDF;
-}
-
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 void BDF<T, SD, OdeType, SP, Derived>::Reset(){

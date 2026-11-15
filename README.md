@@ -145,8 +145,8 @@ int main(){
 
         ode::EventList<T, State> event_list = ode::make_event_list<T, State>(std::move(event));
 
-        auto solver = ode::make_rich_vsolver<T, SD>(
-            ode::Stepper::RK45,
+        auto solver = ode::make_rich_vsolver<SD>(
+            ode::tags::RK45{},
             MyOdeSystem{},
             T{0.0},
             y0,
@@ -179,8 +179,8 @@ int main(){
         FullState full_rtol{.main = rtol, .variation = rtol};
         FullState full_atol{.main = atol, .variation = atol};
 
-        auto solver = ode::chaos::make_variational_solver<ode::UtilPolicy::Virtual, T, SD>(
-            ode::Stepper::RK45,
+        auto solver = ode::chaos::make_variational_solver<ode::UtilPolicy::Virtual, SD>(
+            ode::tags::RK45{},
             MyOdeSystem{},
             T{0.0},
             full_q0,
@@ -199,4 +199,30 @@ int main(){
 
     return 0;
 }
+```
+
+## Choosing a stepper
+
+A stepper is chosen by its *tag*, a type: `ode::tags::Euler`, `ode::tags::RK4`, `ode::tags::RK23`, `ode::tags::RK45`, `ode::tags::DOP853` or `ode::tags::BDF`. The factories take one by value, as above, and the static ones as a template argument:
+
+```cpp
+auto solver = ode::getSolver<ode::tags::BDF, ode::SolverPolicy::Static, T, SD>(MyOdeSystem{}, T{0.0}, y0, rtol, atol);
+```
+
+To choose one at runtime, a `Catalog` of tags maps each to an id and a name. `ode::Steppers` is the catalog of the built-in ones:
+
+```cpp
+ode::Steppers::Id id = ode::Steppers::getID("DOP853"); // or ode::Steppers::id<ode::tags::DOP853>
+auto solver = ode::Steppers::make<ode::UtilPolicy::RichVirtual, T, SD>(id, MyOdeSystem{}, T{0.0}, y0, rtol, atol);
+std::cout << solver->get_method(); // DOP853
+```
+
+`Catalog::from_stepper` hands the tag of an id to a generic lambda, for anything else that takes a tag. The pre-compiled `ode::crafted` interface takes its steppers by their id in `Steppers`.
+
+Unlike an enum, the set of steppers is open. A stepper of your own is a class template, say `mylib::Midpoint<T, SD, OdeType, SolverPolicy SP, typename Derived = void>`, built on the solver bases like those in `include/odecraft/Steppers` (see `tests/src/catalog.cpp` for one outside `namespace ode`). Declaring its tag, at global scope, makes it usable wherever the built-in ones are, and it can be listed in a catalog of your own:
+
+```cpp
+ODECRAFT_DECLARE_STEPPER(Midpoint, mylib::Midpoint) // declares ode::tags::Midpoint
+
+using MySteppers = ode::Catalog<ode::tags::RK45, ode::tags::BDF, ode::tags::Midpoint>;
 ```

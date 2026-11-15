@@ -53,11 +53,6 @@ RK45<T, SD, OdeType, SP, Derived>::RK45(OdeType ode, T t0, State q0, RealState r
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper RK45<T, SD, OdeType, SP, Derived>::method() const{
-    return Stepper::RK45;
-}
-
-template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 void RK45<T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
     this->Rhs(K_[Nstages], this->t_new(), this->vector_new());

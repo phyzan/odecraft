@@ -44,6 +44,9 @@ using OdeDriver = ::ode::ODE<T, D>;
  * ode_t<T> instantiation, so anything else would compile here and fail at link with a mangled
  * error. Taking ode_t<T> by value turns that into a plain conversion error at the call site,
  * and lets you write the system inline: ODE<double> ode({.Rhs = f}, t0, q0, rtol, atol).
+ *
+ * The stepper is chosen at runtime, by its id in Steppers (RK45 by default), where ode::ODE
+ * takes the tag of one as its first argument.
  */
 template<typename T>
 class ODE : public ::ode::ODE<T, SD>{
@@ -63,8 +66,10 @@ public:
         T stepsize = 0,
         int dir = 1,
         EventList<T> events = {},
-        Stepper method = Stepper::RK45
-    ) : Base(std::move(ode), t0, std::move(q0), std::move(rtol), std::move(atol), min_step, max_step, stepsize, dir, std::move(events), method) {}
+        Steppers::Id method = Steppers::id<tags::RK45>
+    ) : Base(Steppers::from_stepper<Base>(method, [&]<typename S>(){
+            return Base(S{}, std::move(ode), t0, std::move(q0), std::move(rtol), std::move(atol), min_step, max_step, stepsize, dir, std::move(events));
+        })) {}
 
     DEFAULT_RULE_OF_FOUR(ODE)
 };
@@ -74,17 +79,20 @@ public:
 
 namespace ode{
 
-// ODE's constructor and init() are member templates over the system type. Only the
-// ode_t<T> instantiation is compiled -- that is the one that would otherwise drag every
-// stepper's implementation into the caller's translation unit, since init() dispatches
-// over all of them.
+// ODE's constructor and init() are member templates over the stepper tag and the system type.
+// Only the ode_t<T> instantiations of init() for the compiled steppers are compiled -- those are
+// what would otherwise drag every stepper's implementation into the caller's translation unit,
+// since crafted::ODE dispatches over all of them.
+#define ODECRAFT_ODE_INIT(CLS, SPEC, T)                                                             \
+    SPEC void ODE<T, crafted::SD>::init<::ode::tags::CLS, crafted::ode_t<T>>(                       \
+        ::ode::tags::CLS, crafted::ode_t<T>, T, crafted::State<T>, crafted::State<T>, crafted::State<T>, T, T, T, int, crafted::EventList<T>);
+
 #define ODECRAFT_EXTERN_ODE(T)                                                                      \
     extern template class EventCounter<T, crafted::SD>;                                             \
     extern template class EventCounter<T, crafted::VarSD>;                                          \
     extern template class ODE<T, crafted::SD>;                                                      \
     extern template class ODE<T, crafted::VarSD>;                                                   \
-    extern template void ODE<T, crafted::SD>::init<crafted::ode_t<T>>(                              \
-        crafted::ode_t<T>, T, crafted::State<T>, crafted::State<T>, crafted::State<T>, T, T, T, int, crafted::EventList<T>, Stepper);
+    ODECRAFT_FOR_EACH_STEPPER(ODECRAFT_ODE_INIT, extern template, T)
 
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_EXTERN_ODE)
 

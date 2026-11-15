@@ -15,7 +15,7 @@ void test_lazy_scalar(){
     State y0 = {1, -3};
     State tol = {T{1e-40}, T{1e-40}};
 
-    auto solver = getSolver<Stepper::BDF, SolverPolicy::Static, T, SD>(
+    auto solver = getSolver<tags::BDF, SolverPolicy::Static, T, SD>(
         OdeData{
             .Rhs=ODECRAFT_LAMBDA(out, t, y){ 
                 out[0] = y[1];

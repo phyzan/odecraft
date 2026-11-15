@@ -1,6 +1,6 @@
 #pragma once
 
-#include "odecraft/Core/SolverFactory.hpp"
+#include <odecraft/Core/Status.hpp>
 #include "OdeResult.hpp"
 #include <sstream>
 

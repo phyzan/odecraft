@@ -15,9 +15,17 @@
 #include "DOPRI/RK45/CraftedRK45.hpp" // IWYU pragma: keep
 #include "DOPRI/DOP853/CraftedDOP853.hpp" // IWYU pragma: keep
 #include "BDF/CraftedBDF.hpp" // IWYU pragma: keep
+#include "Steppers.hpp" // the catalog ode::Steppers
 
 
 namespace ode::crafted{
+
+/// @brief The catalog of the compiled steppers. The compiled interface chooses a stepper at
+/// runtime, by its id here: e.g. Steppers::id<tags::RK45>, or Steppers::getID("RK45").
+using ::ode::Steppers;
+
+/// @brief The stepper tags, e.g. tags::RK45.
+namespace tags = ::ode::tags;
 
 /**
  * @brief Construct a solver of the requested method, behind the OdeRichSolver interface.
@@ -26,7 +34,7 @@ namespace ode::crafted{
  * RichVirtual solver already is an OdeSolver, so callers who do not want events can simply
  * pass no events and hold the result by OdeSolver<T>.
  *
- * @param method    Which stepper to use.
+ * @param method    Which stepper to use: its id in Steppers.
  * @param ode       Rhs and optional Jacobian.
  * @param t0        Initial time.
  * @param q0        Initial state; its shape fixes the shape of the system.
@@ -40,7 +48,7 @@ namespace ode::crafted{
  */
 template<typename T>
 BoxedRichSolver<T> make_rich_vsolver(
-    Stepper method,
+    Steppers::Id method,
     ode_t<T> ode,
     T t0,
     State<T> q0,
@@ -56,7 +64,7 @@ BoxedRichSolver<T> make_rich_vsolver(
 
 #define ODECRAFT_EXTERN_SOLVER_FACTORY(T)                                       \
     extern template BoxedRichSolver<T> make_rich_vsolver<T>(                    \
-        Stepper, ode_t<T>, T, State<T>, State<T>, State<T>, T, T, T, int, EventList<T>);
+        Steppers::Id, ode_t<T>, T, State<T>, State<T>, State<T>, T, T, T, int, EventList<T>);
 
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_EXTERN_SOLVER_FACTORY)
 

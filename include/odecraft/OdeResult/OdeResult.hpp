@@ -1,6 +1,6 @@
 #pragma once
 
-#include "odecraft/Core/SolverFactory.hpp"
+#include <odecraft/Core/Status.hpp>
 #include <odecraft/Toolkit/Tools.hpp>
 #include <odecraft/Interpolation/Univariate/StateInterp.hpp>
 

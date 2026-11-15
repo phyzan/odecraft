@@ -17,8 +17,8 @@ T crossing(const T& /*t*/, const State<T>& y) {
 }
 
 
-template<typename Scalar>
-void crossing_test(Stepper method) {
+template<typename Scalar, typename Stepper>
+void crossing_test(Stepper stepper) {
     using State = State<Scalar>;
 
     // Initial conditions
@@ -38,8 +38,8 @@ void crossing_test(Stepper method) {
     int dir = 1;
 
 
-    pbox::Box<OdeRichSolver<Scalar, SD>> solver = make_solver<UtilPolicy::RichVirtual, Scalar, SD>(
-        method,
+    pbox::Box<OdeRichSolver<Scalar, SD>> solver = make_solver<UtilPolicy::RichVirtual, SD>(
+        stepper,
         OdeData{.Rhs=
             ODECRAFT_LAMBDA(out, /*t*/, q) {
                 const Scalar omega{1}; // angular frequency
@@ -79,12 +79,12 @@ void test_oscillator_solver() {
 
     // Test with double precision
     std::cout << "Testing with double precision:\n";
-    crossing_test<double>(Stepper::RK45);
+    crossing_test<double>(tags::RK45{});
 
     // Test with arbitrary precision
     std::cout << "\nTesting with arbitrary precision (mpreal):\n";
     mpfr::mpreal::set_default_prec(256); // Set precision to 256 bits
 
-    crossing_test<mpfr::mpreal>(Stepper::RK45);
+    crossing_test<mpfr::mpreal>(tags::RK45{});
     std::cout << "Expected event at t = 3.48143\n";
 }

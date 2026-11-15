@@ -46,11 +46,23 @@
 /// @brief Define them (src/ units). Must appear after the matching declarations.
 #define ODECRAFT_DEFINE_STEPPER(T, CLS)  ODECRAFT_STEPPER_SET(template, CLS, T)
 
+/**
+ * @brief MACRO(CLS, args...) for every stepper the compiled interface ships, by class name.
+ *
+ * These are the steppers of the built-in catalog ode::Steppers, the ones a Steppers::Id can
+ * name: keep the two lists in step.
+ */
+#define ODECRAFT_FOR_EACH_STEPPER(MACRO, ...)                   \
+    MACRO(Euler __VA_OPT__(,) __VA_ARGS__)                      \
+    MACRO(RK4 __VA_OPT__(,) __VA_ARGS__)                        \
+    MACRO(RK23 __VA_OPT__(,) __VA_ARGS__)                       \
+    MACRO(RK45 __VA_OPT__(,) __VA_ARGS__)                       \
+    MACRO(DOP853 __VA_OPT__(,) __VA_ARGS__)                     \
+    MACRO(BDF __VA_OPT__(,) __VA_ARGS__)
+
 
 namespace ode::crafted{
 
-
-using ::ode::Stepper;
 
 template<typename T>
 using OdeSolver = ::ode::OdeSolver<T, SD>;

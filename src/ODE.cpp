@@ -8,8 +8,7 @@ namespace ode{
     template class EventCounter<T, crafted::VarSD>;                                     \
     template class ODE<T, crafted::SD>;                                                 \
     template class ODE<T, crafted::VarSD>;                                              \
-    template void ODE<T, crafted::SD>::init<crafted::ode_t<T>>(                         \
-        crafted::ode_t<T>, T, crafted::State<T>, crafted::State<T>, crafted::State<T>, T, T, T, int, crafted::EventList<T>, Stepper);
+    ODECRAFT_FOR_EACH_STEPPER(ODECRAFT_ODE_INIT, template, T)
 
 ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_INSTANTIATE_ODE)
 

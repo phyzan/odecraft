@@ -68,11 +68,6 @@ RK4<T, SD, OdeType, SP, Derived>::RK4(OdeType ode, T t0, State q0, RealState rto
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-Stepper RK4<T, SD, OdeType, SP, Derived>::method() const{
-    return Stepper::RK4;
-}
-
-template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 StepResult RK4<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
     // standard Runge-Kutta-4 with fixed step size
 

@@ -23,16 +23,17 @@ template<typename T, typename SD, SolverPolicy SP>
 using BaseInterface = HelperVirtualSolver<T, SD, SP>::type;
 
 
-template<typename Solver, typename T, typename SD, SolverPolicy SP>
-using SolverCloneType = std::conditional_t<SP==SolverPolicy::Virtual || SP==SolverPolicy::RichVirtual, OdeSolver<T, SD>, Solver>;
-
-
 /// @brief Traits struct mapping a solver type to its virtual base interface.
-/// Specialize this before the solver class definition to override the default.
+/// Specialize this before the solver class is instantiated to override the default.
+///
+/// BaseSolver derives from `type` while its Derived class is still incomplete, so a solver
+/// cannot name its interface through a member of its own: this is the hook instead. BaseSolver
+/// exposes the result as `virtual_base` (see VariationalSolver, reached through ChaoticSolver).
 template<typename Derived, typename T, typename SD, SolverPolicy SP>
 struct SolverVirtualTypeTraits {
     using type = BaseInterface<T, SD, SP>;
 };
+
 
 } // namespace ode::traits
 

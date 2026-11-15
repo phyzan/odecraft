@@ -14,4 +14,4 @@
 // BDF algorithm again for the augmented 2N system, so keeping them apart lets that work
 // run in parallel instead of serialising into a single translation unit.
 
-ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_DEFINE_VARIATIONAL, ::ode::Stepper::BDF, BDF)
+ODECRAFT_FOR_EACH_SCALAR(ODECRAFT_DEFINE_VARIATIONAL, BDF)
