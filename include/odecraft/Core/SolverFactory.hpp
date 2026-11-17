@@ -221,8 +221,8 @@ public:
 };
 
 
-template<typename Stepper, SolverPolicy SP, typename T, typename SD, typename OdeType>
-inline auto getSolver(OdeType ode, T t0, state_t<T, SD> q0, real_state_t<T, SD> rtol, real_state_t<T, SD> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, state_t<T, SD>> events = {}){
+template<typename SD, SolverPolicy SP, typename Stepper, typename T, typename OdeType>
+inline auto getSolver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, SD> q0, real_state_t<T, SD> rtol, real_state_t<T, SD> atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, state_t<T, SD>> events = {}){
     return typename Stepper::template type<T, SD, OdeType, SP>(std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
 }
 

@@ -1,5 +1,3 @@
-#include "odecraft/Contracts/DenseDescriptor.hpp"
-#include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/odecraft.hpp>
 
 using namespace ode;
@@ -37,13 +35,15 @@ void run(){
     // Stack allocated solver (the size is a compile-time parameter)
     State<double, 2> q0_stack = {1, 0};
     State<double, 2> tol_stack = {1e-10, 1e-10};
-    auto solver_1 = getSolver<Stepper, SolverPolicy::Static, double, SD<2>>(
+    auto solver_1 = getSolver<SD<2>, SolverPolicy::Static>(
+        Stepper{},
         OdeData{.Rhs=rhs}, t0, q0_stack, tol_stack, tol_stack, min_step, max_step, stepsize, 1);
 
     // Heap allocated solver (the size is a runtime parameter)
     State<double, 0> q0_heap = {1, 0};
     State<double, 0> tol_heap = {1e-10, 1e-10};
-    auto solver_2 = getSolver<Stepper, SolverPolicy::Static, double, SD<0>>(
+    auto solver_2 = getSolver<SD<0>, SolverPolicy::Static>(
+        Stepper{},
         OdeData{.Rhs=rhs}, t0, q0_heap, tol_heap, tol_heap, min_step, max_step, stepsize, 1);
 
     

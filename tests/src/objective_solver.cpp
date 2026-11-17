@@ -1,5 +1,3 @@
-#include "odecraft/Contracts/DenseDescriptor.hpp"
-#include "odecraft/Core/SolverFactory.hpp"
 #include <odecraft/odecraft.hpp>
 
 using T = double;

@@ -206,7 +206,7 @@ int main(){
 A stepper is chosen by its *tag*, a type: `ode::tags::Euler`, `ode::tags::RK4`, `ode::tags::RK23`, `ode::tags::RK45`, `ode::tags::DOP853` or `ode::tags::BDF`. The factories take one by value, as above, and the static ones as a template argument:
 
 ```cpp
-auto solver = ode::getSolver<ode::tags::BDF, ode::SolverPolicy::Static, T, SD>(MyOdeSystem{}, T{0.0}, y0, rtol, atol);
+auto solver = ode::getSolver<SD, ode::SolverPolicy::Static>(ode::tags::BDF{}, MyOdeSystem{}, T{0.0}, y0, rtol, atol);
 ```
 
 To choose one at runtime, a `Catalog` of tags maps each to an id and a name. `ode::Steppers` is the catalog of the built-in ones:

@@ -17,11 +17,9 @@ add_subdirectory(external/xdiff)
 
 # ndspan and polybox are header-only without a CMakeLists of their own
 add_library(odecraft_ndspan INTERFACE)
-add_library(odecraft::ndspan ALIAS odecraft_ndspan)
 target_include_directories(odecraft_ndspan INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/external/ndspan/include)
 
 add_library(odecraft_polybox INTERFACE)
-add_library(odecraft::polybox ALIAS odecraft_polybox)
 target_include_directories(odecraft_polybox INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/external/polybox/include)
 
 # qhull (reentrant C library, e.g. libqhull-dev) backs the Delaunay triangulation that <odecraft/odecraft.hpp> includes
@@ -29,7 +27,6 @@ find_path(ODECRAFT_QHULL_INCLUDE_DIR libqhull_r/qhull_ra.h REQUIRED)
 find_library(ODECRAFT_QHULL_LIBRARY qhull_r REQUIRED)
 
 add_library(odecraft_qhull INTERFACE)
-add_library(odecraft::qhull ALIAS odecraft_qhull)
 target_include_directories(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_INCLUDE_DIR})
 target_link_libraries(odecraft_qhull INTERFACE ${ODECRAFT_QHULL_LIBRARY})
 
@@ -40,7 +37,7 @@ add_library(odecraft::odecraft ALIAS odecraft)
 target_include_directories(odecraft INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(odecraft SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/external/mpreal)  # vendored mpreal.h
 target_compile_features(odecraft INTERFACE cxx_std_20)
-target_link_libraries(odecraft INTERFACE xdiff odecraft::ndspan odecraft::polybox odecraft::qhull)
+target_link_libraries(odecraft INTERFACE xdiff odecraft_ndspan odecraft_polybox odecraft_qhull)
 target_compile_definitions(odecraft INTERFACE
     $<$<BOOL:${ODECRAFT_RK4_DENSE}>:ODECRAFT_RK4_DENSE>
     $<$<BOOL:${ODECRAFT_NO_WARN}>:ODECRAFT_NO_WARN>
