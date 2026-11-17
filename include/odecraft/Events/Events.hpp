@@ -140,17 +140,49 @@ public:
 
 
 /**
+ * @brief The base of EventBase: it derives from the interface an event is reached through (Event,
+ * or an empty class for the static policy), and holds the default of locate_impl.
+ */
+template<typename T, typename State, EventPolicy EP>
+class EventHook : public std::conditional_t<(EP == EventPolicy::Virtual), Event<T, State>, detail::EventStaticBase>{
+
+protected:
+
+    /**
+     * @brief Locate when event triggers in an interval (must be overridden).
+     * @param[out] t      Output time of event trigger.
+     * @param[in]  t_old  Time at interval start.
+     * @param[in]  t_new  Time at interval end.
+     * @param[in]  q_old  State vector at t_old.
+     * @param[in]  q_new  State vector at t_new.
+     * @param[in]  f Interpolation function (State& out, const T& t) -> void to compute state at intermediate times (for masked events).
+     * @return True if event was found in interval.
+     */
+    template<isStateInterp<T, State> Callable>
+    auto locate_impl(T& /*t*/,
+        const T& /*t_old*/,
+        const T& /*t_new*/,
+        const State& /*q_old*/,
+        const State& /*q_new*/,
+        Callable&& /*f*/) const {
+        static_assert(sizeof(T) == 0, "EventHook::locate_impl not implemented");
+    }
+};
+
+
+/**
  * @brief CRTP base class implementing the Event interface.
  *
  * Provides common functionality for all event types including state management,
  * masking, and registration. Derived classes implement locate_impl() to define
- * when the event triggers.
+ * when the event triggers. Methods follow the naming
+ * contract in Core/BaseSolver/BaseSolver.hpp.
  *
  * @tparam Derived The derived event class (CRTP pattern).
  * @tparam T       Scalar type for computations.
  */
 template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
-class EventBase : public std::conditional_t<(EP == EventPolicy::Virtual), Event<T, State>, detail::EventStaticBase>{
+class EventBase : public EventHook<T, State, EP>{
 
 public:
 
@@ -245,36 +277,16 @@ protected:
 
     DEFAULT_RULE_OF_FOUR(EventBase)
 
-    // ================ STATIC OVERRIDE (REQUIRED) ======================
-
-    /**
-     * @brief Locate when event triggers in an interval (must be overridden).
-     * @param[out] t      Output time of event trigger.
-     * @param[in]  t_old  Time at interval start.
-     * @param[in]  t_new  Time at interval end.
-     * @param[in]  q_old  State vector at t_old.
-     * @param[in]  q_new  State vector at t_new.
-     * @param[in]  f Interpolation function (State& out, const T& t) -> void to compute state at intermediate times (for masked events).
-     * @return True if event was found in interval.
-     */
-    template<isStateInterp<T, State> Callable>
-    bool locate_impl(T& t,
-        const T& t_old,
-        const T& t_new,
-        const State& q_old,
-        const State& q_new,
-        Callable&& f) const;
+    // locate_impl(), which derived classes must implement, is declared in EventHook
 
     // ============= STATIC OVERRIDE (OPTIONAL) ================
 
     /// @brief Called when event is registered. Override to add custom logic.
-    void register_impl();
+    void Register();
 
     /// @brief Called on reset. Override to reset derived state.
-    void reset_impl(int direction);
-
-    /// @brief Check if temporal. Override to mark as temporal event.
-    bool is_temporal_impl() const;
+    void Reset(int direction);
+    
     //==========================================================
 
 private:
@@ -413,9 +425,6 @@ public:
 
 protected:
 
-    /// @brief Returns true (this is a temporal event).
-    bool        is_temporal_impl() const;
-
     /// @brief Compute time of n-th trigger.
     T           get_t(size_t n) const;
 
@@ -429,10 +438,10 @@ protected:
         Callable&& f) const;
 
     /// @brief Update period counter on registration.
-    void        register_impl();
+    void        Register();
 
     /// @brief Reset period counter.
-    void        reset_impl(int direction);
+    void        Reset(int direction);
 
 private:
 

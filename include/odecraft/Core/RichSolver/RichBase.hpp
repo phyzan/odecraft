@@ -100,7 +100,15 @@ public:
      *
      * @param prec Number of decimal places for floating-point output.
      */
-    void                        show_state(std::ostream& out, int prec=8) const;
+    void                        ShowState(std::ostream& out, int prec=8) const;
+
+    /// @brief Current state, serving a pending immediate mask from the event collection.
+    ///
+    /// An immediate mask must show its transformed state as soon as the event is reported,
+    /// but the ReAdjust that writes it into the new state is deferred so that the step stays
+    /// interpolable for dense output. Between those two points the masked vector is read
+    /// from evt_col's MaskedState, which stores it outside the solver's state buffers.
+    void                        FillCurrentState(State& out) const;
 
     // MODIFIERS
     /// @brief Resets the solver to its initial state, clearing any event detections.
@@ -156,20 +164,12 @@ protected:
 
     /// @brief Advance implementation with event detection.
     template<typename... Args>
-    bool        Adv_Impl(Args&&... args);
+    bool        PerformStep(Args&&... args);
 
     /// @brief Re-adjustment hook for state changes at events.
     void ReAdjust(const State& new_state);
     
     //================= STATIC OVERRIDES ======================
-    
-    /// @brief Current state, serving a pending immediate mask from the event collection.
-    ///
-    /// An immediate mask must show its transformed state as soon as the event is reported,
-    /// but the ReAdjust that writes it into the new state is deferred so that the step stays
-    /// interpolable for dense output. Between those two points the masked vector is read
-    /// from evt_col's MaskedState, which stores it outside the solver's state buffers.
-    void fill_current_vector_impl(State& out) const;
 
     bool    RequestTimeFloor(T& out);
     //=========================================================

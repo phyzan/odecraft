@@ -64,13 +64,13 @@ public:
     DEFAULT_RULE_OF_FOUR(BDF)
 
     void            Reset();
+    bool            ValidateICs(const T& t0, const State& q0) const;
 
 protected:
 
     StepResult      adapt_impl(T& t_out, T& habs_out, State& q_out, const T& t, const T& stepsize, const State& q_in);
     auto            local_interp_impl() const;
     void            ReAdjust(const State& new_vector);
-    bool            validate_ics_impl(const T& t0, const State& q0) const;
 
 private:
 
@@ -107,7 +107,7 @@ private:
     worker_t<State>             work_scratch_;
     worker_t<RealState>         scale_scratch_;
 
-    // the Jacobian at the initial conditions that validate_ics_impl checks
+    // the Jacobian at the initial conditions that ValidateICs checks
     worker_t<JacMat>            jac_scratch_;
 
 };

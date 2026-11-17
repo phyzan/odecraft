@@ -25,8 +25,26 @@ struct VirtualNdInterpolator {
 
 struct EmptyNdInterpolator {};
 
+/// @brief The base of NdInterpolator: it derives from the interface an interpolator is reached
+/// through (VirtualNdInterpolator, or an empty class), and holds the defaults of the methods every
+/// interpolator must implement.
+template<typename T, bool AS_VIRTUAL>
+class InterpolatorHook : public std::conditional_t<AS_VIRTUAL, VirtualNdInterpolator, EmptyNdInterpolator> {
+
+protected:
+
+    auto            interp_impl(T* /*out*/, const T* /*coords*/) const { static_assert(sizeof(T) == 0, "InterpolatorHook::interp_impl not implemented"); }
+
+    auto            ndim_impl() const { static_assert(sizeof(T) == 0, "InterpolatorHook::ndim_impl not implemented"); }
+
+    auto            contains_impl(const T* /*coords*/) const { static_assert(sizeof(T) == 0, "InterpolatorHook::contains_impl not implemented"); }
+};
+
+
+// Derived classes implement interp_impl, ndim_impl and contains_impl. Methods follow the naming
+// contract in Core/BaseSolver/BaseSolver.hpp.
 template<typename Derived, typename T, int NDIM, bool AS_VIRTUAL = false>
-class NdInterpolator : public std::conditional_t<AS_VIRTUAL, VirtualNdInterpolator, EmptyNdInterpolator> {
+class NdInterpolator : public InterpolatorHook<T, AS_VIRTUAL> {
 
 
 public:
@@ -45,13 +63,11 @@ public:
 
     bool norm_interp(T* out, const T* coords) const;
 
-    // ============== Static Override ==================
     bool            interp(T* out, const T* coords) const;
 
     int             ndim() const;
 
     bool            contains(const T* coords) const;
-    // =================================================
 
 protected:
 

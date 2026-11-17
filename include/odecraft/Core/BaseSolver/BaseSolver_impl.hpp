@@ -17,16 +17,16 @@ namespace ode{
 // ODE PROPERTIES
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::Rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
+void BaseSolver<Derived, T, SD, OdeType, SP>::rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
     return ode_.Rhs(out, t, q);
 }
 
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::Jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
+void BaseSolver<Derived, T, SD, OdeType, SP>::jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
     
     if constexpr (JP == JacPolicy::Approx){
-        return this->JacApprox(out, t, q);
+        return this->jac_approx(out, t, q);
     } else if constexpr (JP == JacPolicy::Autodiff){
         decltype(auto) out_duals = dual_scratch.get();
         decltype(auto) dual_seeds = seed_scratch.get();
@@ -47,7 +47,7 @@ void BaseSolver<Derived, T, SD, OdeType, SP>::Jac(JacMat& out, const T& t, const
         if (ode_.Jac != nullptr){
             ode_.Jac(out, t, q);
         } else {
-            return this->JacApprox(out, t, q);
+            return this->jac_approx(out, t, q);
         }
     } else {
         ode_.Jac(out, t, q);
@@ -55,30 +55,30 @@ void BaseSolver<Derived, T, SD, OdeType, SP>::Jac(JacMat& out, const T& t, const
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::Jac(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
-    this->JacApprox(out, t, q, dq);
+void BaseSolver<Derived, T, SD, OdeType, SP>::jac(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
+    this->jac_approx(out, t, q, dq);
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::JacApprox(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
+void BaseSolver<Derived, T, SD, OdeType, SP>::jac_approx(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw){
     // jac_approx works on 3 state vectors: the shifted point and the two evaluations around it
     decltype(auto) w_x = scratch_0.get();
     decltype(auto) w_y1 = scratch_1.get();
     decltype(auto) w_y2 = scratch_2.get();
 
     ode::jac_approx_autostep<T, SD>([this](State& out_, const T& t_, const State& q_){
-        this->Rhs(out_, t_, q_);
+        this->rhs(out_, t_, q_);
     }, out, w_x, w_y1, w_y2, t, q, this->atol());
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::JacApprox(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
+void BaseSolver<Derived, T, SD, OdeType, SP>::jac_approx(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw){
     decltype(auto) w_x = scratch_0.get();
     decltype(auto) w_y1 = scratch_1.get();
     decltype(auto) w_y2 = scratch_2.get();
 
     ode::jac_approx_explicit<T, SD>([this](State& out_, const T& t_, const State& q_){
-        this->Rhs(out_, t_, q_);
+        this->rhs(out_, t_, q_);
     }, out, w_x, w_y1, w_y2, t, q, dq);
 }
 
@@ -157,9 +157,9 @@ std::string_view BaseSolver<Derived, T, SD, OdeType, SP>::message() const{
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
+void BaseSolver<Derived, T, SD, OdeType, SP>::ShowState(std::ostream& out, int prec) const{
     decltype(auto) worker = scratch_0.get();
-    this->fill_current_vector(worker);
+    THIS->FillCurrentState(worker);
 
     out << std::setprecision(prec) << "\n" << 
     "OdeSolver current state:\n---------------------------\n"
@@ -203,7 +203,7 @@ T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step(const T& t, const State& q)
         s_i = atol_i + rtol_i * abs(q_i);
     }, scale, this->rtol(), this->atol(), q);
 
-    this->Rhs(f0, t, q);
+    this->rhs(f0, t, q);
     T d0 = rms_norm<SD, T>(q, scale);
     T d1 = rms_norm<SD, T>(f0, scale);
     if (d0 * 1e5 < 1 || d1 * 1e5 < 1){
@@ -215,7 +215,7 @@ T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step(const T& t, const State& q)
         y1_i = q_i + h0 * dir * f0_i;
     }, y1, q, f0);
 
-    this->Rhs(f1, t+h0*dir, y1);
+    this->rhs(f1, t+h0*dir, y1);
 
     State& tmp = y1;//y1 can be recycled, its not used anymore below
     SD::for_each([](value_t<T, SD>& tmp_i, const value_t<T, SD>& f0_i, const value_t<T, SD>& f1_i){
@@ -246,7 +246,7 @@ std::unique_ptr<typename BaseSolver<Derived, T, SD, OdeType, SP>::clone_type> Ba
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 bool BaseSolver<Derived, T, SD, OdeType, SP>::advance(){
     if (this->is_running()){
-        return THIS->Adv_Impl();
+        return THIS->PerformStep();
     } else {
         this->warn_dead();
         return false;
@@ -276,14 +276,14 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::advance_by(T interval){
 
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, OdeType, SP>::SetIcs(T t0, State y0, T stepsize, int direction){
+bool BaseSolver<Derived, T, SD, OdeType, SP>::SetICs(T t0, State y0, T stepsize, int direction){
     
     if (direction != 1 && direction != -1 && direction != 0){
         throw std::domain_error("Integration direction must be 1, -1, or 0");
     }
 
     direction = (direction == 0) ? this->direction() : direction; // if 0, keep existing direction;
-    if (this->validate_ics(t0, y0)){
+    if (THIS->ValidateICs(t0, y0)){
         if (stepsize < 0) {
             this->cerr("Cannot set negative stepsize in solver initialization");
             return false;
@@ -323,25 +323,15 @@ BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::state_interpolator(i
         return pbox::make_box<LocalInterpolator<T, SD>>(this->t(), q_new_);
     } else {
         // detached: the segment outlives the step (and the solver itself)
-        auto interp = this->local_interp_impl().detach();
+        auto interp = THIS->local_interp_impl().detach();
         return pbox::make_box<CustomLocalInterpolator<T, SD, decltype(interp)>>(std::move(interp), t_old_, t_new_, q_old_, q_new_, bdr1, bdr2);
     }
-}
-
-template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-StepResult BaseSolver<Derived, T, SD, OdeType, SP>::adapt_impl(T& t_new, T& habs_new, State& y_new, const T& t, const T& habs, const State& q) noexcept(!detail::rhs_may_throw){
-    return THIS->adapt_impl(t_new, habs_new, y_new, t, habs, q);
-}
-
-template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-auto BaseSolver<Derived, T, SD, OdeType, SP>::local_interp_impl() const{
-    return THIS->local_interp_impl();
 }
 
 /// @brief Non-owning interpolator for the closed interval [t_old, t_new]. Valid while the solver is not advanced or goes out of scope
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 auto BaseSolver<Derived, T, SD, OdeType, SP>::light_interp() const {
-    return [f = this->local_interp_impl(), this](State& out, const T& t){
+    return [f = THIS->local_interp_impl(), this](State& out, const T& t){
         if (t == this->t_old()) {
             copy_state<SD>(out, q_old_);
         } else if (t == this->t_new()){
@@ -358,7 +348,7 @@ auto BaseSolver<Derived, T, SD, OdeType, SP>::light_interp() const {
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 auto BaseSolver<Derived, T, SD, OdeType, SP>::heavy_interp() const {
     return [
-        f = this->local_interp_impl().detach(),
+        f = THIS->local_interp_impl().detach(),
         d = this->direction(),
         t1 = this->t_old(),
         q1 = this->vector_old(),
@@ -382,11 +372,11 @@ auto BaseSolver<Derived, T, SD, OdeType, SP>::heavy_interp() const {
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::fill_current_vector_impl(State& out) const{
+void BaseSolver<Derived, T, SD, OdeType, SP>::FillCurrentState(State& out) const{
     if (this->is_at_new_state()){
         copy_state<SD>(out, q_new_);
     } else {
-        this->local_interp_impl()(out, this->t());
+        THIS->local_interp_impl()(out, this->t());
     }
 }
 
@@ -425,11 +415,6 @@ const T& BaseSolver<Derived, T, SD, OdeType, SP>::t_old() const{
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::fill_current_vector(State& out) const{
-    return THIS->fill_current_vector_impl(out);
-}
-
-template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 void BaseSolver<Derived, T, SD, OdeType, SP>::warn_dead() const{
 #ifndef ODECRAFT_NO_WARN
     this->cerr("\nIntegrator has permanently stopped");
@@ -452,11 +437,6 @@ void BaseSolver<Derived, T, SD, OdeType, SP>::ReAdjust(const State& new_state){
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, OdeType, SP>::validate_ics(const T& t0, const State& q0) const {
-    return THIS->validate_ics_impl(t0, q0);
-}
-
-template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 bool BaseSolver<Derived, T, SD, OdeType, SP>::has_valid_ics() const {
     switch (status_){
         case StepperStatus::BadICS:
@@ -468,13 +448,13 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::has_valid_ics() const {
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-bool BaseSolver<Derived, T, SD, OdeType, SP>::validate_ics_impl(const T& t0, const State& q0) const {
+bool BaseSolver<Derived, T, SD, OdeType, SP>::ValidateICs(const T& t0, const State& q0) const {
     if (!all_are_finite<T, SD>(q0) || !isfinite(t0)){
         return false;
     }
     decltype(auto) worker = this->scratch_0.get();
     
-    this->Rhs(worker, t0, q0);
+    this->rhs(worker, t0, q0);
 
     return all_are_finite<T, SD>(worker);
 }
@@ -507,7 +487,7 @@ BaseSolver<Derived, T, SD, OdeType, SP>::BaseSolver(OdeType ode, T t0, State q0,
             throw std::runtime_error("The stepsize argument cannot be negative");
         } else if (max_step_ < min_step_){
             throw std::runtime_error("Maximum allowed stepsize cannot be smaller than minimum allowed stepsize");
-        } else if (!this->validate_ics_impl(t0, q_new_)){
+        } else if (!BaseSolver::ValidateICs(t0, q_new_)){
             status_ = StepperStatus::BadICS;
         } else if (events.size() > 0){
             throw std::invalid_argument("Cannot instantiate a Solver with events when it is declared with a non-rich SolverPolicy");
@@ -610,9 +590,9 @@ StepResult BaseSolver<Derived, T, SD, OdeType, SP>::adapt_it(State& q_out, T& t_
         // A callback that throws abandons the step midway: q_old_ may hold part of it (see
         // take_step), and the stepper's caches may too. So the solver ends up as after a failed
         // step: stopped at the last accepted step with the interpolation interval closed, until
-        // SetIcs() or Reset() rebuilds everything.
+        // SetICs() or Reset() rebuilds everything.
         try {
-            return this->adapt_impl(
+            return THIS->adapt_impl(
                 t_out,
                 habs_out,
                 q_out,
@@ -627,7 +607,7 @@ StepResult BaseSolver<Derived, T, SD, OdeType, SP>::adapt_it(State& q_out, T& t_
             throw;
         }
     } else {
-        return this->adapt_impl(
+        return THIS->adapt_impl(
             t_out,
             habs_out,
             q_out,
@@ -655,7 +635,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::take_step(T& t_out, T& habs_out){
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename... Args>
-bool BaseSolver<Derived, T, SD, OdeType, SP>::Adv_Impl(Args&&... args){
+bool BaseSolver<Derived, T, SD, OdeType, SP>::PerformStep(Args&&... args){
     const int d = this->direction();
     if constexpr (sizeof...(Args) > 0){
         T time_floor = nearest_time(args...);

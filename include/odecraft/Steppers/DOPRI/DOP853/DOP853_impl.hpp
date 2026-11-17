@@ -364,20 +364,20 @@ DOP853<T, SD, OdeType, SP, Derived>::DOP853(OdeType ode, T t0, State q0, RealSta
     // the arrays of states take the shape of q0 too
     K_.fill(q0);
     coef_mat_.fill(q0);
-    this->Rhs(K_[N_STAGES], t0, q0);
+    this->rhs(K_[N_STAGES], t0, q0);
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 void DOP853<T, SD, OdeType, SP, Derived>::Reset(){
     Base::Reset();
-    this->Rhs(K_[N_STAGES], this->t_new(), this->vector_new());
+    this->rhs(K_[N_STAGES], this->t_new(), this->vector_new());
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 void DOP853<T, SD, OdeType, SP, Derived>::ReAdjust(const State& new_vector){
     Base::ReAdjust(new_vector);
     // the first stage of the next step (FSAL)
-    this->Rhs(K_[N_STAGES], this->t(), new_vector);
+    this->rhs(K_[N_STAGES], this->t(), new_vector);
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
@@ -398,11 +398,11 @@ void DOP853<T, SD, OdeType, SP, Derived>::cache_coef_matrix() const{
 
     // Three extra stages, evaluated only for dense-output interpolation.
     detail::rk_stage<SD>(r, y_old, h, K_, A, 13, detail::stages<0, 6, 7, 8, 9, 10, 11, 12>);
-    this->Rhs(K_[13], t_old + C[13]*h, r);
+    this->rhs(K_[13], t_old + C[13]*h, r);
     detail::rk_stage<SD>(r, y_old, h, K_, A, 14, detail::stages<0, 5, 6, 7, 10, 11, 12, 13>);
-    this->Rhs(K_[14], t_old + C[14]*h, r);
+    this->rhs(K_[14], t_old + C[14]*h, r);
     detail::rk_stage<SD>(r, y_old, h, K_, A, 15, detail::stages<0, 5, 6, 7, 8, 12, 13, 14>);
-    this->Rhs(K_[15], t_old + C[15]*h, r);
+    this->rhs(K_[15], t_old + C[15]*h, r);
 
     // F[0..2], from the end points of the step and the derivatives there: K[0] and K[12]
     SD::for_each([&h](S& F0, S& F1, S& F2, const S& y_old_i, const S& y_new_i, const S& f_old_i, const S& f_new_i){
@@ -434,7 +434,7 @@ T DOP853<T, SD, OdeType, SP, Derived>::step_impl(T& t_new, State& q_new, const T
         this->atol(),
         A, C, E3, E5,
         [this](State& out, const T& time, const State& y){
-            this->Rhs(out, time, y);
+            this->rhs(out, time, y);
         }
     );
 }

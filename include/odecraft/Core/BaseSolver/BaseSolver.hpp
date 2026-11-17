@@ -77,6 +77,65 @@ using StepperFactors = std::conditional_t<
 
 } // namespace ode::detail
 
+/*
+Method naming, for the CRTP chains of odecraft (BaseSolver, RichSolver, EventBase, NdInterpolator,
+VectorField) and every class deriving from them:
+    lower()       concrete; not meant to be overridden
+    Upper()       may be overridden; always has a default
+    lower_impl()  protected, must be overridden; its default is a static_assert
+Upper() and lower_impl() are called through THIS, so that the most derived version runs. The only
+direct calls are qualified ones: Base::Upper() from an override, and the calls where THIS cannot be
+used, in a constructor (the parts derived from it do not exist yet) or in a class that closes its
+chain (it has no Derived parameter). A class that closes two chains at once redeclares the lower()
+methods that both of them give it.
+
+Each chain starts at a hook base (StepperHook, EventHook, InterpolatorHook, VectorFieldHook), which
+derives from the polymorphic interface, or an empty class, and holds the lower_impl() defaults: an
+explicit instantiation of the CRTP base, as in the compiled library, does not reach them.
+*/
+
+/**
+ * @brief The base of BaseSolver: it derives from the interface a solver is reached through, and
+ * holds the defaults of the methods every stepper must implement.
+ *
+ * The interface is the one SolverVirtualTypeTraits gives: OdeSolver or OdeRichSolver for the
+ * virtual policies, EmptySolver for the static ones.
+ */
+template<typename Derived, typename T, typename SD, SolverPolicy SP>
+class StepperHook : public traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type {
+
+    using Interface = traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type;
+
+public:
+
+    /// @brief The interface the solver is reached through (OdeSolver, OdeRichSolver, or one
+    /// a solver specializes SolverVirtualTypeTraits for), void for the static policies.
+    using virtual_base = std::conditional_t<std::is_same_v<Interface, EmptySolver>, void, Interface>;
+
+protected:
+
+    /**
+     * @brief Perform one adaptive integration step, returning a StepResult.
+     * @note Writes the new vector to y_new, which may be q_old_ itself (see BaseSolver::take_step),
+     *       so it must not read vector_old() or interpolate. noexcept unless ODECRAFT_RHS_THROWS is defined.
+     */
+    auto adapt_impl(T& /*t_new*/, T& /*habs_new*/, state_t<T, SD>& /*y_new*/, const T& /*t*/, const T& /*habs*/, const state_t<T, SD>& /*q*/) noexcept(!detail::rhs_may_throw) {
+        static_assert(sizeof(T) == 0, "StepperHook::adapt_impl not implemented");
+    }
+
+    /**
+     * @brief Lightweight non-owning interpolator in the open-interval (t_old, t_new).
+     Only guaranteed to be valid while the solver remains unchanged.
+     Call local_interp_impl().detach() for an owning, independent interpolator for that interval
+     which constructs a full copy of the required data members
+     @return LightFunctor, callable with (State& out, const T& t),  t_old < t < t_new
+    */
+    auto local_interp_impl() const {
+        static_assert(sizeof(T) == 0, "StepperHook::local_interp_impl not implemented");
+    }
+};
+
+
 /**
  * @brief Base class for adaptive-step ODE solvers using CRTP.
  *
@@ -99,16 +158,13 @@ using StepperFactors = std::conditional_t<
  */
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-class BaseSolver : public traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type {
+class BaseSolver : public StepperHook<Derived, T, SD, SP> {
 
     static_assert(hasRhsFunc<OdeType, T, state_t<T, SD>>, "Invalid OdeType::Rhs signature");
 
 public:
 
-    using Base = traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type;
-    /// @brief The interface the solver is reached through (OdeSolver, OdeRichSolver, or one
-    /// a solver specializes SolverVirtualTypeTraits for), void for the static policies.
-    using virtual_base = std::conditional_t<std::is_same_v<Base, EmptySolver>, void, Base>;
+    using typename StepperHook<Derived, T, SD, SP>::virtual_base;
     /// @brief What clone() points to: the solver itself for the static policies, OdeSolver for
     /// the virtual ones. Not virtual_base: clone() overrides OdeSolver::clone(), and a
     /// std::unique_ptr return type cannot be covariant.
@@ -141,7 +197,7 @@ public:
      * @param[in]  q    State vector
      * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
     */
-    void                 Rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
+    void                 rhs(State& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Compute the Jacobian matrix of the ODE system.
@@ -154,9 +210,9 @@ public:
      * @param[in]  q    State vector
      * @note noexcept unless ODECRAFT_RHS_THROWS is defined.
     */
-    void                 Jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
+    void                 jac(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
 
-    void                 Jac(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw);
+    void                 jac(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Approximate the Jacobian using central finite differences.
@@ -164,7 +220,7 @@ public:
      * @param[in]  t    Integration parameter.
      * @param[in]  q    State vector
     */
-    void                 JacApprox(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
+    void                 jac_approx(JacMat& out, const T& t, const State& q) const noexcept(!detail::rhs_may_throw);
 
     /**
      * @brief Approximate the Jacobian using central finite differences.
@@ -173,7 +229,7 @@ public:
      * @param[in]  q    State vector
      * @param[in] dq    Perturbation state vector to use for finite differences
     */
-    void                 JacApprox(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw);
+    void                 jac_approx(JacMat& out, const T& t, const State& q, const State& dq) const noexcept(!detail::rhs_may_throw);
 
     // ACCESSORS
 
@@ -222,7 +278,7 @@ public:
     size_t              step_count() const;
 
     /// @brief Fills the values of an array with those of the current true state vector
-    void                fill_current_vector(State& out) const;
+    void                FillCurrentState(State& out) const;
     StepperStatus       status() const;
     std::string_view    message() const;
 
@@ -230,15 +286,16 @@ public:
      * @brief Print the current solver state to stdout.
      * @param prec Number of decimal places for floating-point output.
      */
-    void                show_state(std::ostream& out, int prec=8) const;
+    void                ShowState(std::ostream& out, int prec=8) const;
 
     /**
      * @brief Validate proposed initial conditions.
      * @param t0 Initial time.
      * @param q0 Initial state vector.
      * @return True if the ICs are valid (finite values, finite RHS evaluation).
+     * @note An override calls Base::ValidateICs first, then adds its own checks.
     */
-    bool                validate_ics(const T& t0, const State& q0) const;
+    bool                ValidateICs(const T& t0, const State& q0) const;
 
     bool                has_valid_ics() const;
     
@@ -335,7 +392,7 @@ public:
      * @return True if ICs were valid and set successfully. Otherwise returns false and nothing happens. 
      * @throws std::domain_error if the direction is not any of [-1, 0, 1]
      */
-    bool                SetIcs(T t0, State y0, T stepsize = 0, int direction = 0);
+    bool                SetICs(T t0, State y0, T stepsize = 0, int direction = 0);
 
     /**
      * @brief Permanently terminate the solver.
@@ -362,13 +419,13 @@ public:
 
     // VIRTUAL INTERFACE ALIASES (inline overrides to avoid virtual calls)
     // Accessors
-    void                get_rhs(State& out, const T& t, const State& q) const { Rhs(out, t, q); }
-    void                get_jac(JacMat& out, const T& t, const State& q) const { Jac(out, t, q); }
-    void                get_jac(JacMat& out, const T& t, const State& q, const State& h) const { Jac(out, t, q, h); }
+    void                get_rhs(State& out, const T& t, const State& q) const { rhs(out, t, q); }
+    void                get_jac(JacMat& out, const T& t, const State& q) const { jac(out, t, q); }
+    void                get_jac(JacMat& out, const T& t, const State& q, const State& h) const { jac(out, t, q, h); }
     const T&            get_time() const { return t(); }
     const T&            get_new_time() const { return t_new(); }
     const T&            get_old_time() const { return t_old(); }
-    void                get_current_vector(State& out) const { this->fill_current_vector(out); }
+    void                get_current_vector(State& out) const { THIS->FillCurrentState(out); }
     const State&        get_new_vector() const { return vector_new(); }
     const State&        get_old_vector() const { return vector_old(); }
     const T&            get_ics_time() const { return t_ics(); }
@@ -383,13 +440,14 @@ public:
     bool                get_is_running() const {return is_running();}
     StepperStatus       get_status() const { return status(); }
     std::string_view    get_message() const { return message(); }
-    bool                get_validate_ics(const T& t0, const State& q0) const { return validate_ics(t0, q0); }
+    bool                get_validate_ics(const T& t0, const State& q0) const { return THIS->ValidateICs(t0, q0); }
     bool                get_has_valid_ics() const { return has_valid_ics(); }
     std::string_view    get_method() const { return method(); }
     BoxedInterp<T, SD>  get_state_interpolator(int bdr1, int bdr2) const { return state_interpolator(bdr1, bdr2); }
     T                   get_auto_step(const T& t, const State& q) const { return auto_step(t, q); }
     T                   get_auto_step() const { return auto_step(); }
-    
+    void                show_state(std::ostream& out, int prec=8) const { THIS->ShowState(out, prec); }
+
     // Modifiers
     bool                do_advance() { return advance(); }
     bool                do_advance_by(T interval) { return advance_by(interval); }
@@ -423,7 +481,7 @@ public:
 
     void                do_reset() { THIS->Reset(); }
     void                do_kill() { kill(); }
-    bool                do_set_ics(T t0, State y0, T stepsize = 0, int direction = 0) { return THIS->SetIcs(std::move(t0), std::move(y0), stepsize, direction); }
+    bool                do_set_ics(T t0, State y0, T stepsize = 0, int direction = 0) { return THIS->SetICs(std::move(t0), std::move(y0), stepsize, direction); }
 
     /// @brief Name of the stepper
     std::string_view method() const {
@@ -436,39 +494,21 @@ protected:
     using MainSolverType = BaseSolver;
 
     // =================== STATIC OVERRIDES (NECESSARY) ===============================
-    // Derived classes MUST implement these methods / attributes.
+    // Derived classes MUST implement these attributes, and the methods declared in StepperHook.
 
     /// @brief Whether the method is implicit (must be defined in Derived).
     static constexpr bool       IS_IMPLICIT = Derived::IS_IMPLICIT;
     /// @brief Order of the error estimator (must be defined in Derived).
     static constexpr int        ERR_EST_ORDER = Derived::ERR_EST_ORDER;
 
-    /**
-     * @brief Perform one adaptive integration step.
-     * @note Writes the new vector to q_new, which may be q_old_ itself (see take_step), so it
-     *       must not read vector_old() or interpolate. noexcept unless ODECRAFT_RHS_THROWS is defined.
-     */
-    StepResult          adapt_impl(T& t_new, T& habs_new, State& y_new, const T& t, const T& habs, const State& q) noexcept(!detail::rhs_may_throw);
-    
-    /**
-     * @brief Lightweight non-owning interpolator in the open-interval (t_old, t_new).
-     Only guaranteed to be valid while the solver remains unchanged.
-     Call local_interp_impl().detach() for an owning, independent interpolator for that interval
-     which constructs a full copy of the required data members
-     @return LightFunctor, callable with (State& out, const T& t),  t_old < t < t_new
-    */
-    auto                local_interp_impl() const;
-
-    void                fill_current_vector_impl(State& out) const;
-
     // ================================================================================
 
     // ========================= STATIC OVERRIDES (OPTIONAL) ==========================
     // Derived classes MAY override these methods. Call base implementation first.
 
-    /// @brief Advance implementation. If t_lim is nullptr, advance normally. Otherwise, if the implementation yields a time beyond t_lim, it should only cache the step information (e.g. counters, or event or state register etc) since the solver is "not to go there yet" and only apply them once Adv_Impl is called with t_lim beyond the implementation's predicted step.
+    /// @brief Advance implementation. If t_lim is nullptr, advance normally. Otherwise, if the implementation yields a time beyond t_lim, it should only cache the step information (e.g. counters, or event or state register etc) since the solver is "not to go there yet" and only apply them once PerformStep is called with t_lim beyond the implementation's predicted step.
     template<typename... Args>
-    bool        Adv_Impl(Args&&... args);
+    bool        PerformStep(Args&&... args);
 
     constexpr bool    RequestTimeFloor(T& /*out*/) {
         return false;
@@ -481,15 +521,6 @@ protected:
     where t() is the true current time, which might lie between t_old() and t_new() (e.g. if an event occurred).
     */
     void    ReAdjust(const State& new_state);
-
-    /**
-     * @brief Validate initial conditions implementation.
-     * @param t0 Initial time.
-     * @param q0 Initial state.
-     * @return True if ICs are valid.
-     * @note Derived should call base first, then add additional checks.
-     */
-    bool    validate_ics_impl(const T& t0, const State& q0) const;
 
     // ================================================================================
 
@@ -595,7 +626,7 @@ private:
     template<typename A, typename B>
     const T& nearest_of(const A& t_a, const B& t_b) const;
 
-    /// @brief Only use inside Adv_Impl (so that if the state here is updated, all derived classes are aware). Move the current state to a new time between the current time and the most recently adapted state. This is a lowlevel operation, so use carefully or the intended bahavior might break.
+    /// @brief Only use inside PerformStep (so that if the state here is updated, all derived classes are aware). Move the current state to a new time between the current time and the most recently adapted state. This is a lowlevel operation, so use carefully or the intended bahavior might break.
     void                    move_state(const T& time);
     
     OdeType         ode_;

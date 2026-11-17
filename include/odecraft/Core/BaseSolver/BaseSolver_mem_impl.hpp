@@ -75,12 +75,12 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::generic_advance_until(
     auto evolve = [&](State& worker) NDSPAN_LAMBDA_INLINE -> bool {
         bool res;
         while (
-            (res = (this->is_running() && THIS->Adv_Impl(time)))
+            (res = (this->is_running() && THIS->PerformStep(time)))
             && (time != this->t())
         ){
             bool obs_res;
             if constexpr (isObserver<Callable, T, State>){
-                this->fill_current_vector(worker);
+                THIS->FillCurrentState(worker);
                 obs_res = observer(this->t(), worker, nullptr);
             } else{
                 obs_res = true;
@@ -94,7 +94,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::generic_advance_until(
         if (res){
             const T* t_ptr = (!explicit_steps || (has_checkpoints && t_dual == time)) ? &t_dual : nullptr;
             if constexpr (isObserver<Callable, T, State>){
-                this->fill_current_vector(worker);
+                THIS->FillCurrentState(worker);
                 observer(this->t(), worker, t_ptr);
             }            
             return true;
@@ -157,7 +157,7 @@ BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::generic_interpolate_
     pbox::Box<LinkedInterpolator<T, SD>> interp;
     {
         decltype(auto) worker = scratch_0.get();
-        this->fill_current_vector(worker);
+        THIS->FillCurrentState(worker);
         interp = pbox::make_box<LinkedInterpolator<T, SD>>(this->t(), worker);
     }
 

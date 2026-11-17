@@ -148,7 +148,7 @@ int main(){
     auto yf = y0;
     while (solver.advance() && solver.t() < 20){
         if (solver.at_event()){
-            solver.fill_current_vector(yf);
+            solver.FillCurrentState(yf);
             std::cout << "\n----------- EVENT DETECTED -----------" << std::endl;
             std::cout << "Event detected at t = " << solver.t() << ", event name = " << solver.current_event().event->name() << std::endl;
             std::cout << "State at event: ";

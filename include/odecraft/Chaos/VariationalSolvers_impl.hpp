@@ -404,12 +404,12 @@ template<typename Stepper, typename T, typename SD, typename OdeType, SolverPoli
 T VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::stretching_number() const{
     if (flagged){
         // The deviation vector was just renormalized, so the new period starts at unit norm.
-        // The solver holds the old one until the next Adv_Impl applies it.
+        // The solver holds the old one until the next PerformStep applies it.
         return T(0);
     }
     // TODO : cache the stretching number, since calling fill_current_vector interpolates every time.
     decltype(auto) q = current_scratch_.get();
-    this->fill_current_vector(q);
+    THIS->FillCurrentState(q);
     return log(detail::state_norm<T, SD>(q.variation));
 }
 
@@ -449,7 +449,7 @@ void VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::Reset(){
 }
 
 template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-bool VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::SetIcs(T t0, State y0, T stepsize, int direction){
+bool VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::SetICs(T t0, State y0, T stepsize, int direction){
     // The norm of y0 must be non-zero
     if (SD::all_true([](const value_t<T, SD>& v){
         // value_t itself is not guaranteed to be comparable to T
@@ -457,7 +457,7 @@ bool VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::SetIcs(T t0, State
     }, y0.variation)){
         return false;
     } else {
-        return Base::SetIcs(std::move(t0), normalized_ics(std::move(y0)), std::move(stepsize), direction);
+        return Base::SetICs(std::move(t0), normalized_ics(std::move(y0)), std::move(stepsize), direction);
     }
 }
 
@@ -544,18 +544,18 @@ auto getVariationalSolver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, Var
 
 template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 template<typename... Args>
-bool VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::Adv_Impl(Args&&... args) {
+bool VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>::PerformStep(Args&&... args) {
     if (flagged){
         Base::ReAdjust(flag_state_);
         flagged = false;
     }
 
     const int d = this->direction();
-    const bool success = Base::Adv_Impl(t_next_, std::forward<Args>(args)...);
+    const bool success = Base::PerformStep(t_next_, std::forward<Args>(args)...);
     if (success && (this->t() == t_next_)){
         t_last_ = t_next_;
         t_next_ = this->t_ics() + (++np + 1UL)*period_*d;
-        this->fill_current_vector(flag_state_);
+        THIS->FillCurrentState(flag_state_);
         logksi_last_ = logksi_;
         logksi_ += log(detail::state_norm<T, SD>(flag_state_.variation));
         detail::normalized<T, SD>(flag_state_.variation, flag_state_.variation);

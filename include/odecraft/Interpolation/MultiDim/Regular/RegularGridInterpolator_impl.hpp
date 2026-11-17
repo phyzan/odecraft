@@ -21,18 +21,18 @@ RegularGridInterpolator<NDIM, AS_VIRTUAL>::RegularGridInterpolator(const ValuesC
 }
 
 template<int NDIM, bool AS_VIRTUAL>
-bool RegularGridInterpolator<NDIM, AS_VIRTUAL>::contains(const double* coords) const{
+bool RegularGridInterpolator<NDIM, AS_VIRTUAL>::contains_impl(const double* coords) const{
     return grid_.contains(coords);
 }
 
 template<int NDIM, bool AS_VIRTUAL>
-int RegularGridInterpolator<NDIM, AS_VIRTUAL>::ndim() const{
+int RegularGridInterpolator<NDIM, AS_VIRTUAL>::ndim_impl() const{
     return grid_.ndim();
 }
 
 
 template<int NDIM, bool AS_VIRTUAL>
-bool RegularGridInterpolator<NDIM, AS_VIRTUAL>::interp(double* out, const double* coords) const{
+bool RegularGridInterpolator<NDIM, AS_VIRTUAL>::interp_impl(double* out, const double* coords) const{
     int nd = this->ndim();
     CArray2D<double, NDIM, 2, Base::ALLOC> cube(nd, 2); // cube(axis, neighbor)
 
@@ -109,6 +109,21 @@ bool RegularVectorField<NDIM, AS_VIRTUAL>::contains(const double* coords) const{
 }
 
 template<int NDIM, bool AS_VIRTUAL>
+bool RegularVectorField<NDIM, AS_VIRTUAL>::interp_impl(double* out, const double* coords) const{
+    return InterpBase::interp(out, coords);
+}
+
+template<int NDIM, bool AS_VIRTUAL>
+int RegularVectorField<NDIM, AS_VIRTUAL>::ndim_impl() const{
+    return InterpBase::ndim();
+}
+
+template<int NDIM, bool AS_VIRTUAL>
+bool RegularVectorField<NDIM, AS_VIRTUAL>::contains_impl(const double* coords) const{
+    return InterpBase::contains(coords);
+}
+
+template<int NDIM, bool AS_VIRTUAL>
 void RegularVectorField<NDIM, AS_VIRTUAL>::OdeFuncNorm(double* out, double t, const double* q) const{
     
     if (coord_type_ == CoordType::Cartesian){
@@ -165,10 +180,10 @@ std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::str
 
     // Every integration sets its own initial conditions through do_set_ics
     EventList<double, State> events{};
-    pbox::Box<OdeRichSolver<double, FieldSD<NDIM>>> solver = Steppers::make<UtilPolicy::RichVirtual, double, FieldSD<NDIM>>(method,
+    pbox::Box<OdeRichSolver<double, FieldSD<NDIM>>> solver = Steppers::make<UtilPolicy::RichVirtual, FieldSD<NDIM>>(method,
         OdeData{
             .Rhs=[this](State& out, double t, const State& q){
-                this->OdeFuncNorm(out.data(), t, q.data());
+                RegularVectorField::OdeFuncNorm(out.data(), t, q.data());
             },
         },
         0.0, ::ode::interp::detail::uniform_state<NDIM>(nd, 0), ::ode::interp::detail::uniform_state<NDIM>(nd, rtol), ::ode::interp::detail::uniform_state<NDIM>(nd, atol), min_step, max_step, stepsize, +1, std::move(events));

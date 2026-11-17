@@ -25,20 +25,6 @@ bool EventBase<Derived, EP, T, State, MaskFunc>::locate_state(T& out,
     }
 }
 
-template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
-template<isStateInterp<T, State> Callable>
-bool EventBase<Derived, EP, T, State, MaskFunc>::locate_impl(T& /*t*/,
-    const T& /*t_old*/,
-    const T& /*t_new*/,
-    const State& /*q_old*/,
-    const State& /*q_new*/,
-    Callable&& /*f*/) const{
-
-    // Always false but only fires if the function is instantiated
-    static_assert(sizeof(Callable) == 0, "static override");
-    return false;
-}
-
 template<typename T, typename State, isObjFun<T, State> Target, typename MaskFunc, EventPolicy EP, typename Derived>
 template<isStateInterp<T, State> Callable>
 bool PreciseEvent<T, State, Target, MaskFunc, EP, Derived>::locate_impl(T& t_out,

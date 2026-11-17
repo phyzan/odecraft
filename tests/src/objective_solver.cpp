@@ -53,7 +53,7 @@ void test_single_objective(){
         solver.advance();
         if (solver.is_at_objective()){
             crossings_found++;
-            solver.fill_current_vector(q);
+            solver.FillCurrentState(q);
             if (std::abs(solver.t() - t_expected) >= 1e-8){
                 std::cerr << "Error: crossing time inaccurate!" << std::endl;
             } else if (std::abs(q[0]) >= 1e-8){
@@ -117,7 +117,7 @@ void test_two_objectives(){
     ){
         solver.advance();
         if (solver.is_at_objective()){
-            solver.fill_current_vector(q);
+            solver.FillCurrentState(q);
             if (solver.current_objective() == 0){
                 crossings0_found++;
                 if (std::abs(solver.t() - t0_expected) >= 1e-8){
