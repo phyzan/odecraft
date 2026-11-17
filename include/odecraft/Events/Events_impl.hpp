@@ -117,7 +117,7 @@ bool EventBase<Derived, EP, T, State, MaskFunc>::locate(T& out,
 template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
 bool EventBase<Derived, EP, T, State, MaskFunc>::lock(){
     if (is_located_){
-        THIS->register_impl();
+        THIS->Register();
         return true;
     }else{
         return false;
@@ -126,16 +126,16 @@ bool EventBase<Derived, EP, T, State, MaskFunc>::lock(){
 
 template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
 void EventBase<Derived, EP, T, State, MaskFunc>::reset(int direction){
-    THIS->reset_impl(direction);
+    THIS->Reset(direction);
 }
 
 template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
-void EventBase<Derived, EP, T, State, MaskFunc>::register_impl(){
+void EventBase<Derived, EP, T, State, MaskFunc>::Register(){
     counter_++;
 }
 
 template<typename Derived, EventPolicy EP, typename T, typename State, typename MaskFunc>
-void EventBase<Derived, EP, T, State, MaskFunc>::reset_impl(int direction){
+void EventBase<Derived, EP, T, State, MaskFunc>::Reset(int direction){
     counter_ = 0;
     is_located_ = false;
     direction_ = (direction == 0) ? direction_ : direction;
@@ -180,14 +180,14 @@ T PeriodicEvent<T, State, MaskFunc, EP, Derived>::get_t(size_t n) const{
 }
 
 template<typename T, typename State, typename MaskFunc, EventPolicy EP, typename Derived>
-void PeriodicEvent<T, State, MaskFunc, EP, Derived>::register_impl(){
-    Base::register_impl();
+void PeriodicEvent<T, State, MaskFunc, EP, Derived>::Register(){
+    Base::Register();
     n_ = n_aux_;
 }
 
 template<typename T, typename State, typename MaskFunc, EventPolicy EP, typename Derived>
-void PeriodicEvent<T, State, MaskFunc, EP, Derived>::reset_impl(int direction){
-    Base::reset_impl(direction);
+void PeriodicEvent<T, State, MaskFunc, EP, Derived>::Reset(int direction){
+    Base::Reset(direction);
     n_ = n_aux_ = 0;
 }
 

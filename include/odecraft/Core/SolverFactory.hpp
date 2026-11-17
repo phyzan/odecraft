@@ -141,10 +141,10 @@ class Catalog {
     template<typename /*Stepper*/>
     struct tag {};
 
-    template<typename S, UtilPolicy UP, typename T, typename SD, typename... Args>
-    static BoxedSolver<T, SD, UP> construct(Args&&... args) {
-        static_assert(std::constructible_from<S, Args...>, "Stepper not constructible from these arguments");
-        return std::make_unique<S>(std::forward<Args>(args)...);
+    template<typename S, UtilPolicy UP, typename SD, typename OdeType, typename T, typename... Args>
+    static BoxedSolver<T, SD, UP> construct(OdeType rhs, T t0, Args&&... args) {
+        static_assert(std::constructible_from<S, OdeType, T, Args...>, "Stepper not constructible from these arguments");
+        return std::make_unique<S>(std::move(rhs), std::move(t0), std::forward<Args>(args)...);
     }
 
     template<typename S, typename ReturnType, typename Callable>
@@ -188,17 +188,16 @@ public:
     static constexpr Id id = Id(index_of<S>());
 
     // Runtime choice: builds the stepper with id `which`, instantiated for <T, SD, OdeType, SP>.
-    template<UtilPolicy UP, typename T, typename SD, typename OdeType, typename... Args>
-    static BoxedSolver<T, SD, UP> make(Id which, OdeType ode, Args&&... args) {
-        using Fn = BoxedSolver<T, SD, UP> (*)(OdeType&&, Args&&...);
+    template<UtilPolicy UP, typename SD, typename T, typename OdeType, typename... Args>
+    static BoxedSolver<T, SD, UP> make(Id which, OdeType ode, T t0, Args&&... args) {
         constexpr SolverPolicy SP = UP == UtilPolicy::RichVirtual ? SolverPolicy::RichVirtual : SolverPolicy::Virtual;
-        static constexpr Fn table[] = {&construct<typename Stepper::template type<T, SD, OdeType, SP>, UP, T, SD, OdeType, Args...>...};
-        return table[which.index()](std::move(ode), std::forward<Args>(args)...);
+        static constexpr std::array table{&construct<typename Stepper::template type<T, SD, OdeType, SP>, UP, SD, OdeType, T, Args...>...};
+        return table[which.index()](std::move(ode), std::move(t0), std::forward<Args>(args)...);
     }
 
     // Id -> string
     static std::string_view getName(Id stepper){
-        static constexpr std::string_view Names[] = {Stepper::name...};
+        static constexpr std::array Names{Stepper::name...};
         return Names[stepper.index()];
     }
 
@@ -215,8 +214,7 @@ public:
     // Calls callable.template operator()<S>(), where S is the stepper tag with id `stepper`.
     template<typename ReturnType, typename Callable>
     static ReturnType from_stepper(Id stepper, Callable&& callable) {
-        using Fn = ReturnType (*)(Callable&&);
-        static constexpr Fn table[] = {&call_with<Stepper, ReturnType, Callable>...};
+        static constexpr std::array table{&call_with<Stepper, ReturnType, Callable>...};
         return table[stepper.index()](std::forward<Callable>(callable));
     }
 

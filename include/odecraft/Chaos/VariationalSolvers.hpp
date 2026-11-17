@@ -266,7 +266,7 @@ public:
     T       log_ksi() const;
     T       lyapunov_exponent() const;
     void    Reset();
-    bool    SetIcs(T t0, State y0, T stepsize, int direction = 0);
+    bool    SetICs(T t0, State y0, T stepsize, int direction = 0);
 
     // VIRTUAL INTERFACE ALIASES (overrides that forward to the non-virtual accessors)
     void    get_rhs_main(MainState& out, const T& t, const MainState& q) const;
@@ -283,7 +283,7 @@ protected:
     void    ReAdjust(const State& new_vector);
 
     template<typename... Args>
-    bool Adv_Impl(Args&&... args);
+    bool PerformStep(Args&&... args);
 
 private:
 

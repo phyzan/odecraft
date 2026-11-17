@@ -103,7 +103,7 @@ BDF<T, SD, OdeType, SP, Derived>::BDF(OdeType ode, T t0, State q0, RealState rto
     newton_tol_ = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol_min, ndspan::min<T>(T(3)/100, pow(rtol_min, T(1)/T(2))));
 
     if (this->is_running()){
-        if (this->validate_ics_impl(t0, q0)){
+        if (BDF::ValidateICs(t0, q0)){
             this->reset_impl_alone();
         }else{
             this->set_status(StepperStatus::BadICS);
@@ -123,12 +123,12 @@ void BDF<T, SD, OdeType, SP, Derived>::ReAdjust(const State& new_vector) {
         }
     }
     copy_state<SD>(D_[0][0], new_vector);
-    this->Rhs(D_[0][1], this->t(), new_vector);
+    this->rhs(D_[0][1], this->t(), new_vector);
     const T h = this->stepsize() * this->direction();
     SD::for_each([&h](S& f_i){
         f_i *= h;
     }, D_[0][1]);
-    this->Jac(J_, this->t(), new_vector);
+    this->jac(J_, this->t(), new_vector);
     order_ = 1;
     n_eq_steps_ = 0;
     valid_LU_ = false;
@@ -136,13 +136,13 @@ void BDF<T, SD, OdeType, SP, Derived>::ReAdjust(const State& new_vector) {
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-bool BDF<T, SD, OdeType, SP, Derived>::validate_ics_impl(const T& t0, const State& q0) const{
-    if (!Base::validate_ics_impl(t0, q0)){
+bool BDF<T, SD, OdeType, SP, Derived>::ValidateICs(const T& t0, const State& q0) const{
+    if (!Base::ValidateICs(t0, q0)){
         return false;
     }
 
     decltype(auto) J = jac_scratch_.get();
-    this->Jac(J, t0, q0);
+    this->jac(J, t0, q0);
     return jac_all_are_finite<T, SD>(J);
 }
 
@@ -162,7 +162,7 @@ void BDF<T, SD, OdeType, SP, Derived>::reset_impl_alone(){
     const T h0 = this->stepsize() * this->direction();
     const State& q0 = this->vector_ics();
     decltype(auto) f = work_scratch_.get();
-    this->Rhs(f, t0, q0);
+    this->rhs(f, t0, q0);
 
     for (Differences& D : D_){
         for (State& D_k : D){
@@ -175,7 +175,7 @@ void BDF<T, SD, OdeType, SP, Derived>::reset_impl_alone(){
             D1_i = f_i * h0;
         }, D[1], f);
     }
-    this->Jac(J_, t0, q0);
+    this->jac(J_, t0, q0);
     order_ = 1;
     n_eq_steps_ = 0;
     valid_LU_ = false;
@@ -267,7 +267,7 @@ StepResult BDF<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_out, T& habs_out, S
                 if (currentjac){
                     break;
                 }
-                this->Jac(J_, t_new, y_pred);
+                this->jac(J_, t_new, y_pred);
                 valid_LU_ = false;
                 currentjac = true;
             }
@@ -382,7 +382,7 @@ detail::NewtConv BDF<T, SD, OdeType, SP, Derived>::solve_bdf_system(State& y, co
     StepResult flag = StepResult::Success;
     for (size_t k=0; k<NEWTON_MAXITER; k++){
         // work holds f(t_new, y), then the right hand side c*f - psi - d, then the correction dy
-        this->Rhs(work, t_new, y);
+        this->rhs(work, t_new, y);
         SD::for_each([&c](S& w_i, const S& psi_i, const S& d_i){
             w_i = c * w_i - psi_i - d_i;
         }, work, psi, d);

@@ -44,11 +44,11 @@ protected:
         t_new = t + h;
         habs_new = habs;
         // q_new = q + h * f(t + h/2, q + h/2 * f(t, q))
-        this->Rhs(k_, t, q);
+        this->rhs(k_, t, q);
         SD::for_each([&h](auto& k_i, const auto& q_i){
             k_i = q_i + k_i * (h/2);
         }, k_, q);
-        this->Rhs(q_new, t + h/2, k_);
+        this->rhs(q_new, t + h/2, k_);
         SD::for_each([&h](auto& q_new_i, const auto& q_i){
             q_new_i = q_i + q_new_i * h;
         }, q_new, q);
@@ -197,7 +197,7 @@ void run_runtime_choice(){
                          MySteppers::id<tags::BDF>, MySteppers::id<tags::TracedRK45>};
     for (const MySteppers::Id id : ids){
         const std::string name(MySteppers::getName(id));
-        BoxedSolver<T, SD, UtilPolicy::RichVirtual> solver = MySteppers::make<UtilPolicy::RichVirtual, T, SD>(
+        BoxedSolver<T, SD, UtilPolicy::RichVirtual> solver = MySteppers::make<UtilPolicy::RichVirtual, SD, T>(
             id, Oscillator{}, 0.0, q0, tol, tol, 0.0, 0.0, 1e-4, 1);
         check(solver->get_method() == name, "the solver made from id " + std::to_string(id.index()) + " is " + name);
 

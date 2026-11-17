@@ -213,7 +213,7 @@ To choose one at runtime, a `Catalog` of tags maps each to an id and a name. `od
 
 ```cpp
 ode::Steppers::Id id = ode::Steppers::getID("DOP853"); // or ode::Steppers::id<ode::tags::DOP853>
-auto solver = ode::Steppers::make<ode::UtilPolicy::RichVirtual, T, SD>(id, MyOdeSystem{}, T{0.0}, y0, rtol, atol);
+auto solver = ode::Steppers::make<ode::UtilPolicy::RichVirtual, SD>(id, MyOdeSystem{}, T{0.0}, y0, rtol, atol);
 std::cout << solver->get_method(); // DOP853
 ```
 

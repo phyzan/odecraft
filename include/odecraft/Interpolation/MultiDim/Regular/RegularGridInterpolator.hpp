@@ -26,6 +26,7 @@ class RegularGridInterpolator : public NdInterpolator<RegularGridInterpolator<ND
     */
 
     using Base = NdInterpolator<RegularGridInterpolator<NDIM, AS_VIRTUAL>, double, NDIM, AS_VIRTUAL>;
+    friend Base;
 
 public:
 
@@ -36,10 +37,12 @@ public:
 
     inline const RegularGrid<double, NDIM>&  grid() const { return grid_; }
 
-    // ============== Static Override ==================
-    int             ndim() const;
-    bool            interp(double* out, const double* coords) const;
-    bool            contains(const double* coords) const;
+protected:
+
+    // ============== Static Overrides ==================
+    int             ndim_impl() const;
+    bool            interp_impl(double* out, const double* coords) const;
+    bool            contains_impl(const double* coords) const;
     // =================================================
 
 private:
@@ -54,8 +57,14 @@ class RegularVectorField : public RegularGridInterpolator<NDIM, AS_VIRTUAL>, pub
 
     using InterpBase = RegularGridInterpolator<NDIM, AS_VIRTUAL>;
     using VFBase = VectorField<RegularVectorField<NDIM, AS_VIRTUAL>, NDIM, AS_VIRTUAL>;
+    friend VFBase;
 
 public:
+
+    // Both bases have these, so they are redeclared here, as the interpolator's
+    bool    interp(double* out, const double* coords) const;
+    int     ndim() const;
+    bool    contains(const double* coords) const;
 
     // overriden to support different coordinate systems (Cartesian, Polar, Spherical)
     void OdeFuncNorm(double* out, double t, const double* q) const;
@@ -67,11 +76,13 @@ public:
     std::vector<CArray2D<double, NDIM, 0>>    streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method) const;
 
 
-    // ============ Explicit overrides for VectorField ==============
-    bool    interp(double* out, const double* coords) const;
-    int     ndim() const;
-    bool    contains(const double* coords) const;
-    // ==============================================================
+protected:
+
+    // ======= Static overrides for VectorField: the interpolator's ======
+    bool    interp_impl(double* out, const double* coords) const;
+    int     ndim_impl() const;
+    bool    contains_impl(const double* coords) const;
+    // ==================================================================
 
 
 private:

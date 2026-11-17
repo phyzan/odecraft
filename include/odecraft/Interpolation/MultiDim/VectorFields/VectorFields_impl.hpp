@@ -7,17 +7,17 @@ namespace ode::interp {
 
 template<typename Derived, int NDIM, bool AS_VIRTUAL>
 bool VectorField<Derived, NDIM, AS_VIRTUAL>::interp(double* out, const double* coords) const{
-    return THIS->interp(out, coords);
+    return THIS->interp_impl(out, coords);
 }
 
 template<typename Derived, int NDIM, bool AS_VIRTUAL>
 int VectorField<Derived, NDIM, AS_VIRTUAL>::ndim() const {
-    return THIS->ndim();
+    return THIS->ndim_impl();
 }
 
 template<typename Derived, int NDIM, bool AS_VIRTUAL>
 bool VectorField<Derived, NDIM, AS_VIRTUAL>::contains(const double* coords) const{
-    return THIS->contains(coords);
+    return THIS->contains_impl(coords);
 }
 
 template<typename Derived, int NDIM, bool AS_VIRTUAL>

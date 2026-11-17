@@ -22,17 +22,17 @@ ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ScatteredNdInterpolator(TriPtr<NDIM> 
 }
 
 template<int NDIM, bool AS_VIRTUAL>
-bool ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::interp(double* out, const double* coords) const{
+bool ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::interp_impl(double* out, const double* coords) const{
     return tri_->interpolate(out, coords, this->values().data(), this->nvals_per_point());
 }
 
 template<int NDIM, bool AS_VIRTUAL>
-int ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ndim() const {
+int ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ndim_impl() const {
     return tri_->ndim();
 }
 
 template<int NDIM, bool AS_VIRTUAL>
-bool ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::contains(const double* coords) const {
+bool ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::contains_impl(const double* coords) const {
     return tri_->contains(coords);
 }
 
@@ -73,6 +73,21 @@ int ScatteredVectorField<NDIM, AS_VIRTUAL>::ndim() const {
 
 template<int NDIM, bool AS_VIRTUAL>
 bool ScatteredVectorField<NDIM, AS_VIRTUAL>::contains(const double* coords) const {
+    return InterpBase::contains(coords);
+}
+
+template<int NDIM, bool AS_VIRTUAL>
+bool ScatteredVectorField<NDIM, AS_VIRTUAL>::interp_impl(double* out, const double* coords) const{
+    return InterpBase::interp(out, coords);
+}
+
+template<int NDIM, bool AS_VIRTUAL>
+int ScatteredVectorField<NDIM, AS_VIRTUAL>::ndim_impl() const {
+    return InterpBase::ndim();
+}
+
+template<int NDIM, bool AS_VIRTUAL>
+bool ScatteredVectorField<NDIM, AS_VIRTUAL>::contains_impl(const double* coords) const {
     return InterpBase::contains(coords);
 }
 

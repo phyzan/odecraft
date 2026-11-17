@@ -17,7 +17,7 @@ BoxedRichSolver<T> make_rich_vsolver(
     int dir,
     EventList<T> events
 ){
-    return Steppers::make<::ode::UtilPolicy::RichVirtual, T, SD>(method, std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
+    return Steppers::make<UtilPolicy::RichVirtual, SD>(method, std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), std::move(min_step), std::move(max_step), std::move(stepsize), dir, std::move(events));
 }
 
 

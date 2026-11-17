@@ -16,7 +16,7 @@ struct ObjFunData{
 /*
 StaticEventStepper passes itself as the Derived type to the base solver class,
 and as a result it is the most derived class in the CRTP hierarchy.
-That means that any class deriving from StaticEventStepper that overrides functions like `Adv_Impl` will not have those overrides called by the base solver class,.
+That means that any class deriving from StaticEventStepper that overrides functions like `PerformStep` will not have those overrides called by the base solver class,.
 For virtual inheritance this might not be the case, so it is best not to override any of the base solver functions, but only extend the functionality.
 */
 template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename... ObjFun>
@@ -50,7 +50,7 @@ public:
 protected:
 
     template<typename... Args>
-    bool Adv_Impl(Args&&... args);
+    bool PerformStep(Args&&... args);
 
     void ReAdjust(const State& new_vector);
 

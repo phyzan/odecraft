@@ -59,15 +59,15 @@ void run(){
 
     State<double, 2> q1;
     State<double, 0> q2 = q0_heap; // the current vector is copied into q2, so it must have the size of the state
-    solver_1.fill_current_vector(q1);
-    solver_2.fill_current_vector(q2);
+    solver_1.FillCurrentState(q1);
+    solver_2.FillCurrentState(q2);
     if (q1[0] != q2[0] || q1[1] != q2[1]){
         std::cerr << "Error: Stack and Heap solvers produced different results!" << std::endl;
     } else {
         std::cout << "Result ( t = " << tmax << " ): x = " << q1[0] << ", xdot = " << q1[1] << std::endl;
 
         State<double, 2> arr;
-        solver_1.Rhs(arr, tmax, q1);
+        solver_1.rhs(arr, tmax, q1);
         
         std::cout << "xdotdot = " << arr[0] << " " << arr[1] << std::endl;
     }

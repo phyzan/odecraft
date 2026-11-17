@@ -31,7 +31,7 @@ void test_lazy_scalar(){
     auto t_start = std::chrono::high_resolution_clock::now();
     solver.advance_until(0.001);
     auto t_end = std::chrono::high_resolution_clock::now();
-    solver.fill_current_vector(y0);
+    solver.FillCurrentState(y0);
     std::cout << "q: " << y0[0] << " " << y0[1] << std::endl;
     std::cout << "Time taken: " << std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count() << " ms" << std::endl;
 }

@@ -42,8 +42,8 @@ std::vector<size_t> RichSolver<Derived, T, SD, OdeType, SP>::toEventIdx(const st
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void RichSolver<Derived, T, SD, OdeType, SP>::show_state(std::ostream& out, int prec) const{
-    Base::show_state(out, prec);
+void RichSolver<Derived, T, SD, OdeType, SP>::ShowState(std::ostream& out, int prec) const{
+    Base::ShowState(out, prec);
     std::string_view event_name = this->current_event().event ? this->current_event().event->name().c_str() : "";
     out << "\tEvent     : " << event_name << "\n";
 }
@@ -128,7 +128,7 @@ void RichSolver<Derived, T, SD, OdeType, SP>::Reset(){
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void RichSolver<Derived, T, SD, OdeType, SP>::fill_current_vector_impl(State& out) const{
+void RichSolver<Derived, T, SD, OdeType, SP>::FillCurrentState(State& out) const{
     if (is_at_canon_event && !evt_col.event(current_idx).mask_delayed()){
         // Immediate mask, ReAdjust still pending: the masked state is the current one, but
         // it has not been written into the new state yet. A delayed mask deliberately falls
@@ -137,7 +137,7 @@ void RichSolver<Derived, T, SD, OdeType, SP>::fill_current_vector_impl(State& ou
         assert(ms != nullptr && "Solver is at a canon event but has no masked state");
         copy_state<SD>(out, ms->masked_vector);
     } else {
-        Base::fill_current_vector_impl(out);
+        Base::FillCurrentState(out);
     }
 }
 
@@ -154,11 +154,11 @@ template<typename Derived, typename T, typename SD, typename OdeType, SolverPoli
 bool RichSolver<Derived, T, SD, OdeType, SP>::RequestTimeFloor(T& out) {
     // no need to call Base::RequestTimeFloor, the Base class does not request it.
     detection_idx = -1; // reset detection index at the start of a new detection round
-    // do not also set is_at_event to false, as the Adv_Impl might fail and the step should remain in the same state.
+    // do not also set is_at_event to false, as the PerformStep might fail and the step should remain in the same state.
     if ((is_event_waiting = evt_col.detect_all_between(
         /*
-        Passing a lambda that calls this->local_interp_impl() at every evaluation,
-        bacause it is cheaper than passing this->local_interp_impl() itself.
+        Passing a lambda that calls THIS->local_interp_impl() at every evaluation,
+        bacause it is cheaper than passing THIS->local_interp_impl() itself.
         Constructing it once can require RHS evaluations depending on the derived class,
         and if no events are detected there is no reason for that, while constructing at every
         evaluation might cost a lot only in the first call.
@@ -168,7 +168,7 @@ bool RichSolver<Derived, T, SD, OdeType, SP>::RequestTimeFloor(T& out) {
         this->vector_old(),
         this->vector_new(),
         [this](State& state_out, const T& t){
-            return this->local_interp_impl()(state_out, t);
+            return THIS->local_interp_impl()(state_out, t);
         }
     ))){
         // is_event_waiting has been set to true, preparing the push_event_queue for the first event
@@ -188,7 +188,7 @@ bool RichSolver<Derived, T, SD, OdeType, SP>::push_event_queue(){
     if (is_event_waiting && evt_col.get_time(size_t(detection_idx+1)) == this->t()){
         current_idx = evt_col.get_event_idx(size_t(++detection_idx));
         // determine if this one is a canon event. The ReAdjust that applies the mask is
-        // deferred to the next Adv_Impl for delayed and immediate masks alike: it collapses
+        // deferred to the next PerformStep for delayed and immediate masks alike: it collapses
         // the old and new states, and until it runs this step stays interpolable, which is
         // what lets dense output cover the part of it already traversed. An immediate mask
         // still *reports* the masked state right away -- fill_current_vector serves it from
@@ -219,10 +219,10 @@ bool RichSolver<Derived, T, SD, OdeType, SP>::at_canon_event() const{
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 template<typename... Args>
-bool RichSolver<Derived, T, SD, OdeType, SP>::Adv_Impl(Args&&... args){
+bool RichSolver<Derived, T, SD, OdeType, SP>::PerformStep(Args&&... args){
     
     if (evt_col.size() == 0){
-        return Base::Adv_Impl(std::forward<Args>(args)...);
+        return Base::PerformStep(std::forward<Args>(args)...);
     } else if (this->at_canon_event()) {
         const MaskedState<T, State>* ms = evt_col.masked_state();
         assert(ms != nullptr && "Solver is at a canon event but has no masked state");
@@ -231,17 +231,17 @@ bool RichSolver<Derived, T, SD, OdeType, SP>::Adv_Impl(Args&&... args){
     }
     
     if (this->is_at_new_state()){
-        if (!Base::Adv_Impl(std::forward<Args>(args)...)){
+        if (!Base::PerformStep(std::forward<Args>(args)...)){
             // new event detection pass was triggered in this command
             return false;
         } else if (!this->push_event_queue()){
-            // is_event_waiting has been set to false in the previous Adv_Impl call, no need to set it again here
+            // is_event_waiting has been set to false in the previous PerformStep call, no need to set it again here
             is_at_event = false;
             is_at_canon_event = false;
         }
         return true;
     } else if (is_event_waiting){
-        if (Base::Adv_Impl(evt_col.get_time(size_t(detection_idx+1)), std::forward<Args>(args)...)){
+        if (Base::PerformStep(evt_col.get_time(size_t(detection_idx+1)), std::forward<Args>(args)...)){
             if (!this->push_event_queue()){
                 is_at_event = false;
                 is_at_canon_event = false;
@@ -253,7 +253,7 @@ bool RichSolver<Derived, T, SD, OdeType, SP>::Adv_Impl(Args&&... args){
     } else {
         is_at_event = false;
         is_at_canon_event = false;
-        return Base::Adv_Impl(std::forward<Args>(args)...);
+        return Base::PerformStep(std::forward<Args>(args)...);
     }
 }
 

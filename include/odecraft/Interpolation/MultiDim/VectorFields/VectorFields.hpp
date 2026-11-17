@@ -84,17 +84,31 @@ struct VirtualVectorField {
 
 struct EmptyVectorField {};
 
+/// @brief The base of VectorField: it derives from the interface a vector field is reached through
+/// (VirtualVectorField, or an empty class), and holds the defaults of the methods every vector
+/// field must implement.
 template<typename Derived, int NDIM, bool AS_VIRTUAL>
-class VectorField : public std::conditional_t<AS_VIRTUAL, VirtualVectorField<NDIM>, EmptyVectorField> {
+class VectorFieldHook : public std::conditional_t<AS_VIRTUAL, VirtualVectorField<NDIM>, EmptyVectorField> {
+
+protected:
+
+    auto interp_impl(double* /*out*/, const double* /*coords*/) const { static_assert(sizeof(Derived) == 0, "VectorFieldHook::interp_impl not implemented"); }
+    auto ndim_impl() const { static_assert(sizeof(Derived) == 0, "VectorFieldHook::ndim_impl not implemented"); }
+    auto contains_impl(const double* /*coords*/) const { static_assert(sizeof(Derived) == 0, "VectorFieldHook::contains_impl not implemented"); }
+};
+
+
+// Derived classes implement interp_impl, ndim_impl and contains_impl. Methods follow the naming
+// contract in Core/BaseSolver/BaseSolver.hpp.
+template<typename Derived, int NDIM, bool AS_VIRTUAL>
+class VectorField : public VectorFieldHook<Derived, NDIM, AS_VIRTUAL> {
 
 
 public:
 
-    // ============== Static Overrides ==================
     bool interp(double* out, const double* coords) const;
     int ndim() const;
     bool contains(const double* coords) const;
-    // =================================================
 
     void OdeFuncNorm(double* out, double t, const double* q) const;
 
