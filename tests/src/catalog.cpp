@@ -1,6 +1,4 @@
-#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
-
 #include <array>
 #include <cmath>
 #include <iostream>
@@ -220,7 +218,9 @@ void run_compile_time_choice(){
     const State q0 = {1.0, 0.0};
     const State tol = {1e-10, 1e-10};
 
-    auto solver = getSolver<tags::Midpoint, SolverPolicy::Static, T, SD>(Oscillator{}, 0.0, q0, tol, tol, 0.0, 0.0, 1e-3, 1);
+    auto solver = getSolver<SD, SolverPolicy::Static>(
+        tags::Midpoint{},
+        Oscillator{}, 0.0, q0, tol, tol, 0.0, 0.0, 1e-3, 1);
     check(solver.method() == "Midpoint", "getSolver builds the user-defined stepper");
     std::unique_ptr<decltype(solver)> copy = solver.clone();
     check(copy->method() == "Midpoint", "a static solver clones into its own type");

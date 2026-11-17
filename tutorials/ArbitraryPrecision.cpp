@@ -1,4 +1,3 @@
-#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 #include <lazex/apps/lazex_mpreal.hpp>
 

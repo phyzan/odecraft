@@ -1,4 +1,3 @@
-#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 
 
@@ -126,7 +125,8 @@ int main(){
     T stepsize{0};
     int dir = 1;
 
-    auto solver = getSolver<tags::RK45, ode::SolverPolicy::RichStatic, T, SD>(
+    auto solver = getSolver<SD, SolverPolicy::RichStatic>(
+        tags::RK45{},
         OdeData{.Rhs=
             ODECRAFT_LAMBDA(out, /*t*/, q) {
                 const T omega{1}; // angular frequency

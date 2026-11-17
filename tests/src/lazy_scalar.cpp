@@ -1,4 +1,3 @@
-#include "odecraft/Contracts/DenseDescriptor.hpp"
 #include <odecraft/odecraft.hpp>
 #include <lazex/apps/lazex_mpreal.hpp>
 
@@ -15,7 +14,8 @@ void test_lazy_scalar(){
     State y0 = {1, -3};
     State tol = {T{1e-40}, T{1e-40}};
 
-    auto solver = getSolver<tags::BDF, SolverPolicy::Static, T, SD>(
+    auto solver = getSolver<SD, SolverPolicy::Static>(
+        tags::BDF{},
         OdeData{
             .Rhs=ODECRAFT_LAMBDA(out, t, y){ 
                 out[0] = y[1];

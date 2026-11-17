@@ -1,6 +1,3 @@
-#include "odecraft/Contracts/DenseDescriptor.hpp"
-#include <odecraft/Events/Events.hpp>
-#include <odecraft/Core/VirtualBase.hpp>
 #include <odecraft/odecraft.hpp>
 #include <mpreal.h>
 

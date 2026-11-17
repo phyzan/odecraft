@@ -1,7 +1,6 @@
-#include "odecraft/Chaos/VariationalContract.hpp"
-#include "odecraft/Contracts/DenseDescriptor.hpp"
-#include <iostream>
 #include <odecraft/odecraft.hpp>
+#include <iostream>
+
 
 using namespace ode;
 
