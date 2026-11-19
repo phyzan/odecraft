@@ -66,8 +66,10 @@ public:
     int     ndim() const;
     bool    contains(const double* coords) const;
 
-    // overriden to support different coordinate systems (Cartesian, Polar, Spherical)
+    // overriden to support different coordinate systems (Cartesian, Polar, Spherical): the field
+    // holds physical components, which both turn into the rates of change of the coordinates
     void OdeFuncNorm(double* out, double t, const double* q) const;
+    void OdeFunc(double* out, double t, const double* q) const;
 
     // grid[i].data(), grid[i].size() : grid points along axis i
     template<typename ValuesContainer, typename AxisViewContainer>
@@ -89,6 +91,9 @@ private:
 
     template<size_t... I>
     std::vector<CArray2D<double, NDIM, 0>>    streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method, std::index_sequence<I...>) const;
+
+    // The physical components of a velocity at q, in out, to the rates of change of q's coordinates
+    void    to_coordinate_rates(double* out, const double* q) const;
 
     CoordType coord_type_;
 
