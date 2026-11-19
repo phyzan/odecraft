@@ -148,12 +148,35 @@ void RegularVectorField<NDIM, AS_VIRTUAL>::OdeFuncNorm(double* out, double t, co
     }
 
     // Then convert normalized physical components to coordinate velocities
+    to_coordinate_rates(out, q);
+}
+
+template<int NDIM, bool AS_VIRTUAL>
+void RegularVectorField<NDIM, AS_VIRTUAL>::OdeFunc(double* out, double t, const double* q) const{
+    if (coord_type_ == CoordType::Cartesian){
+        VFBase::OdeFunc(out, t, q);
+        return;
+    }
+
+    if (!this->interp(out, q)){
+        std::fill(out, out + this->ndim(), 0);
+        return;
+    }
+    // At the field's own speed, its physical components as they are
+    to_coordinate_rates(out, q);
+}
+
+template<int NDIM, bool AS_VIRTUAL>
+void RegularVectorField<NDIM, AS_VIRTUAL>::to_coordinate_rates(double* out, const double* q) const{
     if (coord_type_ == CoordType::Polar){
-        out[1] /= q[0]; // dphi/dt = vphi_hat / r
+        out[1] /= q[0]; // dphi/dt = v_phi / r
+    } else if (coord_type_ == CoordType::Spherical){
+        // (r, theta, phi): the constructor allows spherical coordinates in 3D only, so phi is the last
+        const int phi = this->ndim() - 1;
+        out[1] /= q[0]; // dtheta/dt = v_theta / r
+        out[phi] /= q[0] * sin(q[1]); // dphi/dt = v_phi / (r*sin(theta))
     } else {
-        assert(coord_type_ == CoordType::Spherical && "Unsupported coordinate type");
-        out[1] /= q[0]; // dtheta/dt = vtheta_hat / r
-        out[2] /= q[0] * sin(q[1]); // dphi/dt = vphi_hat / (r*sin(theta))
+        assert(coord_type_ == CoordType::Cartesian && "Unsupported coordinate type");
     }
 }
 
@@ -303,6 +326,11 @@ std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::str
                 }
             }
 
+            // Outside the domain the field is zero, so the line would only stay where it is: it
+            // ends on the first point past the edge
+            if (!this->contains(q_new.data())){
+                break;
+            }
         }
         s_total += std::abs(rich_solver->get_time());
         return n_steps;

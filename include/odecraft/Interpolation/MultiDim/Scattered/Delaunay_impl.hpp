@@ -268,33 +268,31 @@ double DelaunayTri<NDIM>::get_value(const double* point, const double* field) co
 
 template<size_t NDIM>
 double DelaunayTri<NDIM>::volume(int simplex_idx) const {
-    const double* d  = invT_.ptr(simplex_idx, 0, 0);
-    int nd = ndim();
+    // |det E| / nd!, E holding the edges from v0, the last vertex, to the others. From the vertices
+    // rather than from invT: Qhull may keep flat simplices, whose invT is not finite but whose
+    // volume is 0
+    const int nd = ndim();
+    const int* v = get_simplex(simplex_idx);
+    const double* v0 = v0_.ptr(simplex_idx, 0);
+    double small[9];
+    double* e = (nd <= 3) ? small : mat_cache().data();
+    for (int i = 0; i < nd; ++i) {
+        for (int j = 0; j < nd; ++j) {
+            e[i * nd + j] = points_(v[j], i) - v0[i];
+        }
+    }
 
     double det;
-    if constexpr (NDIM == 1) {
-        det = d[0];
-    } else if constexpr (NDIM == 2) {
-        det = d[0]*d[3] - d[1]*d[2];
-    } else if constexpr (NDIM == 3) {
-        det = d[0]*(d[4]*d[8] - d[5]*d[7])
-            - d[1]*(d[3]*d[8] - d[5]*d[6])
-            + d[2]*(d[3]*d[7] - d[4]*d[6]);
+    if (nd == 1) {
+        det = e[0];
+    } else if (nd == 2) {
+        det = e[0]*e[3] - e[1]*e[2];
+    } else if (nd == 3) {
+        det = e[0]*(e[4]*e[8] - e[5]*e[7])
+            - e[1]*(e[3]*e[8] - e[5]*e[6])
+            + e[2]*(e[3]*e[7] - e[4]*e[6]);
     } else {
-        // NDIM == 0: runtime dimension
-        if (nd == 1) {
-            det = d[0];
-        } else if (nd == 2) {
-            det = d[0]*d[3] - d[1]*d[2];
-        } else if (nd == 3) {
-            det = d[0]*(d[4]*d[8] - d[5]*d[7])
-                - d[1]*(d[3]*d[8] - d[5]*d[6])
-                + d[2]*(d[3]*d[7] - d[4]*d[6]);
-        } else {
-            double* worker = mat_cache().data();
-            std::copy(d, d + nd*nd, worker);
-            det = detLU_row_major(worker, nd);
-        }
+        det = detLU_row_major(e, nd);
     }
 
     // n!
@@ -304,7 +302,7 @@ double DelaunayTri<NDIM>::volume(int simplex_idx) const {
         fact *= i;
     }
 
-    return 1.0 / (std::abs(det) * fact);
+    return std::abs(det) / fact;
 }
 
 template<size_t NDIM>
@@ -468,10 +466,12 @@ CArray2D<double, NDIM, NDIM>& DelaunayTri<NDIM>::mat_cache() const {
     // cache for temporary matrices used in barycentric coordinate computation, to avoid repeated allocations
     // this is also per-object, per-thread cache
     thread_local std::unordered_map<const DelaunayTri*, CArray2D<double, NDIM, NDIM>> cache;
-    if (cache.find(this) == cache.end()) {
-        cache[this] = CArray2D<double, NDIM, NDIM>(this->ndim(), this->ndim());
+    auto& mat = cache[this];
+    // Sized for this object: one destroyed before it may have left an entry at the same address
+    if (mat.size() != size_t(this->ndim() * this->ndim())) {
+        mat = CArray2D<double, NDIM, NDIM>(this->ndim(), this->ndim());
     }
-    return cache[this];
+    return mat;
 }
 
 template<size_t NDIM>

@@ -210,6 +210,7 @@ TEMPLATE_TEST_CASE("A vector field is reached through VirtualVectorField", "[vec
 struct StreamplotSummary {
     size_t lines = 0;
     size_t malformed = 0;      // not of shape (2, n >= 2)
+    size_t repeats = 0;        // points that coincide with the one before them
     size_t closed_circles = 0; // lines that never come near the edge of the domain
     Magnitude worst_gap{0};    // the longest step between consecutive points, over ds
     Magnitude worst_drift{0};  // the largest change of radius along a closed circle
@@ -237,6 +238,7 @@ StreamplotSummary summarize(const Lines& lines, double ds, bool polar, double x_
             out.worst_escape = worst(Magnitude{escape}, out.worst_escape);
             if (i > 0){
                 const double dx = x - line(0, i - 1), dy = y - line(1, i - 1);
+                out.repeats += (dx == 0 && dy == 0) ? 1 : 0;
                 const double gap = polar ? std::hypot(dx, x * dy) : std::hypot(dx, dy);
                 out.worst_gap = worst(Magnitude{gap / ds}, out.worst_gap);
             }
@@ -261,6 +263,8 @@ TEMPLATE_TEST_CASE("streamplot_data covers a field with streamlines along it", "
     CAPTURE(summary.lines, summary.closed_circles);
     CHECK(summary.lines >= 3);
     CHECK(summary.malformed == 0);
+    // A line that leaves the domain ends there, rather than piling up points on its edge
+    CHECK(summary.repeats == 0);
     CHECK(summary.closed_circles >= 1);
     CHECK_THAT(summary.worst_drift, IsAtMost(1e-6));
     // Points are ds apart along the line, or closer where it stops at the edge
@@ -385,8 +389,10 @@ TEST_CASE("Fields in polar and spherical coordinates hold physical components", 
 }
 
 TEST_CASE("A streamline at the field's own speed reads its components as physical too", "[vector-field][coordinates]"){
-    // A rigid rotation, v = r e_phi in the plane and v = r sin(theta) e_phi in space, turns at
-    // dphi/dt = 1 whatever the point: normalizing only changes the speed along the same curve
+    // Without normalizing, the field's physical components are still turned into the rates of
+    // its coordinates, at the field's own speed. v = r e_phi, linear in r and so interpolated
+    // exactly, turns at dphi/dt = 1 in the plane, and at dphi/dt = 1/sin(theta) in space, about the
+    // polar axis on the cone of its own theta
     SECTION("in polar coordinates"){
         const auto field = curvilinear_field<RegularField2>(CoordType::Polar, [](double* out, const double* x){
             out[0] = 0;
@@ -401,11 +407,13 @@ TEST_CASE("A streamline at the field's own speed reads its components as physica
         const auto field = curvilinear_field<RegularFieldN>(CoordType::Spherical, [](double* out, const double* x){
             out[0] = 0;
             out[1] = 0;
-            out[2] = x[0] * std::sin(x[1]);
+            out[2] = x[0];
         });
         const double from[] = {1.5, 1.0, 0.3};
         const auto end = end_of(field.streamline(from, 1.0, 1e-10, 1e-10, 0, 0, 0, 1, rk45, false), 3);
-        CHECK_THAT(abs_error(end[2], 1.3), IsAtMost(1e-6)); // sin(theta) is interpolated
+        CHECK_THAT(abs_error(end[0], 1.5), IsAtMost(1e-8));
+        CHECK_THAT(abs_error(end[1], 1.0), IsAtMost(1e-8));
+        CHECK_THAT(abs_error(end[2], 0.3 + 1 / std::sin(1.0)), IsAtMost(1e-8));
     }
 }
 
@@ -420,6 +428,8 @@ TEST_CASE("streamplot_data in polar coordinates follows the field", "[vector-fie
     CAPTURE(summary.lines);
     CHECK(summary.lines >= 3);
     CHECK(summary.malformed == 0);
+    // A line that leaves the domain ends there, rather than piling up points on its edge
+    CHECK(summary.repeats == 0);
     // Along circles, ds apart in physical length
     CHECK_THAT(summary.worst_drift, IsAtMost(1e-6));
     CHECK_THAT(summary.worst_gap, IsAtMost(1 + 1e-6));
