@@ -41,7 +41,7 @@ using cache_t = std::conditional_t<
     const F&>;
 
 template<typename T, typename SD>
-using value_t = SD::template value_type<T>;
+using value_t = typename SD::template value_type<T>;
 
 template<typename T, typename SD, int Order>
 using dual_t = xdiff::Dual<value_t<T, SD>, SD, Order>;
@@ -56,16 +56,16 @@ template<typename T, typename SD, int Order>
 using dual_state_t = xdiff::dual_state_t<value_t<T, SD>, SD, Order>;
 
 template<typename T, typename SD>
-using real_state_t = SD::template state_type<T>;
+using real_state_t = typename SD::template state_type<T>;
 
 template<typename T, typename SD>
-using state_t = SD::template state_type<value_t<T, SD>>;
+using state_t = typename SD::template state_type<value_t<T, SD>>;
 
 template<typename T, typename SD>
-using jacmat_t = SD::JD::template jacobian_matrix<value_t<T, SD>>;
+using jacmat_t = typename SD::JD::template jacobian_matrix<value_t<T, SD>>;
 
 template<typename T, typename SD, int Order>
-using dual_jacmat_t = SD::JD::template jacobian_matrix<dual_t<T, SD, Order>>;
+using dual_jacmat_t = typename SD::JD::template jacobian_matrix<dual_t<T, SD, Order>>;
 
 
 namespace detail{
@@ -239,8 +239,11 @@ struct OdeData {
 // Clang fails to synthesize the implicit aggregate deduction guide for
 // OdeData{.Rhs=...} when the initialization occurs inside a template (even if
 // unrelated to the enclosing template parameters); GCC handles it fine. These
-// explicit guides make designated-initializer CTAD work portably everywhere,
-// for both the Rhs-only and the Rhs+Jac aggregate-init forms.
+// explicit guides make designated-initializer CTAD work there on Clang 17+,
+// for both the Rhs-only and the Rhs+Jac aggregate-init forms. Clang 16 and
+// older have no CTAD for aggregates, so OdeData{.Rhs=...} can't deduce there
+// at all; the positional OdeData{rhs} and OdeData{rhs, jac} go through these
+// guides on every compiler, which is why the library itself uses them.
 template<typename RHS>
 OdeData(RHS) -> OdeData<RHS>;
 

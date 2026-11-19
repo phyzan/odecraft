@@ -13,6 +13,14 @@ struct ObjFunData{
 
 };
 
+// Explicit guides, so that ObjFunData{func, ftol} and ObjFunData{func, ftol, dir} deduce their
+// types on every compiler: Clang 16 and older have no CTAD for aggregates
+template<typename Callable, typename T>
+ObjFunData(Callable, T) -> ObjFunData<T, Callable>;
+
+template<typename Callable, typename T>
+ObjFunData(Callable, T, int) -> ObjFunData<T, Callable>;
+
 /*
 StaticEventStepper passes itself as the Derived type to the base solver class,
 and as a result it is the most derived class in the CRTP hierarchy.
@@ -24,7 +32,7 @@ class StaticEventStepper : public Stepper::template type<T, SD, OdeType, SP, Sta
 
     ODECRAFT_DERIVED_STEPPER;
 
-    using Base = Stepper::template type<T, SD, OdeType, SP, StaticEventStepper<Stepper, T, SD, OdeType, SP, ObjFun...>>;
+    using Base = typename Stepper::template type<T, SD, OdeType, SP, StaticEventStepper<Stepper, T, SD, OdeType, SP, ObjFun...>>;
 
 public:
     using State = state_t<T, SD>;

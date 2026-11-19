@@ -19,4 +19,5 @@ Checks: >
   -modernize-use-nodiscard,
   -readability-implicit-bool-conversion,
   -readability-convert-member-functions-to-static,
-  -readability-use-anyofallof
+  -readability-use-anyofallof,
+  -readability-redundant-typename

@@ -205,7 +205,7 @@ std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::str
     EventList<double, State> events{};
     pbox::Box<OdeRichSolver<double, FieldSD<NDIM>>> solver = Steppers::make<UtilPolicy::RichVirtual, FieldSD<NDIM>>(method,
         OdeData{
-            .Rhs=[this](State& out, double t, const State& q){
+            [this](State& out, double t, const State& q){
                 RegularVectorField::OdeFuncNorm(out.data(), t, q.data());
             },
         },

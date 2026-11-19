@@ -20,7 +20,7 @@ template<typename T, typename SD>
 struct HelperVirtualSolver<T, SD, SolverPolicy::RichVirtual>{ using type = OdeRichSolver<T, SD>;};
 
 template<typename T, typename SD, SolverPolicy SP>
-using BaseInterface = HelperVirtualSolver<T, SD, SP>::type;
+using BaseInterface = typename HelperVirtualSolver<T, SD, SP>::type;
 
 
 /// @brief Traits struct mapping a solver type to its virtual base interface.

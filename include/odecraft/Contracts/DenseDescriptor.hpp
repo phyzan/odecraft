@@ -61,10 +61,10 @@ struct JacobianDescriptor{
     using jacobian_matrix = ndspan::Array2D<S, N, N, LY>;
 
     template<typename S>
-    using state_type = ArrayTypeDescriptor::template state_type<S>;
+    using state_type = typename ArrayTypeDescriptor::template state_type<S>;
 
     template<typename T>
-    using value_type = ArrayTypeDescriptor::template value_type<T>;
+    using value_type = typename ArrayTypeDescriptor::template value_type<T>;
 
     template<typename S, typename From>
     static void resize_like(jacobian_matrix<S>& J, const state_type<From>& ref){
@@ -343,7 +343,7 @@ struct VectorDescriptor : std::conditional_t<(N > 0), xdiff::StaticState<N>, xdi
     using SBase = detail::ArrayStateDescriptor<VectorDescriptor<N>>;
 
     template<typename S>
-    using state_type = XBase::template state_type<S>;
+    using state_type = typename XBase::template state_type<S>;
 
     using SBase::for_each; // or XBase, they are the same
     using SBase::all_true;

@@ -121,7 +121,7 @@ pbox::Box<ODE<double, FieldSD<NDIM>>> VectorField<Derived, NDIM, AS_VIRTUAL>::ge
             return pbox::make_box<ODE<double, FieldSD<NDIM>>>(
                 S{},
                 OdeData{
-                    .Rhs=[this](State& out, double t, const State& q){
+                    [this](State& out, double t, const State& q){
                         THIS->OdeFuncNorm(out.data(), t, q.data());
                     },},
                     0.0, std::move(q0), std::move(rtol_state), std::move(atol_state), min_step, max_step, stepsize, direction, EventList<double, State>{}
@@ -130,7 +130,7 @@ pbox::Box<ODE<double, FieldSD<NDIM>>> VectorField<Derived, NDIM, AS_VIRTUAL>::ge
             return pbox::make_box<ODE<double, FieldSD<NDIM>>>(
                 S{},
                 OdeData{
-                    .Rhs=[this](State& out, double t, const State& q){
+                    [this](State& out, double t, const State& q){
                         THIS->OdeFunc(out.data(), t, q.data());
                     }},
                     0.0, std::move(q0), std::move(rtol_state), std::move(atol_state), min_step, max_step, stepsize, direction, EventList<double, State>{}
