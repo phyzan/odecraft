@@ -154,6 +154,18 @@ struct Nonlinear {
     }
 };
 
+/**
+ * @brief How closely the Jacobian a system provides matches Nonlinear::jacobian computed in a test.
+ *
+ * To rounding only, not exactly: the compiler may evaluate the test's copy, at a constant point, at
+ * compile time, while the solver's calls the math library. Differences would be off by about
+ * sqrt(epsilon), so this still tells which Jacobian the solver used.
+ */
+template<typename T>
+double own_jacobian_rounding(){
+    return 4 * epsilon<T>();
+}
+
 /// @brief The nonlinear system for states of SD only (JacPolicy::Approx).
 template<typename T, typename SD>
 struct PlainNonlinear {

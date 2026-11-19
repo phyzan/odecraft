@@ -124,8 +124,8 @@ TEMPLATE_TEST_CASE("A variational system uses the Jacobian its main system provi
         const Exact<SD, T> exact;
         const auto check = [&](const auto& solver){
             const auto [J_main, J_full, rhs] = derivatives_of<SD, T>(solver);
-            CHECK(max_matrix_error(J_main, exact.J, 2).value == 0);
-            CHECK(max_matrix_error(J_full[0], exact.J, 2).value == 0);
+            CHECK_THAT(max_matrix_error(J_main, exact.J, 2), IsAtMost(own_jacobian_rounding<T>()));
+            CHECK_THAT(max_matrix_error(J_full[0], exact.J, 2), IsAtMost(own_jacobian_rounding<T>()));
             CHECK_THAT(max_error<SD>(rhs.variation, exact.Jdq), IsAtMost(10 * epsilon<T>()));
             // Only the derivative of J along dq is left to differences, of second order
             CHECK_THAT(max_matrix_error(J_full[1], exact.B, 2), IsAtMost(second_difference_accuracy<T>()));
@@ -181,7 +181,7 @@ TEMPLATE_TEST_CASE("The main system of a variational solver is reached on its ow
     auto boxed = ode::chaos::make_variational_solver<ode::UtilPolicy::Virtual, SD>(tags::RK45{}, NonlinearWithJac<T, SD>{}, sample_time<T>(), q, T(1), tol, tol);
     auto J = make_jacmat<SD, T>(q.main);
     boxed->get_jac_main(J, sample_time<T>(), q.main);
-    CHECK(max_matrix_error(J, exact.J, 2).value == 0);
+    CHECK_THAT(max_matrix_error(J, exact.J, 2), IsAtMost(own_jacobian_rounding<T>()));
     boxed->get_rhs_main(f, sample_time<T>(), q.main);
     CHECK(same_state<SD>(f, exact.f));
 }

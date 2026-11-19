@@ -114,9 +114,13 @@ if(ODECRAFT_BUILD_CRAFTED)
     if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(odecraft_crafted PRIVATE -O0 -g3 -UNDEBUG)
     else()
-        # -flto=auto: whatever links these objects runs its link-time optimization in parallel, with
-        # make's jobserver or one job per thread, rather than serially (with a warning)
-        target_compile_options(odecraft_crafted PRIVATE -O3 -flto=auto -funroll-loops -DNDEBUG -g0 -fno-math-errno -fno-trapping-math)
+        # Link-time optimization. GCC's -flto=auto has whatever links these objects optimize them in
+        # parallel, with make's jobserver or one job per thread, rather than serially (with a
+        # warning); other compilers take plain -flto
+        set(ODECRAFT_LTO $<IF:$<CXX_COMPILER_ID:GNU>,-flto=auto,-flto>)
+        target_compile_options(odecraft_crafted PRIVATE -O3 ${ODECRAFT_LTO} -funroll-loops -DNDEBUG -g0 -fno-math-errno -fno-trapping-math)
+        # And on whatever links them: Clang only has the linker read LTO objects when it links with -flto
+        target_link_options(odecraft_crafted INTERFACE ${ODECRAFT_LTO})
         if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             target_compile_options(odecraft_crafted PRIVATE -finline-functions -finline-limit=10000)
         endif()
