@@ -199,6 +199,8 @@ bool RichSolver<Derived, T, SD, OdeType, SP>::push_event_queue(){
         // determine if there is another event after this one
         is_event_waiting = size_t(detection_idx) < evt_col.detection_size() - 1;
         is_at_event = true;
+        [[maybe_unused]] bool locked = this->evt_col.event(current_idx).lock();
+        assert(locked && "Event not located");
         return true;
     } else {
         return false;

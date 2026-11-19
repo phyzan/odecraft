@@ -51,9 +51,12 @@ public:
     const int*          get_neighbors(int simplex_idx) const; // ndim + 1 elements, -1 = no neighbor (boundary)
     int                 find_simplex(const double* point) const; // array of ndim elements, returns simplex index or -1 if not found
     bool                contains(const double* point) const { return find_simplex(point) != -1; }
-    bool                compute_barycentric(double* out, int simplex_idx, const double* point) const; // bary should have ndim+1 elements, returns false if simplex is degenerate
+    // out: ndim + 1 elements, the barycentric coordinates of point in the simplex's vertices, in the
+    // order of get_simplex. Returns false if any is not finite, as for a degenerate simplex
+    bool                compute_barycentric(double* out, int simplex_idx, const double* point) const;
 
-    // if n_fields > 1, then field must be a contiguous array of shape (n_fields, npoints), and output of interpolate will be a contiguous array of shape (n_fields,)
+    // field must be a contiguous array of shape (npoints, n_fields), the n_fields values of each
+    // point together, and the output of interpolate is a contiguous array of shape (n_fields,)
     bool                interpolate(double* out, const double* point, const double* field, int n_fields=1) const;
 
     double              get_value(const double* point, const double* field) const; // field should have npoints elements, returns interpolated value at point

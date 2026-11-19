@@ -18,7 +18,7 @@ ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ScatteredNdInterpolator(const double*
 template<int NDIM, bool AS_VIRTUAL>
 template<typename ValuesContainer>
 ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ScatteredNdInterpolator(TriPtr<NDIM> tri, const ValuesContainer& values, bool coord_axis_first) : Base(values, coord_axis_first), tri_(tri) {
-    assert(tri->npoints() == values.shape(coord_axis_first ? 0 : values.ndim()-1) && "Mismatch between values and Delaunay points");
+    assert(static_cast<size_t>(tri->npoints()) == values.shape(coord_axis_first ? 0 : values.ndim()-1) && "Mismatch between values and Delaunay points");
 }
 
 template<int NDIM, bool AS_VIRTUAL>

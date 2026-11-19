@@ -473,7 +473,7 @@ void LinkedInterpolator<T, SD>::close_end(){
 template<typename T, typename SD>
 void LinkedInterpolator<T, SD>::close_start(){
     _interval_cached = false;
-    _get(0).close_end();
+    _get(0).close_start();
 }
 
 

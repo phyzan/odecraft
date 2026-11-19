@@ -337,7 +337,7 @@ public:
      * @param observer Callable `bool(t, q, t_ptr)`, invoked after every successful step.
      *     `t`     : Current integration time.
      *     `q` : Current state vector.
-     *     `t_ptr` : const T*, this `advance_until` overload always passes null
+     *     `t_ptr` : const T*, null on every call but the last, where it is `&time`
      *     Return `false` to stop advancing immediately.
      * @returns `true` if the solver reached `time`, `false` if stopped early.
      */
@@ -393,11 +393,6 @@ public:
      * @throws std::domain_error if the direction is not any of [-1, 0, 1]
      */
     bool                SetICs(T t0, State y0, T stepsize = 0, int direction = 0);
-
-    /**
-     * @brief Permanently terminate the solver.
-     */
-    void                kill();
 
     /// @brief Reset implementation hook. Derived should call base first.
     void                Reset();
@@ -480,7 +475,6 @@ public:
     }
 
     void                do_reset() { THIS->Reset(); }
-    void                do_kill() { kill(); }
     bool                do_set_ics(T t0, State y0, T stepsize = 0, int direction = 0) { return THIS->SetICs(std::move(t0), std::move(y0), stepsize, direction); }
 
     /// @brief Name of the stepper

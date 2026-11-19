@@ -34,7 +34,7 @@ constexpr void jac_approx_impl(Callable&& func, StepCaller&& step_elem, jacmat_t
         J_ij = df_i;
     }, [&](S& xj, const S& qj, const U& arg){
 
-        decltype(auto) vj = step_elem(arg, abs(qj));
+        const S vj = step_elem(arg, abs(qj));
 
         xj = qj - vj; //vj could be T or Scalar. The operation should work regardless
         func(y1, t, x);

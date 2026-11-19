@@ -14,7 +14,9 @@
 
 #define ODECRAFT_LAMBDA(out, t, q) [=](auto& out, const auto& t, const auto& q) -> void 
 
-#define ODECRAFT_USING_MATH XDIFF_USING_MATH
+#define ODECRAFT_USING_MATH \
+XDIFF_USING_MATH; \
+using std::isfinite;
 
 namespace ode {
 
@@ -363,8 +365,8 @@ bool resize_step(T& factor, T& habs, const T& min_step, const T& max_step){
     return res;
 }
 
-template <typename T>
-inline bool isfinite(const T& value) {
+template<typename T>
+inline bool isFastFinite(const T& value) {
 #ifndef ODECRAFT_NO_NAN_CHECK
     if constexpr (!std::is_integral_v<T>) {
         #ifdef __FAST_MATH__
@@ -373,7 +375,7 @@ inline bool isfinite(const T& value) {
         return (value >= std::numeric_limits<T>::lowest() &&
                 value <= std::numeric_limits<T>::max());
         #else
-        return std::isfinite(value);
+        return isfinite(value);
         #endif
     } else {
         return true; // Integral types are always finite
@@ -387,7 +389,7 @@ template<typename T, typename SD>
 bool all_are_finite(const state_t<T, SD>& state){
 #ifndef ODECRAFT_NO_NAN_CHECK
     return SD::all_true([](const value_t<T, SD>& x){
-        return isfinite(x);
+        return isFastFinite(x);
     }, state);
 #else
     return true;
@@ -398,7 +400,7 @@ template<typename T, typename SD>
 bool jac_all_are_finite(const jacmat_t<T, SD>& J){
 #ifndef ODECRAFT_NO_NAN_CHECK
     return SD::JD::all_true([](const value_t<T, SD>& x){
-        return isfinite(x);
+        return isFastFinite(x);
     }, J);
 #else
     return true;

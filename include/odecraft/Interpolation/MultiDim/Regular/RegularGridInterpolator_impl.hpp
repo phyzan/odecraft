@@ -336,7 +336,9 @@ std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::str
         IntegrateDirection(solver, s_total, x.data(), n_steps_tot, +1);
         int n_steps_bwd = IntegrateDirection(solver, s_total, x.data(), n_steps_tot, -1);
 
-        // if the streamline is long enough and n_steps_tot  > 1, we keep it:
+        // if the streamline is long enough and n_steps_tot  > 1, we keep it. Its points are the
+        // n_steps_bwd ones behind the seed, the seed itself and the ones ahead of it: n_steps_tot + 1
+        const int n_points = n_steps_tot + 1;
         Array1D<const double*, NDIM, InterpBase::ALLOC> x_line(this->ndim());
         if constexpr (NDIM > 0){
             x_line = {worker_line.ptr(I, max_pts - n_steps_bwd)...};
@@ -345,14 +347,14 @@ std::vector<CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTUAL>::str
                 x_line[axis] = worker_line.ptr(axis, max_pts - n_steps_bwd);
             }
         }
-        CArray2D<double, NDIM, 0> true_line(this->ndim(), n_steps_tot);
+        CArray2D<double, NDIM, 0> true_line(this->ndim(), n_points);
         if (s_total > min_length && n_steps_tot > 1){
             if constexpr (NDIM > 0){
-                (std::copy(x_line[I], x_line[I] + n_steps_tot, true_line.ptr(I, 0)), ...);
-                
+                (std::copy(x_line[I], x_line[I] + n_points, true_line.ptr(I, 0)), ...);
+
             }else{
                 for (int axis=0; axis<this->ndim(); axis++){
-                    std::copy(x_line[axis], x_line[axis] + n_steps_tot, true_line.ptr(axis, 0));
+                    std::copy(x_line[axis], x_line[axis] + n_points, true_line.ptr(axis, 0));
                 }
             }
 

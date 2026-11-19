@@ -237,7 +237,7 @@ struct JacobianDescriptor{
             }
 
             // P*b, with the swaps in the order of the elimination
-            for (size_t k = 0; k < n; ++k){
+            for (size_t k = 0; k + 1 < n; ++k){
                 if (piv[k] != k){
                     std::swap(x[k], x[piv[k]]);
                 }

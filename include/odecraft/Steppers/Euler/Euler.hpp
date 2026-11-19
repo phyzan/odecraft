@@ -19,7 +19,7 @@ public:
     static constexpr bool IS_IMPLICIT = false;
 
     DEFAULT_RULE_OF_FOUR(Euler)
-    Euler(OdeType ode, T t0, State q0, T stepsize, int dir=1, EventList<T, State> events = {});
+    Euler(OdeType ode, T t0, const State& q0, T stepsize, int dir=1, EventList<T, State> events = {});
 
     // Constructor signature that follows the main constructor pattern
     Euler(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T min_step=0, T max_step=0, T stepsize=0, int dir=1, EventList<T, State> events = {});

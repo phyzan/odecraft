@@ -25,11 +25,11 @@ class StaticEventStepper : public Stepper::template type<T, SD, OdeType, SP, Sta
     ODECRAFT_DERIVED_STEPPER;
 
     using Base = Stepper::template type<T, SD, OdeType, SP, StaticEventStepper<Stepper, T, SD, OdeType, SP, ObjFun...>>;
-    using State = state_t<T, SD>;
-
-    static_assert((isObjFun<ObjFun, T, State> && ...), "At least one invalid objective function");
 
 public:
+    using State = state_t<T, SD>;
+    
+    static_assert((isObjFun<ObjFun, T, State> && ...), "At least one invalid objective function");
 
     static constexpr size_t NOBJ = sizeof...(ObjFun);
 
@@ -81,7 +81,7 @@ public:
     SingleStaticEventStepper(ObjFunData<T, ObjFun> data, OdeType ode, Args&&... args);
 
     template<typename... Args>
-    SingleStaticEventStepper(ObjFun obj_fun, OdeType ode, T t0, State q0, Args&&... args);
+    SingleStaticEventStepper(ObjFun obj_fun, int event_dir, OdeType ode, T t0, State q0, Args&&... args);
 
 };
 

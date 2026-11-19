@@ -5,12 +5,26 @@
 
 namespace ode{
 
+namespace detail{
+
+template<typename T, typename SD>
+real_state_t<T, SD> alloc_real_state(const state_t<T, SD>& proto){
+    real_state_t<T, SD> real_state;
+    SD::resize_like(real_state, proto);
+    SD::for_each([&](T& elem){
+        elem = 0;
+    }, real_state);
+    return real_state;
+}
+
+} // namespace ode::detail
+
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-Euler<T, SD, OdeType, SP, Derived>::Euler(OdeType ode, T t0, State q0, T stepsize, int dir, EventList<T, State> events) : Base(std::move(ode), std::move(t0), std::move(q0), RealState{}, RealState{}, 0, 0, stepsize, dir, std::move(events)) {}
+Euler<T, SD, OdeType, SP, Derived>::Euler(OdeType ode, T t0, const State& q0, T stepsize, int dir, EventList<T, State> events) : Base(std::move(ode), std::move(t0), q0, detail::alloc_real_state<T, SD>(q0), detail::alloc_real_state<T, SD>(q0), 0, 0, stepsize, dir, std::move(events)) {}
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-Euler<T, SD, OdeType, SP, Derived>::Euler(OdeType ode, T t0, State q0, RealState /*rtol*/, RealState /*atol*/, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T, State> events) : Euler(std::move(ode), std::move(t0), std::move(q0), std::move(stepsize), dir, std::move(events)) {}
+Euler<T, SD, OdeType, SP, Derived>::Euler(OdeType ode, T t0, State q0, RealState rtol, RealState atol, T /*min_step*/, T /*max_step*/, T stepsize, int dir, EventList<T, State> events) : Base(std::move(ode), std::move(t0), std::move(q0), std::move(rtol), std::move(atol), 0, 0, stepsize, dir, std::move(events)) {}
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
 StepResult Euler<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_new, T& habs_new, State& q_new, const T& t, const T& habs, const State& q){
