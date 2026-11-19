@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RichBase.hpp"
+#include "xdiff/utils/backend.hpp"
 #include <string_view>
 
 namespace ode{
@@ -91,7 +92,7 @@ bool RichSolver<Derived, T, SD, OdeType, SP>::advance_to_event(const T& tmax, co
     bool success = false;
     Base::advance_until(
         tmax,
-        [&](const T& /*t*/, const State& /*state*/, const T* /*extra*/) NDSPAN_LAMBDA_INLINE {
+        [&](const T& /*t*/, const State& /*state*/, const T* /*extra*/) XDIFF_LAMBDA_INLINE {
             if (EventState<T, State> es = this->current_event()){
                 if (event_idx.empty() || std::find(event_idx.begin(), event_idx.end(), es.idx) != event_idx.end()){
                     success = true;

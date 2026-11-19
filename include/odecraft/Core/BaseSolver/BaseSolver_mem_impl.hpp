@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BaseSolver.hpp"
+#include "xdiff/utils/backend.hpp"
 
 
 namespace ode{
@@ -72,7 +73,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::generic_advance_until(
 
 
     bool success;
-    auto evolve = [&](State& worker) NDSPAN_LAMBDA_INLINE -> bool {
+    auto evolve = [&](State& worker) XDIFF_LAMBDA_INLINE -> bool {
         bool res;
         while (
             (res = (this->is_running() && THIS->PerformStep(time)))
@@ -119,7 +120,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::generic_advance_until(
         // a.t.p. t_dual is the last element of `checkpoints`
         throw std::runtime_error(GetStr("Invalid extra steps: last extra step is ", t_dual, " but target time is ", time, ". Extra steps must be in the same direction and between the current time and the target time."));
     }else{
-        auto validate_idx = [&](size_t idx) NDSPAN_LAMBDA_INLINE -> size_t {
+        auto validate_idx = [&](size_t idx) -> size_t {
             if (checkpoints[idx]*d <= this->t()*d){
                 throw std::runtime_error(GetStr("Invalid extra step: ", checkpoints[idx], ". Extra steps must be in the same direction and between the current time (", this->t(), ") and the target time (", time, ")."));
             }
