@@ -21,9 +21,9 @@ public:
     ScatteredNdInterpolator(const double* points, const ValuesContainer& values, int ndim, bool coord_axis_first);
 
     template<typename ValuesContainer>
-    ScatteredNdInterpolator(TriPtr<NDIM> tri, const ValuesContainer& values, bool coord_axis_first);
+    ScatteredNdInterpolator(TriView<NDIM> tri, const ValuesContainer& values, bool coord_axis_first);
 
-    TriPtr<NDIM> tri() const;
+    const TriView<NDIM>& tri() const;
 
     // shape (n_points, ndim)
     const CArray2D<double, 0, NDIM>& points() const;
@@ -38,7 +38,7 @@ protected:
 
 private:
 
-    TriPtr<NDIM> tri_;
+    TriView<NDIM> tri_;
 
 }; // ScatteredNdInterpolator
 
@@ -64,7 +64,7 @@ public:
     ScatteredVectorField(const double* points, const ValuesContainer& values, int ndim, bool coord_axis_first);
 
     template<typename ValuesContainer>
-    ScatteredVectorField(const TriPtr<NDIM>& tri, const ValuesContainer& values, bool coord_axis_first);
+    ScatteredVectorField(const TriView<NDIM>& tri, const ValuesContainer& values, bool coord_axis_first);
 
 protected:
 

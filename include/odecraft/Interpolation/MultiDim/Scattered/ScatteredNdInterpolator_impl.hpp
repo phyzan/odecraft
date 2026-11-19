@@ -17,13 +17,13 @@ ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ScatteredNdInterpolator(const double*
 
 template<int NDIM, bool AS_VIRTUAL>
 template<typename ValuesContainer>
-ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ScatteredNdInterpolator(TriPtr<NDIM> tri, const ValuesContainer& values, bool coord_axis_first) : Base(values, coord_axis_first), tri_(tri) {
-    assert(static_cast<size_t>(tri->npoints()) == values.shape(coord_axis_first ? 0 : values.ndim()-1) && "Mismatch between values and Delaunay points");
+ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ScatteredNdInterpolator(TriView<NDIM> tri, const ValuesContainer& values, bool coord_axis_first) : Base(values, coord_axis_first), tri_(std::move(tri)) {
+    assert(static_cast<size_t>(tri_->npoints()) == values.shape(coord_axis_first ? 0 : values.ndim()-1) && "Mismatch between values and Delaunay points");
 }
 
 template<int NDIM, bool AS_VIRTUAL>
 bool ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::interp_impl(double* out, const double* coords) const{
-    return tri_->interpolate(out, coords, this->values().data(), this->nvals_per_point());
+    return tri_.interpolate(out, coords, this->values().data(), this->nvals_per_point()) != -1;
 }
 
 template<int NDIM, bool AS_VIRTUAL>
@@ -33,11 +33,11 @@ int ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::ndim_impl() const {
 
 template<int NDIM, bool AS_VIRTUAL>
 bool ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::contains_impl(const double* coords) const {
-    return tri_->contains(coords);
+    return tri_.contains(coords);
 }
 
 template<int NDIM, bool AS_VIRTUAL>
-TriPtr<NDIM> ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::tri() const { return tri_; }
+const TriView<NDIM>& ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::tri() const { return tri_; }
 
 template<int NDIM, bool AS_VIRTUAL>
 const CArray2D<double, 0, NDIM>& ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::points() const {
@@ -57,7 +57,7 @@ ScatteredVectorField<NDIM, AS_VIRTUAL>::ScatteredVectorField(const double* point
 
 template<int NDIM, bool AS_VIRTUAL>
 template<typename ValuesContainer>
-ScatteredVectorField<NDIM, AS_VIRTUAL>::ScatteredVectorField(const TriPtr<NDIM>& tri, const ValuesContainer& values, bool coord_axis_first) : InterpBase(tri, values, coord_axis_first), VFBase() {
+ScatteredVectorField<NDIM, AS_VIRTUAL>::ScatteredVectorField(const TriView<NDIM>& tri, const ValuesContainer& values, bool coord_axis_first) : InterpBase(tri, values, coord_axis_first), VFBase() {
     assert((NDIM == 0 || tri->ndim() == NDIM) && "Delaunay ndim must match template NDIM");
 }
 

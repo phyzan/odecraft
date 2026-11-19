@@ -19,8 +19,8 @@
 #include <odecraft/Crafted.hpp>
 
 #include "scalars.hpp"
-#include "settings.hpp"
-#include "output.hpp"
+#include "settings.hpp" // IWYU pragma: keep
+#include "output.hpp" // IWYU pragma: keep
 
 #include <limits>
 #include <string>

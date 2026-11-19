@@ -79,7 +79,7 @@ using RegularVectorField = ::ode::interp::rgi::RegularVectorField<0, true>;
 using DelaunayTri = ::ode::interp::sci::DelaunayTri<0>;
 
 /// @brief Shared handle to a DelaunayTri; interpolators built on the same cloud share one.
-using TriPtr = ::ode::interp::sci::TriPtr<0>;
+using TriView = ::ode::interp::sci::TriView<0>;
 
 /// @brief Barycentric interpolation of a field sampled at scattered points.
 using ScatteredNdInterpolator = ::ode::interp::sci::ScatteredNdInterpolator<0, true>;
@@ -154,7 +154,7 @@ using ScatteredVectorField = ::ode::interp::sci::ScatteredVectorField<0, true>;
     SPEC ode::interp::sci::ScatteredNdInterpolator<0, true>::ScatteredNdInterpolator(               \
         const double*, const ode::crafted::field_values_t&, int, bool);                             \
     SPEC ode::interp::sci::ScatteredNdInterpolator<0, true>::ScatteredNdInterpolator(               \
-        ode::crafted::TriPtr, const ode::crafted::field_values_t&, bool);
+        ode::crafted::TriView, const ode::crafted::field_values_t&, bool);
 
 
 /**
@@ -189,7 +189,7 @@ using ScatteredVectorField = ::ode::interp::sci::ScatteredVectorField<0, true>;
     SPEC ode::interp::sci::ScatteredVectorField<0, true>::ScatteredVectorField(                     \
         const double*, const ode::crafted::field_values_t&, int, bool);                             \
     SPEC ode::interp::sci::ScatteredVectorField<0, true>::ScatteredVectorField(                     \
-        const ode::crafted::TriPtr&, const ode::crafted::field_values_t&, bool);
+        const ode::crafted::TriView&, const ode::crafted::field_values_t&, bool);
 
 
 // At global scope, as in the stepper headers: an explicit instantiation must appear in a

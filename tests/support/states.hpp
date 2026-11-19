@@ -5,13 +5,13 @@
  * @brief The state descriptors the tests run on, and a few ways to build their states.
  */
 
-#include <odecraft/odecraft.hpp>
-#include "scalars.hpp"
-
 #include <algorithm>
 #include <initializer_list>
 #include <string_view>
 #include <tuple>
+
+#include <odecraft/odecraft.hpp>
+#include "scalars.hpp" // IWYU pragma: keep
 
 namespace odetest {
 

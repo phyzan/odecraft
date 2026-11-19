@@ -3,8 +3,8 @@
 // tests is a rigid rotation, whose streamlines are circles: linear, so a grid or a triangulation
 // interpolates it exactly, and its streamlines are known in closed form.
 
-#include "odecraft_test.hpp"
-#include "grids.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
+#include "../support/grids.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -462,7 +462,7 @@ TEST_CASE("The same samples give the same streamlines read as a grid or as scatt
     const Rectilinear grid = custom_grid();
     const auto values = sample(fields::rotation, grid.points(), 2, 2);
     const ScatteredField2 shared(scattered.tri(), view_of(values, grid.size(), 2), true);
-    REQUIRE(shared.tri() == scattered.tri());
+    REQUIRE(shared.tri().shared_tri() == scattered.tri().shared_tri());
 
     for (int dir : {1, -1}){
         for (bool normalized : {false, true}){

@@ -2,15 +2,15 @@
 // take their samples in the one container their constructors are compiled for, field_values_t,
 // over the axes of grid_axes_t. The same samples are read as a grid and as scattered points.
 
-#include "crafted_test.hpp"
-#include "grids.hpp"
 
 #include <cmath>
 #include <limits>
-#include <memory>
 #include <numbers>
 #include <type_traits>
 #include <vector>
+
+#include "../support/crafted_test.hpp" // IWYU pragma: keep
+#include "../support/grids.hpp"
 
 namespace odetest {
 namespace {
@@ -71,7 +71,7 @@ TEST_CASE("The compiled interpolation types are those of the header-only interfa
     STATIC_REQUIRE(std::is_same_v<RegularGridInterpolator, ode::interp::rgi::RegularGridInterpolator<0, true>>);
     STATIC_REQUIRE(std::is_same_v<RegularVectorField, ode::interp::rgi::RegularVectorField<0, true>>);
     STATIC_REQUIRE(std::is_same_v<DelaunayTri, ode::interp::sci::DelaunayTri<0>>);
-    STATIC_REQUIRE(std::is_same_v<TriPtr, std::shared_ptr<DelaunayTri>>);
+    STATIC_REQUIRE(std::is_same_v<TriView, ode::interp::sci::TriView<0>>);
     STATIC_REQUIRE(std::is_same_v<ScatteredNdInterpolator, ode::interp::sci::ScatteredNdInterpolator<0, true>>);
     STATIC_REQUIRE(std::is_same_v<ScatteredVectorField, ode::interp::sci::ScatteredVectorField<0, true>>);
     STATIC_REQUIRE(std::is_same_v<VirtualVectorField, ode::interp::VirtualVectorField<0>>);
@@ -122,18 +122,18 @@ TEST_CASE("A compiled scattered interpolator triangulates its points or shares a
     CHECK(interp.points().shape(0) == n);
     CHECK_THAT(interpolation_error(interp, fields::affine, inside, 2), IsAtMost(1e-13));
 
-    const TriPtr tri = interp.tri();
+    const TriView& tri = interp.tri();
     CHECK(tri->npoints() == int(n));
-    CHECK_THAT(abs_error(tri->total_volume(), 12.0), IsAtMost(1e-12));
+    CHECK_THAT(abs_error(tri.total_volume(), 12.0), IsAtMost(1e-12));
     const ScatteredNdInterpolator shared(tri, field_values_t(values.data(), n, size_t(2)), true);
-    CHECK(shared.tri() == tri);
+    CHECK(shared.tri().shared_tri() == tri.shared_tri());
     CHECK_THAT(interpolation_error(shared, fields::affine, inside, 2), IsAtMost(1e-13));
 
     // A triangulation of its own
     const DelaunayTri own(points.data(), n, 2);
     CHECK(own.nsimplices() == tri->nsimplices());
     const double x[] = {0.33, -0.71};
-    CHECK(own.find_simplex(x) >= 0);
+    CHECK(own.find_simplex(x, -1) >= 0);
 }
 
 TEST_CASE("Compiled vector fields integrate their streamlines", "[crafted][nd-interpolation][vector-field]"){

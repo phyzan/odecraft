@@ -1,7 +1,7 @@
 // The building blocks of dense output: intervals with open, closed and linking ends, the
 // interpolator of a single step, and the chain of them that covers a whole integration.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <stdexcept>
 

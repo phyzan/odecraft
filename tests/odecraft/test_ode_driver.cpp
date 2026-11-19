@@ -2,7 +2,7 @@
 // storing every step or chosen times, recording events under options, returning dense solutions,
 // and being cloned, reset and cleared. Also the result types it fills.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <string>
 #include <vector>

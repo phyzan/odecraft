@@ -3,9 +3,9 @@
 // differentiation, from the system's own Jacobian, and by first and second order differences.
 // Also the block structure of the variational state descriptor, VarSD.
 
-#include "odecraft_test.hpp"
-
 #include <cmath>
+
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 namespace odetest {
 namespace {

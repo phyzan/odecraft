@@ -2,7 +2,7 @@
 // with every stepper, forward and backward, whichever way the main system is differentiated,
 // through every integration routine, the chaotic solver interface and the variational driver.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <vector>
 

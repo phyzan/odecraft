@@ -2,13 +2,13 @@
 // their ids, a stepper declared outside the library, and the virtual interface the boxed
 // solvers are used through.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <span>
 #include <string>
 #include <vector>
 
-#include "renamed_stepper.hpp"
+#include "../support/renamed_stepper.hpp"
 
 
 namespace odetest {

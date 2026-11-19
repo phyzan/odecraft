@@ -1,7 +1,7 @@
 // Accuracy of every stepper: against exact solutions, at its order of convergence, at its
 // tolerance, to the full precision of extended scalar types, and on stiff problems.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <cmath>
 

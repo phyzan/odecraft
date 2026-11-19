@@ -2,7 +2,7 @@
 // system's own Jacobian, from a Jacobian that may be null, and by central differences, with steps
 // chosen from the tolerances or given explicitly.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <cmath>
 

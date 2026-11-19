@@ -2,7 +2,7 @@
 // old and new states collapse into that one, so that nothing can be interpolated across the
 // step that failed, and the state it reports is that last state.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 namespace odetest {
 namespace {

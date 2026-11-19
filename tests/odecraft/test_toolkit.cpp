@@ -2,7 +2,7 @@
 // are built from, small numeric helpers, and the compile-time concepts that decide how a system
 // is differentiated.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <array>
 #include <memory>

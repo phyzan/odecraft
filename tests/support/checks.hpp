@@ -5,8 +5,8 @@
  * @brief Comparisons of states and Jacobians, as plain numbers a CHECK can print.
  */
 
-#include "output.hpp"
-#include "states.hpp"
+#include "output.hpp" // IWYU pragma: keep
+#include "states.hpp" // IWYU pragma: keep
 
 #include <cmath>
 #include <limits>
