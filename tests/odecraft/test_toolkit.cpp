@@ -335,13 +335,20 @@ TEST_CASE("OdeData deduces the types of its callables", "[toolkit]"){
     using State = std::array<double, 2>;
     const auto rhs = ODECRAFT_LAMBDA(out, t, q){ out[0] = q[1]; out[1] = -q[0]; };
 
-    auto rhs_only = ode::OdeData{.Rhs = rhs};
+    auto rhs_only = ode::OdeData{rhs};
     STATIC_REQUIRE(std::is_same_v<decltype(rhs_only)::JacType, std::nullptr_t>);
     CHECK(rhs_only.Jac == nullptr);
 
     const auto jac = [](jacmat_t<double, StaticSize<2>>& /*J*/, double /*t*/, const State& /*q*/){};
-    auto both = ode::OdeData{.Rhs = rhs, .Jac = jac};
+    auto both = ode::OdeData{rhs, jac};
     STATIC_REQUIRE(std::is_same_v<decltype(both)::JacType, std::remove_const_t<decltype(jac)>>);
+
+#if !defined(__clang__) || __clang_major__ >= 17
+    // The designated-initializer spelling deduces the same types. It needs CTAD for aggregates,
+    // which Clang only has from 17
+    STATIC_REQUIRE(std::is_same_v<decltype(ode::OdeData{.Rhs = rhs}), decltype(rhs_only)>);
+    STATIC_REQUIRE(std::is_same_v<decltype(ode::OdeData{.Rhs = rhs, .Jac = jac}), decltype(both)>);
+#endif
 
     State out{};
     rhs_only.Rhs(out, 0.0, State{1, 2});

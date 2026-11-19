@@ -103,11 +103,11 @@ private:
     // ndspan cannot constant-evaluate these tables (they are built with fill() and indexed writes),
     // so, regardless of T, they are plain (computed-once-at-construction) instance members. A is
     // the extended matrix: its row 12 holds the weights b, rows 13..15 the dense-output stages.
-    Coefs::DOP_A A  = Coefs::make_A();
-    Coefs::DOP_C C  = Coefs::make_C();
-    Coefs::DOP_D D  = Coefs::make_D();
-    Coefs::DOP_E E3 = Coefs::make_E3();
-    Coefs::DOP_E E5 = Coefs::make_E5();
+    typename Coefs::DOP_A A  = Coefs::make_A();
+    typename Coefs::DOP_C C  = Coefs::make_C();
+    typename Coefs::DOP_D D  = Coefs::make_D();
+    typename Coefs::DOP_E E3 = Coefs::make_E3();
+    typename Coefs::DOP_E E5 = Coefs::make_E5();
 
     T                                           h_last_ = 0; // step size actually used by the last sweep
     mutable std::array<State, N_STAGES_EXT>     K_;          // the stages of the last step

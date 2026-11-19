@@ -98,7 +98,7 @@ private:
 // ============================================================================
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, OdeType, SP, Derived>::Atype RK45<T, SD, OdeType, SP, Derived>::Amatrix() {
+constexpr typename RK45<T, SD, OdeType, SP, Derived>::Atype RK45<T, SD, OdeType, SP, Derived>::Amatrix() {
     return {T(0),        T(0),        T(0),        T(0),        T(0), T(0),
             T(1)/T(5),  T(0),        T(0),        T(0),        T(0), T(0),
             T(3)/T(40), T(9)/T(40), T(0),        T(0),        T(0), T(0),
@@ -108,7 +108,7 @@ constexpr RK45<T, SD, OdeType, SP, Derived>::Atype RK45<T, SD, OdeType, SP, Deri
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, OdeType, SP, Derived>::Btype RK45<T, SD, OdeType, SP, Derived>::Bmatrix(){
+constexpr typename RK45<T, SD, OdeType, SP, Derived>::Btype RK45<T, SD, OdeType, SP, Derived>::Bmatrix(){
     return {T(35)/T(384),
             T(0),
             T(500)/T(1113),
@@ -118,7 +118,7 @@ constexpr RK45<T, SD, OdeType, SP, Derived>::Btype RK45<T, SD, OdeType, SP, Deri
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, OdeType, SP, Derived>::Ctype RK45<T, SD, OdeType, SP, Derived>::Cmatrix(){
+constexpr typename RK45<T, SD, OdeType, SP, Derived>::Ctype RK45<T, SD, OdeType, SP, Derived>::Cmatrix(){
     return {T(0),
             T(1)/T(5),
             T(3)/T(10),
@@ -128,7 +128,7 @@ constexpr RK45<T, SD, OdeType, SP, Derived>::Ctype RK45<T, SD, OdeType, SP, Deri
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, OdeType, SP, Derived>::Etype RK45<T, SD, OdeType, SP, Derived>::Ematrix() {
+constexpr typename RK45<T, SD, OdeType, SP, Derived>::Etype RK45<T, SD, OdeType, SP, Derived>::Ematrix() {
     return {T(-71)/T(57600),
             T(0),
             T(71)/T(16695),
@@ -139,7 +139,7 @@ constexpr RK45<T, SD, OdeType, SP, Derived>::Etype RK45<T, SD, OdeType, SP, Deri
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK45<T, SD, OdeType, SP, Derived>::Ptype RK45<T, SD, OdeType, SP, Derived>::Pmatrix() {
+constexpr typename RK45<T, SD, OdeType, SP, Derived>::Ptype RK45<T, SD, OdeType, SP, Derived>::Pmatrix() {
     return {T(1),   -T(8048581381)/T(2820520608),   T(8663915743)/T(2820520608),   -T(12715105075)/T(11282082432),
             T(0),    T(0),                          T(0),                          T(0),
             T(0),    T(131558114200)/T(32700410799), -T(68118460800)/T(10900136933), T(87487479700)/T(32700410799),

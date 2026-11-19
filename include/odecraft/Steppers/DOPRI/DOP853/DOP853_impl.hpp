@@ -114,7 +114,7 @@ Table rounded_table(const Work& work){
 } // namespace ode::detail
 
 template<typename T>
-constexpr DOP_COEFS<T>::DOP_A DOP_COEFS<T>::make_A(){
+constexpr typename DOP_COEFS<T>::DOP_A DOP_COEFS<T>::make_A(){
     using W = detail::dop853_work_t<T>;
     const auto q = detail::fraction<W>;
     const W r6 = sqrt(W(6));
@@ -237,7 +237,7 @@ constexpr DOP_COEFS<T>::DOP_A DOP_COEFS<T>::make_A(){
 }
 
 template<typename T>
-constexpr DOP_COEFS<T>::DOP_B DOP_COEFS<T>::make_B(){
+constexpr typename DOP_COEFS<T>::DOP_B DOP_COEFS<T>::make_B(){
     // The weights of the 8th order solution: step 2 above
     using W = detail::dop853_work_t<T>;
     const auto q = detail::fraction<W>;
@@ -255,7 +255,7 @@ constexpr DOP_COEFS<T>::DOP_B DOP_COEFS<T>::make_B(){
 }
 
 template<typename T>
-constexpr DOP_COEFS<T>::DOP_C DOP_COEFS<T>::make_C(){
+constexpr typename DOP_COEFS<T>::DOP_C DOP_COEFS<T>::make_C(){
     // The nodes: step 1 above
     using W = detail::dop853_work_t<T>;
     const W r6 = sqrt(W(6));
@@ -280,7 +280,7 @@ constexpr DOP_COEFS<T>::DOP_C DOP_COEFS<T>::make_C(){
 }
 
 template<typename T>
-constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E3(){
+constexpr typename DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E3(){
     // E3 = b - bhh, bhh being the embedded 3rd order solution: step 4 above
     using W = detail::dop853_work_t<T>;
     const auto q = detail::fraction<W>;
@@ -297,7 +297,7 @@ constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E3(){
 }
 
 template<typename T>
-constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E5(){
+constexpr typename DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E5(){
     // E5 = b - bhat, bhat being the embedded 5th order solution: step 5 above
     using W = detail::dop853_work_t<T>;
     const auto q = detail::fraction<W>;
@@ -321,7 +321,7 @@ constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E5(){
 }
 
 template<typename T>
-constexpr DOP_COEFS<T>::DOP_D DOP_COEFS<T>::make_D(){
+constexpr typename DOP_COEFS<T>::DOP_D DOP_COEFS<T>::make_D(){
     // The dense output's F3..F6 = h D K: step 6 above, and coef_mat_interp_dop853
     using W = detail::dop853_work_t<T>;
     const auto q = detail::fraction<W>;

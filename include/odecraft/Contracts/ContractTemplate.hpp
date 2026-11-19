@@ -13,10 +13,10 @@ template<typename Derived>
 struct StateDescriptor{
 
     template<typename T>
-    using value_type = Derived::template value_type<T>; // e.g. T or std::complex<T>
+    using value_type = typename Derived::template value_type<T>; // e.g. T or std::complex<T>
 
     template<typename S>
-    using state_type = Derived::template state_type<S>;
+    using state_type = typename Derived::template state_type<S>;
 
     template<typename T>
     static T norm_sqr(const value_type<T>& s){
@@ -52,7 +52,7 @@ struct StateDescriptor{
         // e.g. a pattern may store only its nonzero ones.
 
         template<typename S>
-        using jacobian_matrix = Derived::JD::template jacobian_matrix<S>;
+        using jacobian_matrix = typename Derived::JD::template jacobian_matrix<S>;
 
         template<typename S, typename From>
         static void resize_like(jacobian_matrix<S>& J, const state_type<From>& ref){
@@ -106,7 +106,7 @@ struct StateDescriptor{
 
 
             // The row pivots of an LU factorization
-            using pivots_type = Derived::JD::linalg::pivots_type; // e.g. std::vector<size_t>;
+            using pivots_type = typename Derived::JD::linalg::pivots_type; // e.g. std::vector<size_t>;
 
 
             // ---- Products ----

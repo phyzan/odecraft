@@ -99,28 +99,28 @@ private:
 // ============================================================================
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK23<T, SD, OdeType, SP, Derived>::Atype RK23<T, SD, OdeType, SP, Derived>::Amatrix() {
+constexpr typename RK23<T, SD, OdeType, SP, Derived>::Atype RK23<T, SD, OdeType, SP, Derived>::Amatrix() {
     return {T(0),   T(0),      T(0),
             T(1)/2, T(0),      T(0),
             T(0),   T(3)/T(4), T(0),};
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK23<T, SD, OdeType, SP, Derived>::Btype RK23<T, SD, OdeType, SP, Derived>::Bmatrix(){
+constexpr typename RK23<T, SD, OdeType, SP, Derived>::Btype RK23<T, SD, OdeType, SP, Derived>::Bmatrix(){
     return {T(2)/9,
             T(1)/3,
             T(4)/9,};
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK23<T, SD, OdeType, SP, Derived>::Ctype RK23<T, SD, OdeType, SP, Derived>::Cmatrix(){
+constexpr typename RK23<T, SD, OdeType, SP, Derived>::Ctype RK23<T, SD, OdeType, SP, Derived>::Cmatrix(){
     return {T(0),
             T(1)/T(2),
             T(3)/T(4),};
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK23<T, SD, OdeType, SP, Derived>::Etype RK23<T, SD, OdeType, SP, Derived>::Ematrix() {
+constexpr typename RK23<T, SD, OdeType, SP, Derived>::Etype RK23<T, SD, OdeType, SP, Derived>::Ematrix() {
     return {T(5)/T(72),
             T(-1)/T(12),
             T(-1)/T(9),
@@ -128,7 +128,7 @@ constexpr RK23<T, SD, OdeType, SP, Derived>::Etype RK23<T, SD, OdeType, SP, Deri
 }
 
 template<typename T, typename SD, typename OdeType, SolverPolicy SP, typename Derived>
-constexpr RK23<T, SD, OdeType, SP, Derived>::Ptype RK23<T, SD, OdeType, SP, Derived>::Pmatrix() {
+constexpr typename RK23<T, SD, OdeType, SP, Derived>::Ptype RK23<T, SD, OdeType, SP, Derived>::Pmatrix() {
     return {T(1),  -T(4)/T(3),  T(5)/T(9),
             T(0),   T(1),      -T(2)/T(3),
             T(0),   T(4)/T(3), -T(8)/T(9),

@@ -91,12 +91,12 @@ const T& BaseSolver<Derived, T, SD, OdeType, SP>::t() const{
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_new() const{
+const typename BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_new() const{
     return this->q_new_;
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_old() const{
+const typename BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_old() const{
     return this->q_old_;
 }
 
@@ -111,12 +111,12 @@ int BaseSolver<Derived, T, SD, OdeType, SP>::direction() const{
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, OdeType, SP>::rtol() const{
+const typename BaseSolver<Derived, T, SD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, OdeType, SP>::rtol() const{
     return rtol_;
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, OdeType, SP>::atol() const{
+const typename BaseSolver<Derived, T, SD, OdeType, SP>::RealState& BaseSolver<Derived, T, SD, OdeType, SP>::atol() const{
     return atol_;
 }
 
@@ -180,7 +180,7 @@ const T& BaseSolver<Derived, T, SD, OdeType, SP>::t_ics() const{
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-const BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_ics() const{
+const typename BaseSolver<Derived, T, SD, OdeType, SP>::State& BaseSolver<Derived, T, SD, OdeType, SP>::vector_ics() const{
     return this->q_ics_;
 }
 

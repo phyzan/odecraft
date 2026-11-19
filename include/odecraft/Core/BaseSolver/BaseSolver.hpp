@@ -104,7 +104,7 @@ explicit instantiation of the CRTP base, as in the compiled library, does not re
 template<typename Derived, typename T, typename SD, SolverPolicy SP>
 class StepperHook : public traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type {
 
-    using Interface = traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type;
+    using Interface = typename traits::SolverVirtualTypeTraits<Derived, T, SD, SP>::type;
 
 public:
 
@@ -175,7 +175,7 @@ public:
     using ode_type = OdeType;
     using State = state_t<T, SD>;
     using JacMat = jacmat_t<T, SD>;
-    using RealState = SD::template state_type<T>;
+    using RealState = typename SD::template state_type<T>;
 
     template<int Order>
     using DualState = dual_state_t<T, SD, Order>;

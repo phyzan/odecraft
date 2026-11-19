@@ -139,7 +139,7 @@ struct VarSD{
             }
 
             // The pivots of block 0, the only block factored
-            using pivots_type = SD::JD::linalg::pivots_type;
+            using pivots_type = typename SD::JD::linalg::pivots_type;
 
             // The iteration matrix is block lower triangular, [[A, 0], [C, A]]: only A, block 0, is
             // factored, and the matrix is singular exactly when A is

@@ -152,12 +152,12 @@ const Interval<T>& LocalInterpolator<T, SD>::interval() const{
 }
 
 template<typename T, typename SD>
-const LocalInterpolator<T, SD>::State& LocalInterpolator<T, SD>::q_start() const{
+const typename LocalInterpolator<T, SD>::State& LocalInterpolator<T, SD>::q_start() const{
     return _q_old;
 }
 
 template<typename T, typename SD>
-const LocalInterpolator<T, SD>::State& LocalInterpolator<T, SD>::q_end() const{
+const typename LocalInterpolator<T, SD>::State& LocalInterpolator<T, SD>::q_end() const{
     return _q;
 }
 
@@ -343,13 +343,13 @@ size_t LinkedInterpolator<T, SD>::size() const{
 
 
 template<typename T, typename SD>
-const LinkedInterpolator<T, SD>::State& LinkedInterpolator<T, SD>::q_start() const{
+const typename LinkedInterpolator<T, SD>::State& LinkedInterpolator<T, SD>::q_start() const{
     return _get(0).q_start();
 }
 
 
 template<typename T, typename SD>
-const LinkedInterpolator<T, SD>::State& LinkedInterpolator<T, SD>::q_end() const{
+const typename LinkedInterpolator<T, SD>::State& LinkedInterpolator<T, SD>::q_end() const{
     return _get_last().q_end();
 }
 

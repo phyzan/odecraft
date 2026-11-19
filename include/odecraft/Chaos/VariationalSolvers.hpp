@@ -105,7 +105,7 @@ template<typename T, typename SD>
 using dir_dual_t = xdiff::Dual<value_t<T, SD>, xdiff::StaticState<1>, 1>;
 
 template<typename T, typename SD>
-using dir_state_t = SD::template state_type<dir_dual_t<T, SD>>;
+using dir_state_t = typename SD::template state_type<dir_dual_t<T, SD>>;
 
 // Whether the main Rhs takes states of such duals, as its derivative along delta_q
 template<typename OdeType, typename T, typename SD>
@@ -120,7 +120,7 @@ template<typename T, typename SD>
 using jac_dual_t = xdiff::Dual<dir_dual_t<T, SD>, SD, 1>;
 
 template<typename T, typename SD>
-using jac_state_t = SD::template state_type<jac_dual_t<T, SD>>;
+using jac_state_t = typename SD::template state_type<jac_dual_t<T, SD>>;
 
 template<typename T, typename SD>
 using jac_seed_state_t = xdiff::SeedState<dir_dual_t<T, SD>, SD, 1>;
@@ -241,12 +241,12 @@ class VariationalSolver : public Stepper::template type<T, VarSD<SD>, Variationa
 
     */
 
-    using Base = Stepper::template type<T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, SP, GetDerived<VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>, Derived>>;
+    using Base = typename Stepper::template type<T, VarSD<SD>, VariationalOdeSys<T, SD, OdeType>, SP, GetDerived<VariationalSolver<Stepper, T, SD, OdeType, SP, Derived>, Derived>>;
 
 public:
     // ChaoticSolver<T, SD, UP> for the virtual policies, through the SolverVirtualTypeTraits
     // specializations at the end of this file, and void for the static ones.
-    using virtual_base = Base::virtual_base;
+    using virtual_base = typename Base::virtual_base;
     using State = contracts::VarState<state_t<T, SD>>; //same as state_t<T, VarSD<SD>>;
     using RealState = contracts::VarState<real_state_t<T, SD>>; // //same as real_state_t<T, VarSD<SD>>;
     using JacMat = jacmat_t<T, VarSD<SD>>;

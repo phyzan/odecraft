@@ -82,7 +82,7 @@ struct SolverBoxSelector<T, SD, UtilPolicy::Virtual>{
 
 
 template<typename T, typename SD, UtilPolicy UP>
-using BoxedSolver = detail::SolverBoxSelector<T, SD, UP>::type;
+using BoxedSolver = typename detail::SolverBoxSelector<T, SD, UP>::type;
 
 template<SolverPolicy SP>
 constexpr bool is_rich = (SP == SolverPolicy::RichStatic || SP == SolverPolicy::RichVirtual);
@@ -230,7 +230,7 @@ inline auto getSolver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, SD> q0,
 template<UtilPolicy UP, typename SD, typename Stepper, typename T, typename OdeType, typename... Args>
 inline BoxedSolver<T, SD, UP> make_solver(Stepper /*stepper*/, OdeType ode, T t0, state_t<T, SD> q0, Args&&... args){
     constexpr SolverPolicy SP = UP == UtilPolicy::RichVirtual ? SolverPolicy::RichVirtual : SolverPolicy::Virtual;
-    using Solver = Stepper::template type<T, SD, OdeType, SP>;
+    using Solver = typename Stepper::template type<T, SD, OdeType, SP>;
     return pbox::make_box<Solver>(std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...);
 }
 

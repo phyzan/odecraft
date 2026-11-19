@@ -19,7 +19,7 @@ class OdeSolver{
 public:
     using State = state_t<T, SD>;
     using JacMat = jacmat_t<T, SD>;
-    using RealState = SD::template state_type<T>;
+    using RealState = typename SD::template state_type<T>;
 
     // ODE PROPERTIES
     virtual void                get_rhs(State& out, const T& t, const State& q) const = 0;

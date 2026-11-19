@@ -89,7 +89,7 @@ private:
 
     JacMat                      J_;
     JacMat                      A_;   // I - c*J, then its LU factors
-    SD::JD::linalg::pivots_type piv_; // the row pivots of the factors in A_
+    typename SD::JD::linalg::pivots_type piv_; // the row pivots of the factors in A_
     std::array<Differences, 2>  D_;  // change_D writes into the one that is not current
     detail::BDFMatrix<T>        R_, U_, RU_;
     detail::BDFCONSTS<T>        coefs_;
