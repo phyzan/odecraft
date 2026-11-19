@@ -15,7 +15,7 @@ template<size_t NDIM>
 DelaunayTri<NDIM>::DelaunayTri(const double* points, size_t n_points, size_t ndim) : points_(points, n_points, ndim) {
     compute_delaunay();
 
-    int nd = this->ndim();
+    const int nd = this->ndim();
     v0_.resize(nsimplices(), nd);
     invT_.resize(nsimplices(), nd, nd);
 
@@ -49,7 +49,13 @@ DelaunayTri<NDIM>::DelaunayTri(const double* points, size_t n_points, size_t ndi
 
 
 template<size_t NDIM>
-int DelaunayTri<NDIM>::ndim() const { return points_.shape(1); }
+int DelaunayTri<NDIM>::ndim() const {
+    if constexpr (NDIM > 0){
+        return NDIM;
+    } else {
+        return points_.shape(1);
+    }
+}
 
 template<size_t NDIM>
 int DelaunayTri<NDIM>::npoints() const { return points_.shape(0); }
@@ -207,7 +213,8 @@ bool DelaunayTri<NDIM>::compute_barycentric(double* out, int simplex_idx, const 
         y[i] = point[i] - v0[i];
     }
 
-    // bary[1..NDIM]
+    // out[0..nd-1], the coordinates of vertices 0..nd-1: v0 is the last vertex, and T maps the
+    // point's offset from it onto the edges to the others
     for (int i = 0; i < nd; ++i) {
         double sum = 0.0;
         for (int j = 0; j < nd; ++j){
@@ -216,7 +223,7 @@ bool DelaunayTri<NDIM>::compute_barycentric(double* out, int simplex_idx, const 
         out[i] = sum;
     }
 
-    // bary[0]
+    // out[nd], the coordinate of the last vertex: they sum to 1
     double sumb = 1.0;
     for (int i = 0; i < nd; ++i){
         sumb -= out[i];

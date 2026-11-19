@@ -40,7 +40,12 @@ void inv_mat_row_major(T* out, const T* mat, size_t N, T* work, T* lu, size_t* p
     // pivot: size N
     if (N == 0){
         return;
+    } else if (N == 1){
+        // Nothing to pivot: the inverse is the reciprocal
+        out[0] = T(1) / mat[0];
+        return;
     }
+
     
     for (size_t i = 0; i < N * N; ++i){
         lu[i] = mat[i];

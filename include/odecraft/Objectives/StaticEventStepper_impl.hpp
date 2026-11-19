@@ -164,7 +164,7 @@ SingleStaticEventStepper<Stepper, T, SD, OdeType, SP, ObjFun>::SingleStaticEvent
 
 template<typename Stepper, typename T, typename SD, typename OdeType, SolverPolicy SP, typename ObjFun>
 template<typename... Args>
-SingleStaticEventStepper<Stepper, T, SD, OdeType, SP, ObjFun>::SingleStaticEventStepper(ObjFun obj_fun, OdeType ode, T t0, State q0, Args&&... args) : Base(std::tuple{ObjFunData{std::move(obj_fun), T{0.0}, 1}}, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...) {}
+SingleStaticEventStepper<Stepper, T, SD, OdeType, SP, ObjFun>::SingleStaticEventStepper(ObjFun obj_fun, int event_dir, OdeType ode, T t0, State q0, Args&&... args) : Base(std::tuple{ObjFunData{std::move(obj_fun), T{0.0}, event_dir}}, std::move(ode), std::move(t0), std::move(q0), std::forward<Args>(args)...) {}
 
 template<typename Stepper, SolverPolicy SP, typename T, typename SD, typename OdeType, typename... ObjFun, typename... Args>
 auto getEventStepper(std::tuple<ObjFunData<T, ObjFun>...> funcs, OdeType ode, Args&&... args){

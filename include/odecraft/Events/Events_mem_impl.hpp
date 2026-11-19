@@ -38,32 +38,28 @@ bool PreciseEvent<T, State, Target, MaskFunc, EP, Derived>::locate_impl(T& t_out
 
     int dir = this->direction() * this->sign_change_dir();
 
-    // Making sure that the previous step was not a detected event
-    if (abs(f_old) > ftol){
-        if (dir * f_old > 0){
-            return false;
-        } else {
-            T f_new = this->obj_fun(t_new, q_new);
-            decltype(auto) worker = this->worker_.get();
-
-            RootStatus rs = bisect_root(
-                t_out,
-                static_cast<T*>(nullptr),
-                [&](const T& t){
-                    // interpolate the state vector at time t, and pass the value on vec
-                    f(worker, t);
-                    return this->obj_fun(t, worker);
-                },
-                t_old, t_new,
-                std::move(f_old), std::move(f_new),
-                this->ftol
-            );
-
-            return rs == RootStatus::Success;
-        }
-    } else {
+    // Don't do f_old >= 0, `dir` can also be zero
+    if (f_old == T(0) || dir * f_old > 0){
         return false;
     }
+
+    T f_new = this->obj_fun(t_new, q_new);
+    decltype(auto) worker = this->worker_.get();
+
+    RootStatus rs = bisect_root(
+        t_out,
+        static_cast<T*>(nullptr),
+        [&](const T& t){
+            // interpolate the state vector at time t, and pass the value on vec
+            f(worker, t);
+            return this->obj_fun(t, worker);
+        },
+        t_old, t_new,
+        std::move(f_old), std::move(f_new),
+        this->ftol
+    );
+
+    return rs == RootStatus::Success;
 }
 
 

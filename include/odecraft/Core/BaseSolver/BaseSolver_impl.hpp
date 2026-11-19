@@ -7,6 +7,7 @@
 #include <tuple>
 #include <utility>
 #include "BaseSolver_mem_impl.hpp"
+#include "odecraft/Core/Status.hpp"
 #include "odecraft/Toolkit/Tools.hpp"
 #include "xdiff/dual/dual_decls.hpp"
 
@@ -308,13 +309,6 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::SetICs(T t0, State y0, T stepsize,
     }
 }
 
-template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
-void BaseSolver<Derived, T, SD, OdeType, SP>::kill(){
-    if (this->is_running()){
-        this->status_ = StepperStatus::Killed;
-    }
-}
-
 //====================== STATIC OVERRIDES =====================================
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
@@ -373,10 +367,20 @@ auto BaseSolver<Derived, T, SD, OdeType, SP>::heavy_interp() const {
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 void BaseSolver<Derived, T, SD, OdeType, SP>::FillCurrentState(State& out) const{
-    if (this->is_at_new_state()){
-        copy_state<SD>(out, q_new_);
-    } else {
-        THIS->local_interp_impl()(out, this->t());
+
+    switch (status_){
+        case StepperStatus::BetweenSteps:
+            THIS->local_interp_impl()(out, this->t());
+            return;
+        default:
+            /*
+            If the status of the solver was set to NewStep this is correct.
+            If it was set to anything other than that (stopped because e.g. it diverged),
+            that could have only happened while the solver was at a new state and tried
+            to perform a new step
+            */
+            copy_state<SD>(out, q_new_);
+            return;
     }
 }
 
@@ -449,7 +453,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::has_valid_ics() const {
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
 bool BaseSolver<Derived, T, SD, OdeType, SP>::ValidateICs(const T& t0, const State& q0) const {
-    if (!all_are_finite<T, SD>(q0) || !isfinite(t0)){
+    if (!all_are_finite<T, SD>(q0) || !isFastFinite(t0)){
         return false;
     }
     decltype(auto) worker = this->scratch_0.get();
@@ -642,7 +646,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::PerformStep(Args&&... args){
         if (this->is_at_new_state() && (time_floor*d <= t_new()*d)){
             return false;
         } else if (this->is_at_new_state()){
-            T scratch_time, scratch_habs;
+            T scratch_time{}, scratch_habs{};
             if (this->take_step(scratch_time, scratch_habs)){
                 if (THIS->RequestTimeFloor(scratch_time)){
                     assert((scratch_time*d > t_old()*d && scratch_time*d <= t_new()*d) && "Invalid floor requested, with additional requests");
@@ -664,7 +668,7 @@ bool BaseSolver<Derived, T, SD, OdeType, SP>::PerformStep(Args&&... args){
             return true;
         }
     } else if (this->is_at_new_state()){
-        T scratch_time, scratch_habs;
+        T scratch_time{}, scratch_habs{};
         if (this->take_step(scratch_time, scratch_habs)){
             if (THIS->RequestTimeFloor(scratch_time) && lt(scratch_time, t_new())){
                 assert((scratch_time*d > t_old()*d && scratch_time*d <= t_new()*d) && "Invalid floor requested without additional requests.");

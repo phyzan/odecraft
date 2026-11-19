@@ -213,6 +213,11 @@ const Event<T, State>& EventCollection<T, State>::event(size_t event_idx) const{
 }
 
 template<typename T, typename State>
+Event<T, State>& EventCollection<T, State>::event(size_t event_idx){
+    return *events[event_idx].get_raw_pointer();
+}
+
+template<typename T, typename State>
 T EventCollection<T, State>::get_time(size_t detection_idx) const{
     assert(detection_idx < detections && "Out of bounds detection_idx requested in get_time");
     return event_times[detection_order[detection_idx]];

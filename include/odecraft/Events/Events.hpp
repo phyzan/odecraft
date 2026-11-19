@@ -481,10 +481,11 @@ public:
 
     /// @brief Get event by index.
     const event_t&          event(size_t event_idx) const;
+    event_t&                event(size_t event_idx);
 
     T                       get_time(size_t detection_idx) const;
 
-    const event_t*         get_event(size_t detection_idx) const;
+    const event_t*          get_event(size_t detection_idx) const;
 
     bool                    is_located(size_t event_idx) const;
 

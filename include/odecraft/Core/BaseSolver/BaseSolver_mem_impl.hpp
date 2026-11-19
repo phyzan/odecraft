@@ -164,7 +164,7 @@ BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::generic_interpolate_
     const T t_start = this->t();
     const bool reached = this->advance_until(
         time,
-        [&](const T& t, State q, const T* t_ptr){
+        [&](const T& t, const State& q, const T* t_ptr){
             // The solver is already at t, so the chain is extended before the observer is
             // asked: if it stops the integration here, the dense output still reaches t.
             // (covered, t) always lies within the step now held: `covered` is either the
@@ -183,7 +183,7 @@ BoxedInterp<T, SD> BaseSolver<Derived, T, SD, OdeType, SP>::generic_interpolate_
                 }
                 interp->expand(std::move(segment));
                 // q is the current vector at t, filled by generic_advance_until.
-                interp->expand(std::make_unique<LocalInterpolator<T, SD>>(t, std::move(q)));
+                interp->expand(std::make_unique<LocalInterpolator<T, SD>>(t, q));
             }
             if constexpr (isObserver<Callable, T, State>){
                 return observer(t, q, t_ptr);

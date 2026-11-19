@@ -114,7 +114,7 @@ bool ODE<T, SD>::integrate(
         throw std::runtime_error("Integration interval must be non-negative");
     }
 
-    T t_max = interval + solver_->get_time()*solver_->get_direction();
+    T t_max = solver_->get_time() + interval*solver_->get_direction();
 
     return this->integrate_until(
         out,
@@ -136,7 +136,7 @@ bool ODE<T, SD>::integrate(
         throw std::runtime_error("Integration interval must be non-negative");
     }
 
-    T t_max = interval + solver_->get_time()*solver_->get_direction();
+    T t_max = solver_->get_time() + interval*solver_->get_direction();
 
     return this->integrate_until(
         out,
@@ -171,7 +171,7 @@ bool ODE<T, SD>::rich_integrate(
     if (interval < 0){
         throw std::runtime_error("Integration interval must be non-negative");
     }
-    T t_max = interval + solver_->get_time()*solver_->get_direction();
+    T t_max = solver_->get_time() + interval*solver_->get_direction();
     return this->rich_integrate_until(
         out,
         t_max,
