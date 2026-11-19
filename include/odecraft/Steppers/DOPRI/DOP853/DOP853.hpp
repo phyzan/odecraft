@@ -6,8 +6,8 @@
 namespace ode{
 
 // ============================================================================
-// Raw Butcher-tableau constants for DOP853 (Hairer, Norsett & Wanner).
-// Purely data - no solver logic lives here.
+// The Butcher tableau of DOP853 (Hairer, Norsett & Wanner), exactly, so that it holds at any
+// precision of T: see DOP853_impl.hpp. Purely data - no solver logic lives here.
 // ============================================================================
 
 template<typename T>

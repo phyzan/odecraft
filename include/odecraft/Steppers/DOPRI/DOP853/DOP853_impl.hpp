@@ -8,261 +8,383 @@ namespace ode{
 
 
 // ============================================================================
-// DOP_COEFS: raw Butcher-tableau data
+// DOP_COEFS: the Butcher tableau, exactly
 // ============================================================================
+//
+// Hairer's dop853.f gives these constants as decimals of 26 to 30 digits, which would cap a
+// multiprecision T near 1e-28. Here every one is exact: rational, or (p + q sqrt 6)/n. They were
+// worked out in exact arithmetic over Q(sqrt 6) from the conditions the method is built on, as
+// below. The inputs are Hairer's free choices: the nodes, which entries vanish, and eight
+// constants marked "chosen". The decimals give those eight as rationals with denominators of at
+// most 11 digits, recovered by continued fractions. Every derived constant agrees with the
+// decimals to all of their digits, and the derived constants that the decimals also give as such
+// rationals are those rationals exactly, which confirms the inputs.
+//
+// Notation. Stages are numbered from 0, as in the code, one below Hairer's numbering: stage i
+// evaluates K[i] at t + c(i) h from row i of A. The stage defect
+//     d_i(k) = sum_j a(i,j) c(j)^(k-1) - c(i)^k / k
+// vanishes for k = 1..q when stage i integrates every polynomial of degree below q exactly. The
+// order conditions are Butcher's, one per rooted tree t: there are 1, 1, 2, 4, 9, 20, 48 and 115
+// trees with 1 to 8 vertices. The stage weights of t are Phi_i(t) = 1 if t is a single vertex,
+// and otherwise the product over the subtrees s at its root of sum_j a(i,j) Phi_j(s). Weights w
+// have order p when sum_i w(i) Phi_i(t) = 1/gamma(t), gamma(t) being the density of t, for every
+// tree of at most p vertices.
+//
+// 1. Nodes (chosen). c(3) = (6 - sqrt 6)/30, c(4) = (6 + sqrt 6)/30, c(2) = 2 c(3)/3,
+//    c(1) = 2 c(2)/3, and c(5..15) = 1/3, 1/4, 4/13, 127/195, 3/5, 6/7, 1, 1, 1/10, 1/5, 7/9.
+//
+// 2. b, the 8th order solution. It is nonzero on stages 0 and 5..11 only, and there it is the
+//    quadrature of degree 7 on their nodes: sum_i b(i) c(i)^(k-1) = 1/k for k = 1..8.
+//
+// 3. Rows 1..11. Their 50 nonzero entries are subject to 55 linear conditions:
+//    - a row with n entries integrates exactly up to degree min(n, 5) - 1: d_i(k) = 0 for
+//      k = 1..min(n, 5);
+//    - stages 3 and 4, which have no weight, satisfy D(3): sum_i b(i) c(i)^(k-1) a(i,j) = 0
+//      for k = 1, 2, 3;
+//    - stages 5..10 satisfy D(1): sum_i b(i) a(i,j) = b(j) (1 - c(j));
+//    - three order conditions that are linear in the entries: sum_i b(i) d_i(6) = 0 (order 7),
+//      and sum_i b(i) c(i) d_i(6) = sum_i b(i) d_i(7) = 0 (order 8).
+//    These have rank 49, which leaves a(11,7) free. An order 8 condition that is linear in it
+//    gives a(11,7) = -2509602342/877790785. All 200 conditions up to order 8 then hold (checked
+//    at 80 digits), and order 9 does not. In rows 5..11, the entries on stages 3 and 4
+//    come out as conjugate pairs (p +- q sqrt 6)/n, and the others are rational.
+//
+// 4. E3 = b - bhh. The 3rd order solution bhh is the quadrature of degree 2 on the nodes of
+//    stages 0, 8 and 11: bhh = 31/127, 12675/17272 and 3/136.
+//
+// 5. E5 = b - bhat. The 5th order solution bhat has the stages of b, and is a quadrature of
+//    degree 4 on them, which leaves three of its eight weights free. Those are chosen:
+//    bhat(5) = 8670301/1527680, bhat(6) = 22407563/9386244 and bhat(11) = 137909/2056320, which
+//    is 3 b(11)/2. Since b, bhh and bhat each sum to 1, E3 and E5 sum to exactly 0, so a step on
+//    which f is constant estimates no error. The decimals of E5 sum to -4.6e-28 instead.
+//
+// 6. Dense output. Stage 12 evaluates f at the new solution, so its row is b, and stages 13..15
+//    are evaluated for the dense output alone. At x = (t - t_old)/h,
+//        u(x) = y_old + x F0 + x(1-x) F1 + x^2(1-x) F2
+//                     + x^2(1-x)^2 (F3 + x F4 + x(1-x) F5 + x^2(1-x) F6),
+//    where F0..F2 come from y_old, y_new, f_old and f_new, and F3..F6 = h D K over stages 0 and
+//    5..15 (see coef_mat_interp_dop853). With beta_j(x) the weight of K[j] in u(x), u has order 7
+//    when sum_j beta_j(x) Phi_j(t) = x^|t| / gamma(t) for every x and each of the 85 trees of at
+//    most 7 vertices.
+//    - Rows 13 and 15 satisfy C(6): d_i(k) = 0 for k = 1..6. That fixes six of their eight
+//      entries, and the two others are chosen: a(13,9) = 57799439/377055000,
+//      a(13,12) = -4149/500000, a(15,13) = 157882067000/53564469831 and
+//      a(15,14) = -290468882375/31741908048.
+//    - Row 14 satisfies C(6) as well, with a(14,13) = 1912306948/13532473845 chosen. Stages 11
+//      and 12 share the node 1, so C(6) only fixes a(14,11) + a(14,12).
+//    - For each tree, x^|t| / gamma(t) minus the F0..F2 part is x^2(1-x)^2 times a cubic, by the
+//      order of b. The F3..F6 part must equal it, which is one linear condition on each row of D.
+//      Each row of D thus has 85 conditions on its 12 entries, of rank 12. They are consistent
+//      only for a(14,12) = -11518334563/33831184612500, and then D is unique, and rational.
+//    The dense output then satisfies every condition up to order 7 (checked at 60 digits, as
+//    coef_mat_interp_dop853 evaluates it), and not those of order 8.
+//
+// Each table is worked out in dop853_work_t<T>, then rounded to T once. For the built-in floating
+// types that is long double: where it is wider than double, as on x86, their constants come out
+// correctly rounded, as the decimals did.
+
+namespace detail{
+
+/// @brief Where DOP853's constants are worked out before they are rounded to T: long double for
+/// the built-in floating types, and T itself for any other.
+template<typename T>
+using dop853_work_t = std::conditional_t<std::is_floating_point_v<T>, long double, T>;
+
+/// @brief n/d in T. Every n and d below fits in 63 bits, so for a T with at least 64 bits of
+/// precision this is correctly rounded.
+template<typename T>
+T fraction(long long n, long long d){
+    return T(n) / T(d);
+}
+
+/// @brief The table `work` of DOP_COEFS<dop853_work_t<T>>, with each entry rounded to T.
+template<typename T, typename Table, typename Work>
+Table rounded_table(const Work& work){
+    if constexpr (std::is_same_v<Table, Work>){
+        return work;
+    } else {
+        Table res;
+        for (size_t k = 0; k < work.size(); ++k){
+            res.data()[k] = T(work.data()[k]);
+        }
+        return res;
+    }
+}
+
+} // namespace ode::detail
 
 template<typename T>
 constexpr DOP_COEFS<T>::DOP_A DOP_COEFS<T>::make_A(){
-    DOP_A res(N_STAGES_EXT, N_STAGES_EXT);
+    using W = detail::dop853_work_t<T>;
+    const auto q = detail::fraction<W>;
+    const W r6 = sqrt(W(6));
+    const auto c = DOP_COEFS<W>::make_C();
+
+    typename DOP_COEFS<W>::DOP_A res(N_STAGES_EXT, N_STAGES_EXT);
     res.fill(0);
 
+    // Stages 1..11: step 3 above
     // Stage 1
-    res(1, 0) = 5.26001519587677318785587544488e-2;
+    res(1, 0) = c(1);
 
     // Stage 2
-    res(2, 0) = 1.97250569845378994544595329183e-2;
-    res(2, 1) = 5.91751709536136983633785987549e-2;
+    res(2, 0) = c(2)/W(4);
+    res(2, 1) = W(3)*c(2)/W(4);
 
     // Stage 3
-    res(3, 0) = 2.95875854768068491816892993775e-2;
-    res(3, 2) = 8.87627564304205475450678981324e-2;
+    res(3, 0) = c(3)/W(4);
+    res(3, 2) = W(3)*c(3)/W(4);
 
     // Stage 4
-    res(4, 0) = 2.41365134159266685502369798665e-1;
-    res(4, 2) = -8.84549479328286085344864962717e-1;
-    res(4, 3) = 9.24834003261792003115737966543e-1;
+    res(4, 0) = (W(462) + W(107)*r6)/W(3000);
+    res(4, 2) = (W(-402) - W(197)*r6)/W(1000);
+    res(4, 3) = (W(168) + W(73)*r6)/W(375);
 
     // Stage 5
-    res(5, 0) = T(1)/T(27);
-    res(5, 3) = 1.70828608729473871279604482173e-1;
-    res(5, 4) = 1.25467687566822425016691814123e-1;
+    res(5, 0) = q(1, 27);
+    res(5, 3) = (W(16) + r6)/W(108);
+    res(5, 4) = (W(16) - r6)/W(108);
 
     // Stage 6
-    res(6, 0) = T(19)/T(512);
-    res(6, 3) = 1.70252211019544039314978060272e-1;
-    res(6, 4) = 6.02165389804559606850219397283e-2;
-    res(6, 5) = T(-9)/T(512);
+    res(6, 0) = q(19, 512);
+    res(6, 3) = (W(118) + W(23)*r6)/W(1024);
+    res(6, 4) = (W(118) - W(23)*r6)/W(1024);
+    res(6, 5) = q(-9, 512);
 
     // Stage 7
-    res(7, 0) = 3.70920001185047927108779319836e-2;
-    res(7, 3) = 1.70383925712239993810214054705e-1;
-    res(7, 4) = 1.07262030446373284651809199168e-1;
-    res(7, 5) = -1.53194377486244017527936158236e-2;
-    res(7, 6) = 8.27378916381402288758473766002e-3;
+    res(7, 0) = q(13772, 371293);
+    res(7, 3) = (W(51544) + W(4784)*r6)/W(371293);
+    res(7, 4) = (W(51544) - W(4784)*r6)/W(371293);
+    res(7, 5) = q(-5688, 371293);
+    res(7, 6) = q(3072, 371293);
 
     // Stage 8
-    res(8, 0) = 6.24110958716075717114429577812e-1;
-    res(8, 3) = -3.36089262944694129406857109825;
-    res(8, 4) = -8.68219346841726006818189891453e-1;
-    res(8, 5) = 2.75920996994467083049415600797e1;
-    res(8, 6) = 2.01540675504778934086186788979e1;
-    res(8, 7) = -4.34898841810699588477366255144e1;
+    res(8, 0) = q(58656157643, 93983540625);
+    res(8, 3) = (W(-1324889724104) - W(318801444819)*r6)/W(626556937500);
+    res(8, 4) = (W(-1324889724104) + W(318801444819)*r6)/W(626556937500);
+    res(8, 5) = q(96044563816, 3480871875);
+    res(8, 6) = q(5682451879168, 281950621875);
+    res(8, 7) = q(-165125654, 3796875);
 
     // Stage 9
-    res(9, 0) = 4.77662536438264365890433908527e-1;
-    res(9, 3) = -2.48811461997166764192642586468;
-    res(9, 4) = -5.90290826836842996371446475743e-1;
-    res(9, 5) = 2.12300514481811942347288949897e1;
-    res(9, 6) = 1.52792336328824235832596922938e1;
-    res(9, 7) = -3.32882109689848629194453265587e1;
-    res(9, 8) = -2.03312017085086261358222928593e-2;
+    res(9, 0) = q(8909899, 18653125);
+    res(9, 3) = (W(-4521408) - W(1137963)*r6)/W(2937500);
+    res(9, 4) = (W(-4521408) + W(1137963)*r6)/W(2937500);
+    res(9, 5) = q(96663078, 4553125);
+    res(9, 6) = q(2107245056, 137915625);
+    res(9, 7) = q(-4913652016, 147609375);
+    res(9, 8) = q(-78894270, 3880452869);
 
     // Stage 10
-    res(10, 0) = -9.3714243008598732571704021658e-1;
-    res(10, 3) = 5.18637242884406370830023853209;
-    res(10, 4) = 1.09143734899672957818500254654;
-    res(10, 5) = -8.14978701074692612513997267357;
-    res(10, 6) = -1.85200656599969598641566180701e1;
-    res(10, 7) = 2.27394870993505042818970056734e1;
-    res(10, 8) = 2.49360555267965238987089396762;
-    res(10, 9) = -3.0467644718982195003823669022;
+    res(10, 0) = q(-20401265806, 21769653311);
+    res(10, 3) = (W(354216) + W(94326)*r6)/W(112847);
+    res(10, 4) = (W(354216) - W(94326)*r6)/W(112847);
+    res(10, 5) = q(-43306765128, 5313852383);
+    res(10, 6) = q(-20866708358144, 1126708119789);
+    res(10, 7) = q(14886003438020, 654632330667);
+    res(10, 8) = q(35290686222309375, 14152473387134411);
+    res(10, 9) = q(-1477884375, 485066827);
 
-    // Stage 11
-    res(11, 0) = 2.27331014751653820792359768449;
-    res(11, 3) = -1.05344954667372501984066689879e1;
-    res(11, 4) = -2.00087205822486249909675718444;
-    res(11, 5) = -1.79589318631187989172765950534e1;
-    res(11, 6) = 2.79488845294199600508499808837e1;
-    res(11, 7) = -2.85899827713502369474065508674;
-    res(11, 8) = -8.87285693353062954433549289258;
-    res(11, 9) = 1.23605671757943030647266201528e1;
-    res(11, 10) = 6.43392746015763530355970484046e-1;
+    // Stage 11: a(11,7) from an order 8 condition
+    res(11, 0) = q(39815761, 17514443);
+    res(11, 3) = (W(-3457480) - W(960905)*r6)/W(551636);
+    res(11, 4) = (W(-3457480) + W(960905)*r6)/W(551636);
+    res(11, 5) = q(-844554132, 47026969);
+    res(11, 6) = q(8444996352, 302158619);
+    res(11, 7) = q(-2509602342, 877790785);
+    res(11, 8) = q(-28388795297996250, 3199510091356783);
+    res(11, 9) = q(226716250, 18341897);
+    res(11, 10) = q(1371316744, 2131383595);
 
-    // Stage 12 (this is B coefficients, but part of extended A matrix)
-    res(12, 0) = 5.42937341165687622380535766363e-2;
-    res(12, 5) = 4.45031289275240888144113950566;
-    res(12, 6) = 1.89151789931450038304281599044;
-    res(12, 7) = -5.8012039600105847814672114227;
-    res(12, 8) = 3.1116436695781989440891606237e-1;
-    res(12, 9) = -1.52160949662516078556178806805e-1;
-    res(12, 10) = 2.01365400804030348374776537501e-1;
-    res(12, 11) = 4.47106157277725905176885569043e-2;
+    // Stage 12 evaluates f at the new solution, whose row is b (FSAL)
+    const auto b = DOP_COEFS<W>::make_B();
+    for (size_t j = 0; j < N_STAGES; ++j){
+        res(12, j) = b(j);
+    }
 
-    // Stage 13
-    res(13, 0) = 5.61675022830479523392909219681e-2;
-    res(13, 6) = 2.53500210216624811088794765333e-1;
-    res(13, 7) = -2.46239037470802489917441475441e-1;
-    res(13, 8) = -1.24191423263816360469010140626e-1;
-    res(13, 9) = 1.5329179827876569731206322685e-1;
-    res(13, 10) = 8.20105229563468988491666602057e-3;
-    res(13, 11) = 7.56789766054569976138603589584e-3;
-    res(13, 12) = -8.298e-3;
+    // Stages 13..15, for dense output only: step 6 above
+    // Stage 13: C(6), with a(13,9) and a(13,12) chosen
+    res(13, 0) = q(13481885573, 240030000000);
+    res(13, 6) = q(139418837528, 549975234375);
+    res(13, 7) = q(-11108320068443, 45111937500000);
+    res(13, 8) = q(-1769651421925959, 14249385146080000);
+    res(13, 9) = q(57799439, 377055000);
+    res(13, 10) = q(793322643029, 96734250000000);
+    res(13, 11) = q(1458939311, 192780000000);
+    res(13, 12) = q(-4149, 500000);
 
-    // Stage 14
-    res(14, 0) = 3.18346481635021405060768473261e-2;
-    res(14, 5) = 2.83009096723667755288322961402e-2;
-    res(14, 6) = 5.35419883074385676223797384372e-2;
-    res(14, 7) = -5.49237485713909884646569340306e-2;
-    res(14, 10) = -1.08347328697249322858509316994e-4;
-    res(14, 11) = 3.82571090835658412954920192323e-4;
-    res(14, 12) = -3.40465008687404560802977114492e-4;
-    res(14, 13) = 1.41312443674632500278074618366e-1;
+    // Stage 14: C(6), with a(14,13) chosen, and a(14,12) fixed by the order 7 conditions
+    res(14, 0) = q(1595561272731, 50120273500000);
+    res(14, 5) = q(975183916491, 34457688031250);
+    res(14, 6) = q(38492013932672, 718912673015625);
+    res(14, 7) = q(-1114881286517557, 20298710767500000);
+    res(14, 10) = q(-2538710946863, 23431227861250000);
+    res(14, 11) = q(8824659001, 23066716781250);
+    res(14, 12) = q(-11518334563, 33831184612500);
+    res(14, 13) = q(1912306948, 13532473845);
 
-    // Stage 15
-    res(15, 0) = -4.28896301583791923408573538692e-1;
-    res(15, 5) = -4.69762141536116384314449447206;
-    res(15, 6) = 7.68342119606259904184240953878;
-    res(15, 7) = 4.06898981839711007970213554331;
-    res(15, 8) = 3.56727187455281109270669543021e-1;
-    res(15, 12) = -1.39902416515901462129418009734e-3;
-    res(15, 13) = 2.9475147891527723389556272149;
-    res(15, 14) = -9.15095847217987001081870187138;
+    // Stage 15: C(6), with a(15,13) and a(15,14) chosen
+    res(15, 0) = q(-13613986967, 31741908048);
+    res(15, 5) = q(-4755612631, 1012344804);
+    res(15, 6) = q(42939257944576, 5588559685701);
+    res(15, 7) = q(77881972900277, 19140370552944);
+    res(15, 8) = q(22719829234375, 63689648654052);
+    res(15, 12) = q(-1199007803, 857031517296);
+    res(15, 13) = q(157882067000, 53564469831);
+    res(15, 14) = q(-290468882375, 31741908048);
 
-    return res;
+    return detail::rounded_table<T, DOP_A>(res);
 }
 
 template<typename T>
 constexpr DOP_COEFS<T>::DOP_B DOP_COEFS<T>::make_B(){
-    // B coefficients are row 12 of the A matrix (the 8th order solution weights)
-    DOP_A a = make_A();
-    DOP_B res(N_STAGES);
-    for(size_t i = 0; i < N_STAGES; ++i){
-        res(i) = a(12, i);
-    }
-    return res;
+    // The weights of the 8th order solution: step 2 above
+    using W = detail::dop853_work_t<T>;
+    const auto q = detail::fraction<W>;
+    typename DOP_COEFS<W>::DOP_B res(N_STAGES);
+    res.fill(0);
+    res(0) = q(104257, 1920240);
+    res(5) = q(3399327, 763840);
+    res(6) = q(66578432, 35198415);
+    res(7) = q(-1674902723, 288716400);
+    res(8) = q(54980371265625, 176692375811392);
+    res(9) = q(-734375, 4826304);
+    res(10) = q(171414593, 851261400);
+    res(11) = q(137909, 3084480);
+    return detail::rounded_table<T, DOP_B>(res);
 }
 
 template<typename T>
 constexpr DOP_COEFS<T>::DOP_C DOP_COEFS<T>::make_C(){
-    DOP_C res(N_STAGES_EXT);
+    // The nodes: step 1 above
+    using W = detail::dop853_work_t<T>;
+    const W r6 = sqrt(W(6));
+    typename DOP_COEFS<W>::DOP_C res(N_STAGES_EXT);
     res(0) = 0;
-    res(1) = 0.526001519587677318785587544488e-01;
-    res(2) = 0.789002279381515978178381316732e-01;
-    res(3) = 0.118350341907227396726757197510;
-    res(4) = 0.281649658092772603273242802490;
-    res(5) = T(1)/T(3);
-    res(6) = T(1)/T(4);
-    res(7) = T(4)/T(13);
-    res(8) = T(127)/T(195);
-    res(9) = T(3)/T(5);
-    res(10) = T(6)/T(7);
-    res(11) = 1.0;
-    res(12) = 1.0;
-    res(13) = 0.1;
-    res(14) = 0.2;
-    res(15) = T(7)/T(9);
-    return res;
+    res(3) = (W(6) - r6)/W(30);
+    res(4) = (W(6) + r6)/W(30);
+    res(2) = W(2)*res(3)/W(3);
+    res(1) = W(2)*res(2)/W(3);
+    res(5) = W(1)/W(3);
+    res(6) = W(1)/W(4);
+    res(7) = W(4)/W(13);
+    res(8) = W(127)/W(195);
+    res(9) = W(3)/W(5);
+    res(10) = W(6)/W(7);
+    res(11) = 1;
+    res(12) = 1;
+    res(13) = W(1)/W(10);
+    res(14) = W(1)/W(5);
+    res(15) = W(7)/W(9);
+    return detail::rounded_table<T, DOP_C>(res);
 }
 
 template<typename T>
 constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E3(){
-    DOP_E res(N_STAGES + 1);
-    // E3 = B - B3 (3rd order embedded method)
-    // Most values are zero, only differences are specified
-    res(0) = 5.42937341165687622380535766363e-2 - 0.244094488188976377952755905512;
-    res(1) = 0;
-    res(2) = 0;
-    res(3) = 0;
-    res(4) = 0;
-    res(5) = 4.45031289275240888144113950566;
-    res(6) = 1.89151789931450038304281599044;
-    res(7) = -5.8012039600105847814672114227;
-    res(8) = 3.1116436695781989440891606237e-1 - 0.733846688281611857341361741547;
-    res(9) = -1.52160949662516078556178806805e-1;
-    res(10) = 2.01365400804030348374776537501e-1;
-    res(11) = 4.47106157277725905176885569043e-2 - 0.220588235294117647058823529412e-1;
-    res(12) = 0;
-    return res;
+    // E3 = b - bhh, bhh being the embedded 3rd order solution: step 4 above
+    using W = detail::dop853_work_t<T>;
+    const auto q = detail::fraction<W>;
+    const auto b = DOP_COEFS<W>::make_B();
+    typename DOP_COEFS<W>::DOP_E res(N_STAGES + 1);
+    res.fill(0);
+    for (size_t i = 0; i < N_STAGES; ++i){
+        res(i) = b(i);
+    }
+    res(0) -= q(31, 127);
+    res(8) -= q(12675, 17272);
+    res(11) -= q(3, 136);
+    return detail::rounded_table<T, DOP_E>(res);
 }
 
 template<typename T>
 constexpr DOP_COEFS<T>::DOP_E DOP_COEFS<T>::make_E5(){
-    DOP_E res(N_STAGES + 1);
+    // E5 = b - bhat, bhat being the embedded 5th order solution: step 5 above
+    using W = detail::dop853_work_t<T>;
+    const auto q = detail::fraction<W>;
+    const auto b = DOP_COEFS<W>::make_B();
+    typename DOP_COEFS<W>::DOP_B bhat(N_STAGES);
+    bhat.fill(0);
+    bhat(0) = q(72864797, 1769693184);
+    bhat(5) = q(8670301, 1527680);
+    bhat(6) = q(22407563, 9386244);
+    bhat(7) = q(-1839305140361, 246371328000);
+    bhat(8) = q(3740185851728885, 5654156025964544);
+    bhat(9) = q(-676000805, 1389975552);
+    bhat(10) = q(2342627240947, 19613062656000);
+    bhat(11) = q(137909, 2056320);
+    typename DOP_COEFS<W>::DOP_E res(N_STAGES + 1);
     res.fill(0);
-    // E5 = B - B5 (5th order embedded method)
-    res(0) = 0.1312004499419488073250102996e-1;
-    res(5) = -0.1225156446376204440720569753e+1;
-    res(6) = -0.4957589496572501915214079952;
-    res(7) = 0.1664377182454986536961530415e+1;
-    res(8) = -0.3503288487499736816886487290;
-    res(9) = 0.3341791187130174790297318841;
-    res(10) = 0.8192320648511571246570742613e-1;
-    res(11) = -0.2235530786388629525884427845e-1;
-    return res;
+    for (size_t i = 0; i < N_STAGES; ++i){
+        res(i) = b(i) - bhat(i);
+    }
+    return detail::rounded_table<T, DOP_E>(res);
 }
 
 template<typename T>
 constexpr DOP_COEFS<T>::DOP_D DOP_COEFS<T>::make_D(){
-    DOP_D res(INTERP_ORDER - 3, N_STAGES_EXT);
+    // The dense output's F3..F6 = h D K: step 6 above, and coef_mat_interp_dop853
+    using W = detail::dop853_work_t<T>;
+    const auto q = detail::fraction<W>;
+    typename DOP_COEFS<W>::DOP_D res(INTERP_ORDER - 3, N_STAGES_EXT);
     res.fill(0);
 
-    // D[0, :] - first interpolation coefficients
-    res(0, 0) = -0.84289382761090128651353491142e+1;
-    res(0, 5) = 0.56671495351937776962531783590;
-    res(0, 6) = -0.30689499459498916912797304727e+1;
-    res(0, 7) = 0.23846676565120698287728149680e+1;
-    res(0, 8) = 0.21170345824450282767155149946e+1;
-    res(0, 9) = -0.87139158377797299206789907490;
-    res(0, 10) = 0.22404374302607882758541771650e+1;
-    res(0, 11) = 0.63157877876946881815570249290;
-    res(0, 12) = -0.88990336451333310820698117400e-1;
-    res(0, 13) = 0.18148505520854727256656404962e+2;
-    res(0, 14) = -0.91946323924783554000451984436e+1;
-    res(0, 15) = -0.44360363875948939664310572000e+1;
+    // F3: the factor of x^2 (1-x)^2
+    res(0, 0) = q(-17751989329, 2106076560);
+    res(0, 5) = q(4272954039, 7539864640);
+    res(0, 6) = q(-118476319744, 38604839385);
+    res(0, 7) = q(755123450731, 316657731600);
+    res(0, 8) = q(3692384461234828125, 1744130441634250432);
+    res(0, 9) = q(-4612609375, 5293382976);
+    res(0, 10) = q(2091772278379, 933644586600);
+    res(0, 11) = q(2136624137, 3382989120);
+    res(0, 12) = q(-126493, 1421424);
+    res(0, 13) = q(98350000, 5419179);
+    res(0, 14) = q(-18878125, 2053168);
+    res(0, 15) = q(-1944542619, 438351368);
 
-    // D[1, :] - second interpolation coefficients
-    res(1, 0) = 0.10427508642579134603413151009e+2;
-    res(1, 5) = 0.24228349177525818288430175319e+3;
-    res(1, 6) = 0.16520045171727028198505394887e+3;
-    res(1, 7) = -0.37454675472269020279518312152e+3;
-    res(1, 8) = -0.22113666853125306036270938578e+2;
-    res(1, 9) = 0.77334326684722638389603898808e+1;
-    res(1, 10) = -0.30674084731089398182061213626e+2;
-    res(1, 11) = -0.93321305264302278729567221706e+1;
-    res(1, 12) = 0.15697238121770843886131091075e+2;
-    res(1, 13) = -0.31139403219565177677282850411e+2;
-    res(1, 14) = -0.93529243588444783865713862664e+1;
-    res(1, 15) = 0.35816841486394083752465898540e+2;
+    // F4: the factor of x^3 (1-x)^2
+    res(1, 0) = q(32941697297, 3159114840);
+    res(1, 5) = q(456696183123, 1884966160);
+    res(1, 6) = q(19132610714624, 115814518155);
+    res(1, 7) = q(-177904688592943, 474986597400);
+    res(1, 8) = q(-4821139941836765625, 218016305204281304);
+    res(1, 9) = q(30702015625, 3970037232);
+    res(1, 10) = q(-42958039737137, 1400466879900);
+    res(1, 11) = q(-5919468007, 634310460);
+    res(1, 12) = q(2479159, 157936);
+    res(1, 13) = q(-18750000, 602131);
+    res(1, 14) = q(-19203125, 2053168);
+    res(1, 15) = q(15700361463, 438351368);
 
-    // D[2, :] - third interpolation coefficients
-    res(2, 0) = 0.19985053242002433820987653617e+2;
-    res(2, 5) = -0.38703730874935176555105901742e+3;
-    res(2, 6) = -0.18917813819516756882830838328e+3;
-    res(2, 7) = 0.52780815920542364900561016686e+3;
-    res(2, 8) = -0.11573902539959630126141871134e+2;
-    res(2, 9) = 0.68812326946963000169666922661e+1;
-    res(2, 10) = -0.10006050966910838403183860980e+1;
-    res(2, 11) = 0.77771377980534432092869265740;
-    res(2, 12) = -0.27782057523535084065932004339e+1;
-    res(2, 13) = -0.60196695231264120758267380846e+2;
-    res(2, 14) = 0.84320405506677161018159903784e+2;
-    res(2, 15) = 0.11992291136182789328035130030e+2;
+    // F5: the factor of x^3 (1-x)^3
+    res(2, 0) = q(12627015655, 631822968);
+    res(2, 5) = q(-72955222965, 188496616);
+    res(2, 6) = q(-13145744952320, 69488710893);
+    res(2, 7) = q(30084216194513, 56998391688);
+    res(2, 8) = q(-296858761006640625, 25648977082856624);
+    res(2, 9) = q(569140625, 82709109);
+    res(2, 10) = q(-18684190637, 18672891732);
+    res(2, 11) = q(69644045, 89549712);
+    res(2, 12) = q(-11847025, 4264272);
+    res(2, 13) = q(-978650000, 16257537);
+    res(2, 14) = q(519371875, 6159504);
+    res(2, 15) = q(5256837225, 438351368);
 
-    // D[3, :] - fourth interpolation coefficients
-    res(3, 0) = -0.25693933462703749003312586129e+2;
-    res(3, 5) = -0.15418974869023643374053993627e+3;
-    res(3, 6) = -0.23152937917604549567536039109e+3;
-    res(3, 7) = 0.35763911791061412378285349910e+3;
-    res(3, 8) = 0.93405324183624310003907691704e+2;
-    res(3, 9) = -0.37458323136451633156875139351e+2;
-    res(3, 10) = 0.10409964950896230045147246184e+3;
-    res(3, 11) = 0.29840293426660503123344363579e+2;
-    res(3, 12) = -0.43533456590011143754432175058e+2;
-    res(3, 13) = 0.96324553959188282948394950600e+2;
-    res(3, 14) = -0.39177261675615439165231486172e+2;
-    res(3, 15) = -0.14972683625798562581422125276e+3;
+    // F6: the factor of x^4 (1-x)^3
+    res(3, 0) = q(-450944925, 17550638);
+    res(3, 5) = q(-14532122925, 94248308);
+    res(3, 6) = q(-595876966400, 2573655959);
+    res(3, 7) = q(188748653015, 527762886);
+    res(3, 8) = q(2545485458115234375, 27252038150535163);
+    res(3, 9) = q(-1376953125, 36759604);
+    res(3, 10) = q(53995596795, 518691437);
+    res(3, 11) = q(210311225, 7047894);
+    res(3, 12) = q(-1718875, 39484);
+    res(3, 13) = q(58000000, 602131);
+    res(3, 14) = q(-1546875, 39484);
+    res(3, 15) = q(-1262172375, 8429834);
 
-    return res;
+    return detail::rounded_table<T, DOP_D>(res);
 }
 
 namespace detail{
