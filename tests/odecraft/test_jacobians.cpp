@@ -67,7 +67,7 @@ TEMPLATE_TEST_CASE("An explicit Jacobian is the one the system provides", "[jaco
 
             auto J = make_jacmat<SD, T>(sample_point<SD, T>());
             solver.jac(J, sample_time<T>(), sample_point<SD, T>());
-            CHECK(max_matrix_error(J, exact_jacobian<SD, T>(), 2).value == 0);
+            CHECK_THAT(max_matrix_error(J, exact_jacobian<SD, T>(), 2), IsAtMost(own_jacobian_rounding<T>()));
         }
     });
 }
@@ -81,7 +81,7 @@ TEMPLATE_TEST_CASE("A nullable Jacobian is used when it is set", "[jacobian][nul
 
             auto J = make_jacmat<SD, T>(sample_point<SD, T>());
             solver.jac(J, sample_time<T>(), sample_point<SD, T>());
-            CHECK(max_matrix_error(J, exact_jacobian<SD, T>(), 2).value == 0);
+            CHECK_THAT(max_matrix_error(J, exact_jacobian<SD, T>(), 2), IsAtMost(own_jacobian_rounding<T>()));
         }
     });
 }

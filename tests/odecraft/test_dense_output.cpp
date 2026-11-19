@@ -175,7 +175,11 @@ TEMPLATE_TEST_CASE("Dense output jumps where a masked event moves the state", "[
                 // x = t until it reaches 0.5, which moves it back by 0.75: then x = t - 0.75 until it
                 // reaches 0.5 again at t = 1.25, x = t - 1.5 until t = 2, and so on (all times dir).
                 // Every stepper and dense output follows uniform motion exactly.
-                const auto [dense, events] = teleporting_dense_output<Stepper, SD>(dir, delayed, 0.75, T(2.6 * dir));
+                // Not a structured binding: check_x captures dense, which Clang only allows from
+                // version 16, and never with OpenMP on (-fopenmp-simd)
+                const auto result = teleporting_dense_output<Stepper, SD>(dir, delayed, 0.75, T(2.6 * dir));
+                const auto& dense = result.first;
+                const auto& events = result.second;
                 REQUIRE(dense->t_end() == T(2.6 * dir));
                 REQUIRE(events.size() == 3);
 

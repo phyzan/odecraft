@@ -1,0 +1,113 @@
+# Builds the test suite and runs it with every major version of GCC from 11 and of Clang from 13,
+# GCC 11's contemporary, on every push and pull request
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the runs it makes obsolete
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # GCC 11 to 14, from Ubuntu 24.04's own packages
+  gcc:
+    name: gcc-${{ matrix.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [11, 12, 13, 14]
+    env:
+      CC: gcc-${{ matrix.version }}
+      CXX: g++-${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install the compiler and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-${{ matrix.version }} libmpfr-dev libgmp-dev libqhull-dev
+
+      - name: Configure
+        run: cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Release -DODECRAFT_BUILD_TESTS=ON
+
+      # A standard runner has 4 cores and 16 GB of memory, and a compiler process takes up to about 2 GB
+      - name: Build
+        run: cmake --build build-tests -j 4
+
+      - name: Test
+        run: ctest --test-dir build-tests --output-on-failure -j 4
+
+  # GCC 15 and 16 are newer than any Ubuntu runner has: their official images, on Debian trixie
+  gcc-image:
+    name: gcc-${{ matrix.version }}
+    runs-on: ubuntu-24.04
+    container: gcc:${{ matrix.version }}-trixie
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [15, 16]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install the dependencies
+        run: |
+          apt-get update
+          apt-get install -y cmake libmpfr-dev libgmp-dev libqhull-dev
+
+      - name: Configure
+        run: cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Release -DODECRAFT_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build-tests -j 4
+
+      - name: Test
+        run: ctest --test-dir build-tests --output-on-failure -j 4
+
+  # Clang 13 to 23, from LLVM's own packages, which carry them all for Ubuntu 22.04
+  clang:
+    name: clang-${{ matrix.version }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    env:
+      CC: clang-${{ matrix.version }}
+      CXX: clang++-${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      # lld and llvm-ar: ode::crafted is built with link-time optimization, whose LLVM bitcode
+      # objects need LLVM's archiver and a linker that reads them
+      - name: Install the compiler and dependencies
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${{ matrix.version }} main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y clang-${{ matrix.version }} lld-${{ matrix.version }} llvm-${{ matrix.version }} libmpfr-dev libgmp-dev libqhull-dev
+
+      - name: Configure
+        run: cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Release -DODECRAFT_BUILD_TESTS=ON -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+
+      - name: Build
+        run: cmake --build build-tests -j 4
+
+      - name: Test
+        run: ctest --test-dir build-tests --output-on-failure -j 4

@@ -16,6 +16,11 @@ cmake --build build-tests -j 4
 ctest --test-dir build-tests --output-on-failure -j 4
 ```
 
+You can explicitly specify a compiler at configure time to cover more ground, in a directory of its own (CMake keeps the compiler a directory was first configured with):
+```sh
+CXX=clang++ cmake -S . -B build-tests-clang -DCMAKE_BUILD_TYPE=Release -DODECRAFT_BUILD_TESTS=ON
+```
+
 Build options:
 
 | Option | Effect |
@@ -41,6 +46,10 @@ ctest --test-dir build-tests -R "Lyapunov"
 ./build-tests/tests/odecraft_tests "[chaos]" -s        # with every passing check printed too
 ./build-tests/tests/odecraft_tests --list-tests
 ```
+
+On GitHub, [`.github/workflows/tests.yml`](../.github/workflows/tests.yml) builds and runs the
+suite this way on every push and pull request, with every major version of GCC from 11 and of
+Clang from 13.
 
 
 ## Layout
