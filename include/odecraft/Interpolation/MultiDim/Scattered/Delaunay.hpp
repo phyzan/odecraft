@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <ndspan/ndspan.hpp>
+#include <odecraft/Toolkit/Scratch.hpp>
 
 namespace ode::interp::sci {
 
@@ -49,21 +50,26 @@ public:
     
     const int*          get_simplex(int simplex_idx) const; //ndim + 1 elements
     const int*          get_neighbors(int simplex_idx) const; // ndim + 1 elements, -1 = no neighbor (boundary)
-    int                 find_simplex(const double* point) const; // array of ndim elements, returns simplex index or -1 if not found
-    bool                contains(const double* point) const { return find_simplex(point) != -1; }
+    // A DelaunayTri keeps no state between queries, so it may be shared amongst threads. Its
+    // caller provides what a query works with: cached_simplex, the simplex to start the search
+    // from, such as the one the previous search ended in (-1 to start anywhere), and worker, an
+    // ndim x ndim scratch matrix. A TriView keeps both for its queries.
+    int                 find_simplex(const double* point, int cached_simplex) const; // array of ndim elements, returns simplex index or -1 if not found
+    bool                contains(const double* point, int cached_simplex) const { return find_simplex(point, cached_simplex) != -1; }
     // out: ndim + 1 elements, the barycentric coordinates of point in the simplex's vertices, in the
     // order of get_simplex. Returns false if any is not finite, as for a degenerate simplex
     bool                compute_barycentric(double* out, int simplex_idx, const double* point) const;
 
     // field must be a contiguous array of shape (npoints, n_fields), the n_fields values of each
-    // point together, and the output of interpolate is a contiguous array of shape (n_fields,)
-    bool                interpolate(double* out, const double* point, const double* field, int n_fields=1) const;
+    // point together, and the output of interpolate is a contiguous array of shape (n_fields,).
+    // Returns the simplex the point is in, or -1 if it is outside the hull, with out set to NaN
+    int                 interpolate(double* out, const double* point, const double* field, int n_fields, int cached_simplex) const;
 
-    double              get_value(const double* point, const double* field) const; // field should have npoints elements, returns interpolated value at point
+    double              get_value(const double* point, const double* field, int cached_simplex) const; // field should have npoints elements, returns interpolated value at point
 
-    double              volume(int simplex_idx) const; // returns the volume of the simplex with index simplex_idx
+    double              volume(int simplex_idx, CArray2D<double, NDIM, NDIM>& worker) const; // returns the volume of the simplex with index simplex_idx
 
-    double              total_volume() const;
+    double              total_volume(CArray2D<double, NDIM, NDIM>& worker) const;
 
     // auxiliary function for interpolation, used when the caller already has the barycentric coordinates and simplex index (e.g. for multiple fields)
 
@@ -71,11 +77,6 @@ public:
 private:
 
     void compute_delaunay_1d();
-
-    int& thread_cache() const;
-
-    CArray2D<double, NDIM, NDIM>& mat_cache() const;
-
 
     // ============================================================================
     // Qhull-based Delaunay triangulation - O(n log n)
@@ -93,7 +94,74 @@ private:
 
 };
 
+
+/*
+Instantiate a TriView and do not share it amongst threads.
+It holds a shared pointer to a DelaunayTri.
+For multithreading operations that require all threads to
+use the same DelaunayTri, simply instantiate one or more
+TriView's per thread.
+*/
 template<size_t NDIM>
-using TriPtr = std::shared_ptr<DelaunayTri<NDIM>>;
+class TriView{
+public:
+    TriView(std::shared_ptr<DelaunayTri<NDIM>> tri) : mat_scratch_(CArray2D<double, NDIM, NDIM>(tri->ndim(), tri->ndim())), tri_(std::move(tri)) {}
+
+    const std::shared_ptr<DelaunayTri<NDIM>>& operator->() const {
+        return tri_;
+    }
+
+    std::shared_ptr<DelaunayTri<NDIM>>& operator->() {
+        return tri_;
+    }
+
+    const std::shared_ptr<DelaunayTri<NDIM>>& shared_tri() const {
+        return tri_;
+    }
+
+    double  volume(int simplex_idx) const {
+        decltype(auto) worker = mat_scratch_.get();
+        return tri_->volume(simplex_idx, worker);
+    }
+
+    double total_volume() const {
+        decltype(auto) worker = mat_scratch_.get();
+        return tri_->total_volume(worker);
+    }
+
+    // Each search starts from the simplex the last successful one of this view ended in
+    int find_simplex(const double* point) const {
+        return remember(tri_->find_simplex(point, cached_simplex_));
+    }
+
+    bool contains(const double* point) const {
+        return find_simplex(point) != -1;
+    }
+
+    // As DelaunayTri::interpolate: returns the simplex the point is in, or -1 outside the hull
+    int interpolate(double* out, const double* point, const double* field, int n_fields=1) const {
+        return remember(tri_->interpolate(out, point, field, n_fields, cached_simplex_));
+    }
+
+    double get_value(const double* point, const double* field) const {
+        double res;
+        interpolate(&res, point, field, 1);
+        return res;
+    }
+
+private:
+
+    // A point outside the hull leaves the simplex to start the next search from as it was
+    int remember(int simplex) const {
+        if (simplex != -1){
+            cached_simplex_ = simplex;
+        }
+        return simplex;
+    }
+
+    worker_t<CArray2D<double, NDIM, NDIM>> mat_scratch_;
+    std::shared_ptr<DelaunayTri<NDIM>> tri_;
+    mutable int cached_simplex_ = -1;
+};
 
 } // namespace ode::interp::sci

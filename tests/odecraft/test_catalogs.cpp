@@ -1,10 +1,10 @@
 // The stepper catalogs and their ids: compile-time facts and lookups by name, which do not
 // depend on a scalar type, so this source is compiled once.
 
-#include "odecraft_test.hpp"
-#include "renamed_stepper.hpp"
-
 #include <string>
+
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
+#include "../support/renamed_stepper.hpp"
 
 namespace odetest {
 namespace {

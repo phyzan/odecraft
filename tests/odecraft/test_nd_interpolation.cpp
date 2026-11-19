@@ -3,8 +3,8 @@
 // also read both as a regular grid and as scattered points. Vector fields and their streamlines
 // are in test_vector_fields.cpp.
 
-#include "odecraft_test.hpp"
-#include "grids.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
+#include "../support/grids.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -35,6 +35,25 @@ using Tri1 = sci::DelaunayTri<1>;
 using Tri2 = sci::DelaunayTri<2>;
 using Tri3 = sci::DelaunayTri<3>;
 using TriN = sci::DelaunayTri<0>;
+
+// A DelaunayTri works in a scratch matrix its caller provides, as a TriView does with its own
+template<size_t N>
+double volume_of(const sci::DelaunayTri<N>& tri, int s){
+    ndspan::CArray2D<double, N, N> scratch(tri.ndim(), tri.ndim());
+    return tri.volume(s, scratch);
+}
+
+template<size_t N>
+double total_volume_of(const sci::DelaunayTri<N>& tri){
+    ndspan::CArray2D<double, N, N> scratch(tri.ndim(), tri.ndim());
+    return tri.total_volume(scratch);
+}
+
+// The triangulation a scattered interpolator's TriView queries, which copies of the view share
+template<typename Interpolator>
+const auto& tri_of(const Interpolator& interp){
+    return interp.tri().operator->();
+}
 
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 
@@ -349,9 +368,10 @@ Magnitude barycentric_error(const Tri& tri, const std::vector<double>& points){
     const int nd = tri.ndim();
     std::vector<double> bary(nd + 1), back(nd);
     Magnitude err{0};
+    int s = -1; // each search starts from the simplex the previous one ended in
     for (size_t p = 0; p < points.size() / nd; p++){
         const double* x = points.data() + p * nd;
-        const int s = tri.find_simplex(x);
+        s = tri.find_simplex(x, s);
         if (s < 0 || !tri.compute_barycentric(bary.data(), s, x)){
             return {nan};
         }
@@ -381,9 +401,11 @@ Magnitude tri_interpolation_error(const Tri& tri, const Field& f, const std::vec
     const size_t nd = tri.ndim();
     std::vector<double> got(nfields), expected(nfields);
     Magnitude err{0};
+    int s = -1; // each search starts from the simplex the previous one ended in
     for (size_t p = 0; p < points.size() / nd; p++){
         const double* x = points.data() + p * nd;
-        if (!tri.interpolate(got.data(), x, samples.data(), int(nfields))){
+        s = tri.interpolate(got.data(), x, samples.data(), int(nfields), s);
+        if (s < 0){
             return {nan};
         }
         f(expected.data(), x);
@@ -415,7 +437,7 @@ TEMPLATE_TEST_CASE("A Delaunay triangulation of a rectilinear grid splits every 
     CHECK(tri.get_simplices().shape(0) == size_t(tri.nsimplices()));
     CHECK(tri.get_simplices().shape(1) == 3);
     CHECK(tri.get_neighbors().shape(1) == 3);
-    CHECK_THAT(abs_error(tri.total_volume(), grid.volume()), IsAtMost(1e-12));
+    CHECK_THAT(abs_error(total_volume_of(tri), grid.volume()), IsAtMost(1e-12));
 
     const Adjacency adjacency = adjacency_of(tri);
     CHECK(adjacency.broken_faces == 0);
@@ -433,7 +455,7 @@ TEMPLATE_TEST_CASE("A Delaunay triangulation of a rectilinear grid splits every 
             }
         }
         const double cell = (grid.axes[0][hi[0]] - grid.axes[0][lo[0]]) * (grid.axes[1][hi[1]] - grid.axes[1][lo[1]]);
-        const bool half = hi[0] == lo[0] + 1 && hi[1] == lo[1] + 1 && std::abs(tri.volume(s) - cell / 2) < 1e-12;
+        const bool half = hi[0] == lo[0] + 1 && hi[1] == lo[1] + 1 && std::abs(volume_of(tri, s) - cell / 2) < 1e-12;
         halves += half ? 1 : 0;
     }
     CHECK(halves == size_t(tri.nsimplices()));
@@ -444,7 +466,7 @@ TEMPLATE_TEST_CASE("Barycentric coordinates place a point within the simplex fou
     const TestType tri(points.data(), points.size() / 2, 2);
     REQUIRE(tri.nsimplices() > 0);
     CHECK(adjacency_of(tri).broken_faces == 0);
-    CHECK_THAT(abs_error(tri.total_volume(), 12.0), IsAtMost(1e-12));
+    CHECK_THAT(abs_error(total_volume_of(tri), 12.0), IsAtMost(1e-12));
 
     SECTION("inside the hull"){
         CHECK_THAT(barycentric_error(tri, random_points(300, {-2, -1.5}, {2, 1.5}, 99)), IsAtMost(1e-13));
@@ -454,9 +476,9 @@ TEMPLATE_TEST_CASE("Barycentric coordinates place a point within the simplex fou
     SECTION("but not outside it"){
         for (const auto& x : outside_custom_grid){
             CAPTURE(x);
-            CHECK(tri.find_simplex(x.data()) == -1);
+            CHECK(tri.find_simplex(x.data(), -1) == -1);
+            CHECK_FALSE(tri.contains(x.data(), -1));
         }
-        CHECK(count_contained(tri, outside_custom_grid) == 0);
     }
     SECTION("from any simplex the previous search ended in"){
         // The search walks from where the last one ended: alternate between far apart points
@@ -486,15 +508,15 @@ TEMPLATE_TEST_CASE("Barycentric interpolation is exact for affine fields", "[nd-
     const double x[] = {0.33, -0.71};
     double expected[2];
     fields::affine(expected, x);
-    CHECK_THAT(abs_error(tri.get_value(x, first.data()), expected[0]), IsAtMost(1e-14));
+    CHECK_THAT(abs_error(tri.get_value(x, first.data(), -1), expected[0]), IsAtMost(1e-14));
 
     // Outside the hull there is nothing to interpolate
     double out[2] = {0, 0};
     const double beyond[] = {2.5, 0};
-    CHECK_FALSE(tri.interpolate(out, beyond, samples.data(), 2));
+    CHECK(tri.interpolate(out, beyond, samples.data(), 2, -1) == -1);
     CHECK(std::isnan(out[0]));
     CHECK(std::isnan(out[1]));
-    CHECK(std::isnan(tri.get_value(beyond, first.data())));
+    CHECK(std::isnan(tri.get_value(beyond, first.data(), -1)));
 }
 
 TEMPLATE_TEST_CASE("A triangulation in one dimension joins its points in order", "[nd-interpolation][delaunay]", Tri1, TriN){
@@ -515,15 +537,15 @@ TEMPLATE_TEST_CASE("A triangulation in one dimension joins its points in order",
     CHECK(tri.get_neighbors(3)[0] == -1);
     CHECK(tri.get_neighbors(3)[1] == 2);
     CHECK(adjacency_of(tri).broken_faces == 0);
-    CHECK_THAT(abs_error(tri.volume(1), 0.5), IsAtMost(1e-15));
-    CHECK_THAT(abs_error(tri.total_volume(), 3.0), IsAtMost(1e-14));
+    CHECK_THAT(abs_error(volume_of(tri, 1), 0.5), IsAtMost(1e-15));
+    CHECK_THAT(abs_error(total_volume_of(tri), 3.0), IsAtMost(1e-14));
 
     const Field line = [](double* out, const double* x){ out[0] = 2 - 3 * x[0]; };
     const auto samples = sample(line, points, 1, 1);
     CHECK_THAT(tri_interpolation_error(tri, line, samples, random_points(100, {-1}, {2}), 1), IsAtMost(1e-14));
     const double x = 0.7, beyond = 2.5;
-    CHECK(tri.find_simplex(&x) == 2);
-    CHECK_FALSE(tri.contains(&beyond));
+    CHECK(tri.find_simplex(&x, -1) == 2);
+    CHECK_FALSE(tri.contains(&beyond, -1));
 }
 
 TEMPLATE_TEST_CASE("A triangulation in three dimensions locates and interpolates within its hull", "[nd-interpolation][delaunay]", Tri3, TriN){
@@ -545,7 +567,7 @@ TEMPLATE_TEST_CASE("A triangulation in three dimensions locates and interpolates
     const Field affine3 = [](double* out, const double* x){ out[0] = 1 + x[0] - 2 * x[1] + 3 * x[2]; };
     CHECK_THAT(tri_interpolation_error(tri, affine3, sample(affine3, points, 3, 1), inside, 1), IsAtMost(1e-13));
     const double beyond[] = {0, 0, 1.1};
-    CHECK_FALSE(tri.contains(beyond));
+    CHECK_FALSE(tri.contains(beyond, -1));
 }
 
 TEMPLATE_TEST_CASE("Every simplex of a triangulation has a volume even a flat one", "[nd-interpolation][delaunay]", Tri3, TriN){
@@ -557,10 +579,10 @@ TEMPLATE_TEST_CASE("Every simplex of a triangulation has a volume even a flat on
     REQUIRE(tri.nsimplices() > 0);
     size_t undefined = 0;
     for (int s = 0; s < tri.nsimplices(); s++){
-        undefined += std::isfinite(tri.volume(s)) ? 0 : 1;
+        undefined += std::isfinite(volume_of(tri, s)) ? 0 : 1;
     }
     CHECK(undefined == 0);
-    CHECK_THAT(abs_error(tri.total_volume(), grid.volume()), IsAtMost(1e-12));
+    CHECK_THAT(abs_error(total_volume_of(tri), grid.volume()), IsAtMost(1e-12));
 }
 
 TEMPLATE_TEST_CASE("Too few points make an empty triangulation", "[nd-interpolation][delaunay]", Tri2, TriN){
@@ -568,12 +590,12 @@ TEMPLATE_TEST_CASE("Too few points make an empty triangulation", "[nd-interpolat
     const TestType tri(points.data(), 2, 2);
     CHECK(tri.npoints() == 2);
     CHECK(tri.nsimplices() == 0);
-    CHECK(tri.total_volume() == 0);
+    CHECK(total_volume_of(tri) == 0);
     const double x[] = {0.5, 0.5};
-    CHECK_FALSE(tri.contains(x));
+    CHECK_FALSE(tri.contains(x, -1));
     double out = 0;
     const double samples[] = {1, 2};
-    CHECK_FALSE(tri.interpolate(&out, x, samples));
+    CHECK(tri.interpolate(&out, x, samples, 1, -1) == -1);
     CHECK(std::isnan(out));
 }
 
@@ -592,13 +614,15 @@ TEST_CASE("A triangulation is moved or restored from its arrays but never copied
     Tri2 original(points.data(), points.size() / 2, 2);
     const auto probes = random_points(100, {-2, -1.5}, {2, 1.5}, 17);
     std::vector<int> found;
+    found.reserve(probes.size() / 2);
     for (size_t p = 0; p < probes.size() / 2; p++){
-        found.push_back(original.find_simplex(&probes[2 * p]));
+        found.push_back(original.find_simplex(&probes[2 * p], -1));
     }
     const auto same_answers = [&](const Tri2& tri){
         std::vector<int> again;
+        again.reserve(probes.size() / 2);
         for (size_t p = 0; p < probes.size() / 2; p++){
-            again.push_back(tri.find_simplex(&probes[2 * p]));
+            again.push_back(tri.find_simplex(&probes[2 * p], -1));
         }
         return again == found;
     };
@@ -618,7 +642,7 @@ TEST_CASE("A triangulation is moved or restored from its arrays but never copied
             view(std::type_identity<CView3D<const double, 0, 2, 2>>{}, original.get_invT()));
         CHECK(restored.npoints() == original.npoints());
         CHECK(restored.nsimplices() == original.nsimplices());
-        CHECK(restored.total_volume() == original.total_volume());
+        CHECK(total_volume_of(restored) == total_volume_of(original));
         CHECK(same_answers(restored));
     }
     SECTION("moved"){
@@ -649,7 +673,7 @@ TEMPLATE_TEST_CASE("A scattered interpolator reproduces every affine function", 
     CHECK(interp.output_dims() == 1);
     CHECK(interp.output_shape()[0] == 2);
     CHECK(std::equal(points.begin(), points.end(), interp.points().data()));
-    REQUIRE(interp.tri() != nullptr);
+    REQUIRE(tri_of(interp) != nullptr);
     CHECK(interp.tri()->npoints() == int(n));
 
     SECTION("at its samples"){
@@ -691,8 +715,8 @@ TEMPLATE_TEST_CASE("Scattered interpolators share a triangulation and read eithe
 
     const Interpolator first(points.data(), view_of(affine, n, 2), 2, true);
     const Interpolator second(first.tri(), view_of(bilinear_last, 2, n), false);
-    CHECK(second.tri() == first.tri());
-    CHECK(first.tri().use_count() >= 2);
+    CHECK(tri_of(second) == tri_of(first));
+    CHECK(tri_of(first).use_count() >= 2);
     CHECK_THAT(interpolation_error(first, fields::affine, inside, 2, 2), IsAtMost(1e-13));
     // A bilinear field is not interpolated exactly, but what is interpolated is the bilinear one
     CHECK_THAT(interpolation_error(second, fields::bilinear, points, 2, 2), IsAtMost(1e-13));
@@ -726,6 +750,7 @@ TEST_CASE("The same samples read as a regular grid and as scattered points", "[n
     SECTION("span the same domain"){
         const auto [regular, scattered] = read_both(fields::affine, 2);
         std::vector<std::vector<double>> interior;
+        interior.reserve(inside.size() / 2);
         for (size_t p = 0; p < inside.size() / 2; p++){
             interior.push_back({inside[2 * p], inside[2 * p + 1]});
         }
@@ -733,7 +758,7 @@ TEST_CASE("The same samples read as a regular grid and as scattered points", "[n
         CHECK(count_contained(*scattered, interior) == interior.size());
         CHECK(count_contained(*regular, outside_custom_grid) == 0);
         CHECK(count_contained(*scattered, outside_custom_grid) == 0);
-        CHECK_THAT(abs_error(scattered->tri()->total_volume(), grid.volume()), IsAtMost(1e-12));
+        CHECK_THAT(abs_error(scattered->tri().total_volume(), grid.volume()), IsAtMost(1e-12));
     }
     SECTION("reproduce the samples and every affine function"){
         const auto [regular, scattered] = read_both(fields::affine, 2);

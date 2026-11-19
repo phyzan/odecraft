@@ -2,11 +2,11 @@
 // in either direction, recording events under options, storing chosen times, returning dense
 // solutions, and held through an OdeDriver handle that copies it whole.
 
-#include "crafted_test.hpp"
-
 #include <memory>
 #include <numbers>
 #include <type_traits>
+
+#include "../support/crafted_test.hpp"
 
 namespace odetest {
 namespace {

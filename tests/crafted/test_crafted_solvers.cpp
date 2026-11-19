@@ -2,12 +2,12 @@
 // and scalar type the library ships, and driven through the OdeSolver and OdeRichSolver
 // interfaces, on states of any rank.
 
-#include "crafted_test.hpp"
-
 #include <cmath>
 #include <span>
 #include <sstream>
 #include <type_traits>
+
+#include "../support/crafted_test.hpp"
 
 namespace odetest {
 namespace {
@@ -146,13 +146,13 @@ TEMPLATE_TEST_CASE("A state of rank two is integrated as its flattened component
     };
     size_t jacobian_rows = 0;
     const ode_t<T> system{
-        .Rhs = [](State<T>& out, T /*t*/, const State<T>& q){
+        .Rhs = [](State<T>& out, const T& /*t*/, const State<T>& q){
             for (size_t j = 0; j < 2; j++){
                 out(0, j) = q(1, j);
                 out(1, j) = -q(0, j);
             }
         },
-        .Jac = [&jacobian_rows](JacMat<T>& J, T /*t*/, const State<T>& /*q*/){
+        .Jac = [&jacobian_rows](JacMat<T>& J, const T& /*t*/, const State<T>& /*q*/){
             // Over the flattened state: x_j is component j, and v_j component 2 + j
             jacobian_rows = J.shape(0);
             for (size_t i = 0; i < 4; i++){

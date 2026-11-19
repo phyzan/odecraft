@@ -2,7 +2,7 @@
 // descriptor do on their own, and that the solvers work with all of them, and with a descriptor
 // seen through the StateDescriptor contract template.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <odecraft/Contracts/ContractTemplate.hpp>
 

@@ -2,7 +2,7 @@
 // several events within one step, masks that change the state where they fire, and the event
 // machinery itself, through the solver and on its own.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <numbers>
 #include <string>
@@ -506,7 +506,7 @@ TEMPLATE_TEST_CASE("Events locate themselves without a solver", "[events][runtim
         CHECK(event.counter() == 1);
 
         // A decreasing crossing it does not look for
-        CHECK_FALSE(event.locate(t_event, T(0), T(1), q_new, q_old, [](State& o, const T& t){ o[0] = 1 - t; o[1] = 0; }));
+        CHECK_FALSE(event.locate(t_event, T(0), T(1), q_new, q_old, [](State& o, const T& t){ o[0] = 1 - t; o[1] = 0; })); // NOLINT(readability-suspicious-call-argument)
         CHECK_FALSE(event.lock());
 
         std::unique_ptr<ode::Event<T, State>> copy = event.clone();

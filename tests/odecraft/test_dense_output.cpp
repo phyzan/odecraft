@@ -1,7 +1,7 @@
 // Dense output: interpolate_until covers exactly what it integrated, accurately, through events,
 // with the jump a masked event makes, and up to where a failing solver stops.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <vector>
 

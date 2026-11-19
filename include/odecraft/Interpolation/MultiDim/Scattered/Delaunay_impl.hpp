@@ -91,7 +91,7 @@ const int* DelaunayTri<NDIM>::get_neighbors(int simplex_idx) const {
 }
 
 template<size_t NDIM>
-int DelaunayTri<NDIM>::find_simplex(const double* point) const {
+int DelaunayTri<NDIM>::find_simplex(const double* point, const int cached_simplex) const {
     int num_simplices = nsimplices();    
     int nd = ndim();
     auto is_finite = [](double x) { return std::isfinite(x); };
@@ -118,8 +118,7 @@ int DelaunayTri<NDIM>::find_simplex(const double* point) const {
     Array1D<double, DIM_SPX, SPX_ALLOC> bary(nd + 1);
 
     // Walking algorithm: start from cached simplex and walk towards the point
-    int& last_simplex = this->thread_cache(); // start from the last simplex found by this thread on this object
-    int s = (last_simplex >= 0 && last_simplex < num_simplices) ? last_simplex : 0;
+    int s = (cached_simplex >= 0 && cached_simplex < num_simplices) ? cached_simplex : 0;
     int prev = -1; // track previous simplex to avoid oscillation
     int max_iter = num_simplices; // prevent infinite loops
 
@@ -169,7 +168,6 @@ int DelaunayTri<NDIM>::find_simplex(const double* point) const {
 
         if (!any_negative) {
             // All coordinates >= -EPS, point is inside this simplex
-            last_simplex = s; // cache for next query
             return s;
         }
 
@@ -192,7 +190,6 @@ int DelaunayTri<NDIM>::find_simplex(const double* point) const {
     // Fallback: brute force check in case the walk stalls (degenerate/simplex mapping issues).
     for (int sidx = 0; sidx < num_simplices; ++sidx) {
         if (is_inside(sidx)) {
-            last_simplex = sidx;
             return sidx;
         }
     }
@@ -235,11 +232,11 @@ bool DelaunayTri<NDIM>::compute_barycentric(double* out, int simplex_idx, const 
 };
 
 template<size_t NDIM>
-bool DelaunayTri<NDIM>::interpolate(double* out, const double* point, const double* field, int n_fields) const {
-    int simplex_idx = find_simplex(point);
+int DelaunayTri<NDIM>::interpolate(double* out, const double* point, const double* field, int n_fields, int cached_simplex) const {
+    const int simplex_idx = find_simplex(point, cached_simplex);
     if (simplex_idx == -1) {
         std::fill(out, out + n_fields, std::numeric_limits<double>::quiet_NaN());
-        return false;
+        return -1;
     }
     
 
@@ -256,43 +253,41 @@ bool DelaunayTri<NDIM>::interpolate(double* out, const double* point, const doub
         }
     }
 
-    return true;
+    return simplex_idx;
 }
 
 template<size_t NDIM>
-double DelaunayTri<NDIM>::get_value(const double* point, const double* field) const {
+double DelaunayTri<NDIM>::get_value(const double* point, const double* field, int cached_simplex) const {
     double res;
-    interpolate(&res, point, field, 1);
+    interpolate(&res, point, field, 1, cached_simplex);
     return res;
 }
 
 template<size_t NDIM>
-double DelaunayTri<NDIM>::volume(int simplex_idx) const {
+double DelaunayTri<NDIM>::volume(int simplex_idx, CArray2D<double, NDIM, NDIM>& worker) const {
     // |det E| / nd!, E holding the edges from v0, the last vertex, to the others. From the vertices
     // rather than from invT: Qhull may keep flat simplices, whose invT is not finite but whose
     // volume is 0
     const int nd = ndim();
     const int* v = get_simplex(simplex_idx);
     const double* v0 = v0_.ptr(simplex_idx, 0);
-    double small[9];
-    double* e = (nd <= 3) ? small : mat_cache().data();
     for (int i = 0; i < nd; ++i) {
         for (int j = 0; j < nd; ++j) {
-            e[i * nd + j] = points_(v[j], i) - v0[i];
+            worker(i, j) = points_(v[j], i) - v0[i];
         }
     }
 
     double det;
     if (nd == 1) {
-        det = e[0];
+        det = worker[0];
     } else if (nd == 2) {
-        det = e[0]*e[3] - e[1]*e[2];
+        det = worker[0]*worker[3] - worker[1]*worker[2];
     } else if (nd == 3) {
-        det = e[0]*(e[4]*e[8] - e[5]*e[7])
-            - e[1]*(e[3]*e[8] - e[5]*e[6])
-            + e[2]*(e[3]*e[7] - e[4]*e[6]);
+        det = worker[0]*(worker[4]*worker[8] - worker[5]*worker[7])
+            - worker[1]*(worker[3]*worker[8] - worker[5]*worker[6])
+            + worker[2]*(worker[3]*worker[7] - worker[4]*worker[6]);
     } else {
-        det = detLU_row_major(e, nd);
+        det = detLU_row_major(worker.data(), nd);
     }
 
     // n!
@@ -306,11 +301,11 @@ double DelaunayTri<NDIM>::volume(int simplex_idx) const {
 }
 
 template<size_t NDIM>
-double DelaunayTri<NDIM>::total_volume() const{
+double DelaunayTri<NDIM>::total_volume(CArray2D<double, NDIM, NDIM>& worker) const{
     double sum = 0;
     int n = this->nsimplices();
     for (int i=0; i<n; i++){
-        sum += this->volume(i);
+        sum += this->volume(i, worker);
     }
     return sum;
 }
@@ -451,28 +446,6 @@ void DelaunayTri<NDIM>::compute_delaunay() {
     }
 }
 
-template<size_t NDIM>
-int& DelaunayTri<NDIM>::thread_cache() const {
-    // each thread keeps track of the last simplex it found a point in, to speed up subsequent queries
-    // each spawned object will have its own cache.
-    // So it is a per-thread cache, but also per-object cache.
-    // This is so that the interpolation of each sampled function from multiple threads is safe and efficient.
-    thread_local std::unordered_map<const DelaunayTri*, int> cache;
-    return cache[this];
-}
-
-template<size_t NDIM>
-CArray2D<double, NDIM, NDIM>& DelaunayTri<NDIM>::mat_cache() const {
-    // cache for temporary matrices used in barycentric coordinate computation, to avoid repeated allocations
-    // this is also per-object, per-thread cache
-    thread_local std::unordered_map<const DelaunayTri*, CArray2D<double, NDIM, NDIM>> cache;
-    auto& mat = cache[this];
-    // Sized for this object: one destroyed before it may have left an entry at the same address
-    if (mat.size() != size_t(this->ndim() * this->ndim())) {
-        mat = CArray2D<double, NDIM, NDIM>(this->ndim(), this->ndim());
-    }
-    return mat;
-}
 
 template<size_t NDIM>
 void DelaunayTri<NDIM>::set_state(const CView2D<const double, 0, NDIM>& points, const CView2D<const int, 0, DIM_SPX>& simplices, const CView2D<const int, 0, DIM_SPX>& neighbors, const CView2D<const double, 0, NDIM>& v0, const CView3D<const double, 0, NDIM, NDIM>& invT){

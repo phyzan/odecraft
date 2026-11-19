@@ -1,10 +1,10 @@
 // Events of the compiled interface, made by its own makers: zero crossings in either direction,
 // periodic ones, masks applied at once or after the event, and the variational kinds.
 
-#include "crafted_test.hpp"
-
 #include <numbers>
 #include <type_traits>
+
+#include "../support/crafted_test.hpp"
 
 namespace odetest {
 namespace {
@@ -39,7 +39,7 @@ objfun_t<T> position(){
 /// @brief Doubles the state.
 template<typename T>
 rhs_t<T> doubling(){
-    return [](State<T>& out, T /*t*/, const State<T>& q){
+    return [](State<T>& out, const T& /*t*/, const State<T>& q){
         out[0] = 2 * q[0];
         out[1] = 2 * q[1];
     };
@@ -139,7 +139,7 @@ TEMPLATE_TEST_CASE("Events are made into the compiled event types and held by na
 TEMPLATE_TEST_CASE("Variational events act on the state and the deviation", "[crafted][events][chaos]", ODECRAFT_CRAFTED_SCALARS){
     using T = TestType;
     const objfun_t<T, VarState<T>> objective = [](const T& /*t*/, const VarState<T>& q) -> T { return q.main[0]; };
-    const rhs_t<T, VarState<T>> mask = [](VarState<T>& out, T /*t*/, const VarState<T>& q){ out = q; };
+    const rhs_t<T, VarState<T>> mask = [](VarState<T>& out, const T& /*t*/, const VarState<T>& q){ out = q; };
     BoxedEvent<T, VarState<T>> zero = make_variational_precise_event<T>("x = 0", objective, T(0), -1);
     BoxedEvent<T, VarState<T>> tick = make_variational_periodic_event<T>("tick", T(1));
     BoxedEvent<T, VarState<T>> masked = make_variational_periodic_event<T>("kick", T(1), mask, true);

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <odecraft/Toolkit/Tools.hpp>
-#include <stdexcept>
 
 namespace ode::interp::uni {
 

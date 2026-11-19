@@ -190,11 +190,12 @@ int main(){
         }
     }
 
-    // or if direction does not matter, and maximum accuracy is desired, you can use the following constructor:
+    // or if maximum accuracy is desired, you can use the following constructor:
     {
         std::cout << "\n---------- Using SingleStaticEventStepper class with simpler constructor ----------" << std::endl;
         SingleStaticEventStepper<tags::RK45, T, SD, MyOdeRhs, ode::SolverPolicy::Static, Obj1<T>> solver(
             Obj1<T>{},
+            0,
             MyOdeRhs{},
             T{0.0}, // initial time
             q0, // initial state

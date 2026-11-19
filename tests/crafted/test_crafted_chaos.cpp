@@ -2,11 +2,11 @@
 // saddle, known exactly, with every compiled stepper, forward and backward, through
 // make_variational_solver, the chaotic solver interface and the variational driver.
 
-#include "crafted_test.hpp"
-
 #include <cmath>
 #include <memory>
 #include <type_traits>
+
+#include "../support/crafted_test.hpp"
 
 namespace odetest {
 namespace {

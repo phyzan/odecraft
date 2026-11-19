@@ -1,7 +1,7 @@
 // The life of a solver: what it reports once built, how each advancing routine moves it, and how
 // it is restarted from new initial conditions, reset and cloned.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <vector>
 

@@ -2,10 +2,10 @@
 // their precision, the stepper catalog, and the names it re-exports, which must be the very
 // ones of the header-only interface they stand for.
 
-#include "crafted_test.hpp"
-
 #include <functional>
 #include <type_traits>
+
+#include "../support/crafted_test.hpp"
 
 namespace odetest {
 namespace {
@@ -50,7 +50,7 @@ TEMPLATE_TEST_CASE("Callables are type-erased", "[crafted][vocabulary]", ODECRAF
 
     // A system is written inline, and may leave its Jacobian out. Two components, as GCC 13 takes
     // the copy of a one-element array for out of bounds
-    const ode_t<T> system{.Rhs = [](State<T>& out, T t, const State<T>& q){ out[0] = t * q[0]; out[1] = q[0] + q[1]; }};
+    const ode_t<T> system{.Rhs = [](State<T>& out, const T& t, const State<T>& q){ out[0] = t * q[0]; out[1] = q[0] + q[1]; }};
     CHECK(system.Jac == nullptr);
     State<T> out = {T(0), T(0)};
     system.Rhs(out, T(2), State<T>{T(3), T(4)});

@@ -1,7 +1,7 @@
 // Precision beyond double: what the extended scalar types buy over a whole integration.
 // Compiled once, over the extended types only, rather than once per scalar type.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 namespace odetest {
 namespace {

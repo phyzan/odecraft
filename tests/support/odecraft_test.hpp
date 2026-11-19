@@ -19,8 +19,8 @@
 
 #include <odecraft/odecraft.hpp>
 
-#include "scalars.hpp"
-#include "states.hpp"
-#include "problems.hpp"
-#include "steppers.hpp"
-#include "checks.hpp"
+#include "scalars.hpp" // IWYU pragma: keep
+#include "states.hpp" // IWYU pragma: keep
+#include "problems.hpp" // IWYU pragma: keep
+#include "steppers.hpp" // IWYU pragma: keep
+#include "checks.hpp" // IWYU pragma: keep

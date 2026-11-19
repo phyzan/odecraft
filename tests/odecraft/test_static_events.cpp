@@ -2,7 +2,7 @@
 // every direction and at every tolerance, several within one step, and through each way of
 // building such a stepper.
 
-#include "odecraft_test.hpp"
+#include "../support/odecraft_test.hpp" // IWYU pragma: keep
 
 #include <utility>
 #include <vector>
@@ -45,6 +45,7 @@ std::vector<ObjectiveHit<T>> record_objectives(Solver& solver, const T& t_end){
 template<typename T>
 std::vector<int> objectives_of(const std::vector<ObjectiveHit<T>>& hits){
     std::vector<int> out;
+    out.reserve(hits.size());
     for (const auto& hit : hits){
         out.push_back(hit.objective);
     }
@@ -72,7 +73,7 @@ template<typename Stepper, typename SD, typename T, typename... ObjFun>
 auto unit_step_stepper(int dir, ObjFunData<T, ObjFun>... objectives){
     const auto q0 = make_state<SD, T>({0, 0});
     const auto loose = uniform_like<SD, T>(q0, T(1));
-    return ode::getEventStepper<Stepper, SolverPolicy::Static, T, SD>(std::tuple{objectives...}, UniformMotion{}, T(0), q0,
+    return ode::getEventStepper<Stepper, SolverPolicy::Static, T, SD>(std::tuple{std::move(objectives)...}, UniformMotion{}, T(0), q0,
         loose, loose, T(0), T(1), T(1), dir);
 }
 
