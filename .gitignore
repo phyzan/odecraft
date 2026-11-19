@@ -1,5 +1,5 @@
 .cache
-build/
+build*/
 
 # CMake artifacts
 CMakeCache.txt

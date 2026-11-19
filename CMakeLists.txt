@@ -12,6 +12,7 @@ option(ODECRAFT_USE_LAZY_MPREAL "Compile ode::crafted's mpreal_t as lazex::LazyT
 option(ODECRAFT_RHS_THROWS "Allow Rhs and the other user callbacks to throw (otherwise the solvers call them noexcept)" OFF)
 option(ODECRAFT_BUILD_CRAFTED "Build the pre-compiled ode::crafted library (ON by default only when odecraft is the top-level project)" ${PROJECT_IS_TOP_LEVEL})
 option(DEBUG "Enable debug build (-O0 -g3, asserts enabled) instead of the optimized release build" OFF)
+option(ODECRAFT_BUILD_TESTS "Build the Catch2 test suite in tests/ (fetches Catch2 unless it is installed)" OFF)
 
 add_subdirectory(external/xdiff)
 
@@ -113,9 +114,18 @@ if(ODECRAFT_BUILD_CRAFTED)
     if(DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(odecraft_crafted PRIVATE -O0 -g3 -UNDEBUG)
     else()
-        target_compile_options(odecraft_crafted PRIVATE -O3 -flto -funroll-loops -DNDEBUG -g0 -fno-math-errno -fno-trapping-math)
+        # -flto=auto: whatever links these objects runs its link-time optimization in parallel, with
+        # make's jobserver or one job per thread, rather than serially (with a warning)
+        target_compile_options(odecraft_crafted PRIVATE -O3 -flto=auto -funroll-loops -DNDEBUG -g0 -fno-math-errno -fno-trapping-math)
         if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             target_compile_options(odecraft_crafted PRIVATE -finline-functions -finline-limit=10000)
         endif()
     endif()
+endif()
+
+# ----------- Tests ---------------
+
+if(ODECRAFT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
