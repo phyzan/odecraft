@@ -1,21 +1,40 @@
 <p align="center">
-<img src="https://img.shields.io/badge/C%2B%2B20-blue?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++20">
-<img src="https://img.shields.io/badge/Header_Only-green?style=for-the-badge" alt="Header Only">
-</p>
-
-<h1 align="center">OdeCraft</h1>
-
-<p align="center">
-  <strong>A Modern C++ Library for Ordinary Differential Equations</strong>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" alt="OdeCraft" width="440">
+  </picture>
 </p>
 
 <p align="center">
+  <strong>A Modern C++ Library for Ordinary Differential Equations</strong><br>
   High-performance, templated ODE solvers with flexible event detection mechanisms
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++20">
+  <img src="https://img.shields.io/badge/header--only-2ea44f?style=flat-square" alt="Header only">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f97316?style=flat-square" alt="MIT license"></a>
+</p>
+
+<br>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/ivp-dark.svg">
+    <img src="docs/ivp-light.svg" alt="dq/dt = f(t, q), q(t₀) = q₀" height="52">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="#overview">Overview</a> &nbsp;·&nbsp;
+  <a href="#getting-started">Getting started</a> &nbsp;·&nbsp;
+  <a href="#cmake-options">CMake options</a> &nbsp;·&nbsp;
+  <a href="#choosing-a-stepper">Choosing a stepper</a>
 </p>
 
 ---
 
-# OdeCraft
+# Overview
 
 **OdeCraft** is a modern, object-oriented C++ library for solving **Ordinary Differential Equations (ODEs)**.
 
@@ -58,7 +77,7 @@ In an external project, use
 add_subdirectory(path/to/odecraft)
 target_link_libraries(your_target PRIVATE odecraft::odecraft)
 ```
-This gives you `<odecraft/...>`, `<xdiff/...>` etc. includes, the required C++20 standard, and [options](#CMake-options) (toggle with e.g. `-D<OPTION>=ON`)
+This gives you `<odecraft/...>`, `<xdiff/...>` etc. includes, the required C++20 standard, and [options](#cmake-options) (toggle with e.g. `-D<OPTION>=ON`)
 
 # CMake options
 
