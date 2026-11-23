@@ -32,7 +32,6 @@ using GetDerived = std::conditional_t<(std::is_same_v<derived, void>), cls, deri
 
 // USEFUL ALIASES
 
-using ndspan::Array1D, ndspan::CArray2D, ndspan::FArray2D;
 
 template<typename F>
 using cache_t = std::conditional_t<

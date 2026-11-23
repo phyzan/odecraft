@@ -40,7 +40,7 @@ template<int NDIM, bool AS_VIRTUAL>
 const TriView<NDIM>& ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::tri() const { return tri_; }
 
 template<int NDIM, bool AS_VIRTUAL>
-const CArray2D<double, 0, NDIM>& ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::points() const {
+const ndspan::CArray2D<double, 0, NDIM>& ScatteredNdInterpolator<NDIM, AS_VIRTUAL>::points() const {
     return tri_->get_points();
 }
 

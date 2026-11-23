@@ -26,7 +26,7 @@ public:
     const TriView<NDIM>& tri() const;
 
     // shape (n_points, ndim)
-    const CArray2D<double, 0, NDIM>& points() const;
+    const ndspan::CArray2D<double, 0, NDIM>& points() const;
 
 protected:
 

@@ -10,7 +10,7 @@ namespace ode::interp::rgi {
 enum class CoordType : uint8_t {
     Cartesian,
     Polar,
-    Spherical
+    Spherical,
 };
 
 
@@ -75,7 +75,7 @@ public:
     template<typename ValuesContainer, typename AxisViewContainer>
     RegularVectorField(const ValuesContainer& values, const AxisViewContainer& grid, CoordType coord_type, bool coord_axis_first);
 
-    std::vector<CArray2D<double, NDIM, 0>>    streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method) const;
+    std::vector<ndspan::CArray2D<double, NDIM, 0>>    streamplot_data(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method) const;
 
 
 protected:
@@ -90,7 +90,7 @@ protected:
 private:
 
     template<size_t... I>
-    std::vector<CArray2D<double, NDIM, 0>>    streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method, std::index_sequence<I...>) const;
+    std::vector<ndspan::CArray2D<double, NDIM, 0>>    streamplot_data_core(double max_length, double ds, size_t density, double rtol, double atol, double min_step, double max_step, double stepsize, Steppers::Id method, std::index_sequence<I...>) const;
 
     // The physical components of a velocity at q, in out, to the rates of change of q's coordinates
     void    to_coordinate_rates(double* out, const double* q) const;

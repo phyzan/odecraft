@@ -6,14 +6,13 @@
 
 namespace ode::interp::sci {
 
-using namespace ndspan;
 
 template<size_t NDIM>
 class DelaunayTri{
 
     static constexpr double EPS = std::numeric_limits<double>::epsilon() * 100;
 
-    static constexpr Allocation SPX_ALLOC = NDIM == 0 ? Allocation::Heap : Allocation::Stack;
+    static constexpr ndspan::Allocation SPX_ALLOC = NDIM == 0 ? ndspan::Allocation::Heap : ndspan::Allocation::Stack;
 
 public:
 
@@ -33,14 +32,14 @@ public:
     // wihtout having to recompute the triangulation.
     DelaunayTri() = default;
 
-    void set_state(const CView2D<const double, 0, NDIM>& points, const CView2D<const int, 0, DIM_SPX>& simplices, const CView2D<const int, 0, DIM_SPX>& neighbors, const CView2D<const double, 0, NDIM>& v0, const CView3D<const double, 0, NDIM, NDIM>& invT);
+    void set_state(const ndspan::CView2D<const double, 0, NDIM>& points, const ndspan::CView2D<const int, 0, DIM_SPX>& simplices, const ndspan::CView2D<const int, 0, DIM_SPX>& neighbors, const ndspan::CView2D<const double, 0, NDIM>& v0, const ndspan::CView3D<const double, 0, NDIM, NDIM>& invT);
 
     // Member variable accessors
-    const CArray2D<double, 0, NDIM>& get_points() const; // (n_points, ndim)
-    const CArray2D<int, 0, DIM_SPX>& get_simplices() const; // (nsimplices, ndim+1)
-    const CArray2D<int, 0, DIM_SPX>& get_neighbors() const; // (nsimplices, ndim+1)
-    const CArray2D<double, 0, NDIM>& get_v0() const; // (nsimplices, ndim)
-    const CArray3D<double, 0, NDIM, NDIM>& get_invT() const; // (nsimplices, ndim, ndim)
+    const ndspan::CArray2D<double, 0, NDIM>& get_points() const; // (n_points, ndim)
+    const ndspan::CArray2D<int, 0, DIM_SPX>& get_simplices() const; // (nsimplices, ndim+1)
+    const ndspan::CArray2D<int, 0, DIM_SPX>& get_neighbors() const; // (nsimplices, ndim+1)
+    const ndspan::CArray2D<double, 0, NDIM>& get_v0() const; // (nsimplices, ndim)
+    const ndspan::CArray3D<double, 0, NDIM, NDIM>& get_invT() const; // (nsimplices, ndim, ndim)
     
 
     int                 ndim() const;
@@ -67,9 +66,9 @@ public:
 
     double              get_value(const double* point, const double* field, int cached_simplex) const; // field should have npoints elements, returns interpolated value at point
 
-    double              volume(int simplex_idx, CArray2D<double, NDIM, NDIM>& worker) const; // returns the volume of the simplex with index simplex_idx
+    double              volume(int simplex_idx, ndspan::CArray2D<double, NDIM, NDIM>& worker) const; // returns the volume of the simplex with index simplex_idx
 
-    double              total_volume(CArray2D<double, NDIM, NDIM>& worker) const;
+    double              total_volume(ndspan::CArray2D<double, NDIM, NDIM>& worker) const;
 
     // auxiliary function for interpolation, used when the caller already has the barycentric coordinates and simplex index (e.g. for multiple fields)
 
@@ -86,11 +85,11 @@ private:
 
     void compute_delaunay();
 
-    CArray2D<double, 0, NDIM>        points_;    // (npoints, ndim)
-    CArray2D<int, 0, DIM_SPX>        simplices_; // (nsimplices, ndim+1)
-    CArray2D<int, 0, DIM_SPX>        neighbors_; // (nsimplices, ndim+1), -1 = boundary
-    CArray2D<double, 0, NDIM>        v0_;        // (nsimplices, ndim)
-    CArray3D<double, 0, NDIM, NDIM>  invT_;      // (nsimplices, ndim, ndim)
+    ndspan::CArray2D<double, 0, NDIM>        points_;    // (npoints, ndim)
+    ndspan::CArray2D<int, 0, DIM_SPX>        simplices_; // (nsimplices, ndim+1)
+    ndspan::CArray2D<int, 0, DIM_SPX>        neighbors_; // (nsimplices, ndim+1), -1 = boundary
+    ndspan::CArray2D<double, 0, NDIM>        v0_;        // (nsimplices, ndim)
+    ndspan::CArray3D<double, 0, NDIM, NDIM>  invT_;      // (nsimplices, ndim, ndim)
 
 };
 
@@ -105,7 +104,7 @@ TriView's per thread.
 template<size_t NDIM>
 class TriView{
 public:
-    TriView(std::shared_ptr<DelaunayTri<NDIM>> tri) : mat_scratch_(CArray2D<double, NDIM, NDIM>(tri->ndim(), tri->ndim())), tri_(std::move(tri)) {}
+    TriView(std::shared_ptr<DelaunayTri<NDIM>> tri) : mat_scratch_(ndspan::CArray2D<double, NDIM, NDIM>(tri->ndim(), tri->ndim())), tri_(std::move(tri)) {}
 
     const std::shared_ptr<DelaunayTri<NDIM>>& operator->() const {
         return tri_;
@@ -159,7 +158,7 @@ private:
         return simplex;
     }
 
-    worker_t<CArray2D<double, NDIM, NDIM>> mat_scratch_;
+    worker_t<ndspan::CArray2D<double, NDIM, NDIM>> mat_scratch_;
     std::shared_ptr<DelaunayTri<NDIM>> tri_;
     mutable int cached_simplex_ = -1;
 };

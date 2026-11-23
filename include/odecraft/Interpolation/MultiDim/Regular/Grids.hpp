@@ -4,14 +4,13 @@
 
 namespace ode::interp::rgi{
 
-using namespace ndspan;
 
 template<typename T, int NDIM>
 class RegularGrid{
 
     static_assert(NDIM >= 0, "NDIM must be non-negative");
 
-    static constexpr Allocation ALLOC = (NDIM == 0 ? Allocation::Heap : Allocation::Stack);
+    static constexpr ndspan::Allocation ALLOC = (NDIM == 0 ? ndspan::Allocation::Heap : ndspan::Allocation::Stack);
 
 public:
 
@@ -27,7 +26,7 @@ public:
 
     T                   length(int axis) const;
 
-    const Array1D<T, 0>&   x(int i) const;
+    const ndspan::Array1D<T, 0>&   x(int i) const;
 
     bool                contains(const T& x, int axis) const;
 
@@ -41,7 +40,7 @@ public:
 
 private:
 
-    std::vector<Array1D<T, 0>> data_;
+    std::vector<ndspan::Array1D<T, 0>> data_;
     std::vector<int> shape_;
 };
 

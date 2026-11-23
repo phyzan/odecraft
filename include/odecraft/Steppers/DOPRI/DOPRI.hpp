@@ -70,7 +70,7 @@ template<typename T, typename SD, size_t NS, size_t ORD, size_t... k>
 void rk_interp_matrix(
     std::array<state_t<T, SD>, ORD>& coef_mat, // mat[i][j] = j-th elem of i-th state
     const std::array<state_t<T, SD>, NS+1>& K,
-    const CArray2D<T, NS+1, ORD>& P,
+    const ndspan::CArray2D<T, NS+1, ORD>& P,
     std::index_sequence<k...>);
 
 /// @brief Shared step-size control loop: repeatedly calls step_fn(t_new, q_new, t, h, q) -> err_norm,

@@ -56,11 +56,11 @@ protected:
 
 private:
 
-    using Atype = CArray2D<T, Nstages, Nstages>;
-    using Btype = Array1D<T, Nstages>;
-    using Ctype = Array1D<T, Nstages>;
-    using Etype = Array1D<T, Nstages+1>;
-    using Ptype = CArray2D<T, Nstages+1, INTERP_ORDER>;
+    using Atype = ndspan::CArray2D<T, Nstages, Nstages>;
+    using Btype = ndspan::Array1D<T, Nstages>;
+    using Ctype = ndspan::Array1D<T, Nstages>;
+    using Etype = ndspan::Array1D<T, Nstages+1>;
+    using Ptype = ndspan::CArray2D<T, Nstages+1, INTERP_ORDER>;
 
     static constexpr Atype Amatrix();
     static constexpr Btype Bmatrix();

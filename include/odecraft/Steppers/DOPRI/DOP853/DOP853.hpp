@@ -18,11 +18,11 @@ struct DOP_COEFS{
     static constexpr size_t INTERP_ORDER = 7;
     static constexpr int ERR_EST_ORDER = 7;
 
-    using DOP_A = CArray2D<T, N_STAGES_EXT, N_STAGES_EXT>;
-    using DOP_B = Array1D<T, N_STAGES>;
-    using DOP_C = Array1D<T, N_STAGES_EXT>;
-    using DOP_D = CArray2D<T, INTERP_ORDER - 3, N_STAGES_EXT>;
-    using DOP_E = Array1D<T, N_STAGES+1>;
+    using DOP_A = ndspan::CArray2D<T, N_STAGES_EXT, N_STAGES_EXT>;
+    using DOP_B = ndspan::Array1D<T, N_STAGES>;
+    using DOP_C = ndspan::Array1D<T, N_STAGES_EXT>;
+    using DOP_D = ndspan::CArray2D<T, INTERP_ORDER - 3, N_STAGES_EXT>;
+    using DOP_E = ndspan::Array1D<T, N_STAGES+1>;
 
     static constexpr DOP_A make_A();
 

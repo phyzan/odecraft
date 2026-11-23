@@ -30,7 +30,7 @@ struct NewtConv{
 
 // The matrices of change_D, at their largest size: an order uses their leading (order+1) x (order+1) block
 template<typename T>
-using BDFMatrix = FArray2D<T, BDF_MAX_ORDER+1, BDF_MAX_ORDER+1>;
+using BDFMatrix = ndspan::FArray2D<T, BDF_MAX_ORDER+1, BDF_MAX_ORDER+1>;
 
 template<typename T>
 void compute_R(BDFMatrix<T>& R, size_t order, const T& factor);

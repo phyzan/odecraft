@@ -39,7 +39,7 @@ template<typename T, typename SD, size_t NS, size_t ORD, size_t... k>
 void rk_interp_matrix(
     std::array<state_t<T, SD>, ORD>& coef_mat,
     const std::array<state_t<T, SD>, NS+1>& K,
-    const CArray2D<T, NS+1, ORD>& P,
+    const ndspan::CArray2D<T, NS+1, ORD>& P,
     std::index_sequence<k...>){
 
     // One pass per coefficient, which sums in a register rather than through coef_mat[j]

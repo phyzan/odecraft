@@ -19,12 +19,12 @@ DelaunayTri<NDIM>::DelaunayTri(const double* points, size_t n_points, size_t ndi
     v0_.resize(nsimplices(), nd);
     invT_.resize(nsimplices(), nd, nd);
 
-    constexpr Allocation Alloc = (NDIM == 0 ? Allocation::Heap : Allocation::Stack);
-    CArray2D<double, NDIM, NDIM, Alloc> A(nd, nd);
-    CArray2D<double, NDIM, NDIM, Alloc> lu(nd, nd);
+    constexpr ndspan::Allocation Alloc = (NDIM == 0 ? ndspan::Allocation::Heap : ndspan::Allocation::Stack);
+    ndspan::CArray2D<double, NDIM, NDIM, Alloc> A(nd, nd);
+    ndspan::CArray2D<double, NDIM, NDIM, Alloc> lu(nd, nd);
 
-    Array1D<double, NDIM, Alloc> work(nd);
-    Array1D<size_t, NDIM, Alloc> pivot(nd);
+    ndspan::Array1D<double, NDIM, Alloc> work(nd);
+    ndspan::Array1D<size_t, NDIM, Alloc> pivot(nd);
 
     for (int s = 0; s < nsimplices(); ++s) {
         const int* v = get_simplex(s);
@@ -61,17 +61,17 @@ template<size_t NDIM>
 int DelaunayTri<NDIM>::npoints() const { return points_.shape(0); }
 
 template<size_t NDIM>
-const CArray2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_points() const { return points_; }
+const ndspan::CArray2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_points() const { return points_; }
 
 template<size_t NDIM>
-const CArray2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_simplices() const { return simplices_; }
+const ndspan::CArray2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_simplices() const { return simplices_; }
 
-template<size_t NDIM> const CArray2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_neighbors() const { return neighbors_; }
+template<size_t NDIM> const ndspan::CArray2D<int, 0, DelaunayTri<NDIM>::DIM_SPX>& DelaunayTri<NDIM>::get_neighbors() const { return neighbors_; }
 
 template<size_t NDIM>
-const CArray2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_v0() const { return v0_; }
+const ndspan::CArray2D<double, 0, NDIM>& DelaunayTri<NDIM>::get_v0() const { return v0_; }
 
-template<size_t NDIM> const CArray3D<double, 0, NDIM, NDIM>& DelaunayTri<NDIM>::get_invT() const {
+template<size_t NDIM> const ndspan::CArray3D<double, 0, NDIM, NDIM>& DelaunayTri<NDIM>::get_invT() const {
     return invT_; 
 }
 
@@ -115,7 +115,7 @@ int DelaunayTri<NDIM>::find_simplex(const double* point, const int cached_simple
     }
 
 
-    Array1D<double, DIM_SPX, SPX_ALLOC> bary(nd + 1);
+    ndspan::Array1D<double, DIM_SPX, SPX_ALLOC> bary(nd + 1);
 
     // Walking algorithm: start from cached simplex and walk towards the point
     int s = (cached_simplex >= 0 && cached_simplex < num_simplices) ? cached_simplex : 0;
@@ -204,8 +204,8 @@ bool DelaunayTri<NDIM>::compute_barycentric(double* out, int simplex_idx, const 
 
     int nd = ndim();
 
-    constexpr Allocation Alloc = (NDIM == 0 ? Allocation::Heap : Allocation::Stack);
-    Array1D<double, NDIM, Alloc> y(nd);
+    constexpr ndspan::Allocation Alloc = (NDIM == 0 ? ndspan::Allocation::Heap : ndspan::Allocation::Stack);
+    ndspan::Array1D<double, NDIM, Alloc> y(nd);
     for (int i = 0; i < nd; ++i){
         y[i] = point[i] - v0[i];
     }
@@ -241,11 +241,11 @@ int DelaunayTri<NDIM>::interpolate(double* out, const double* point, const doubl
     
 
     int nd = int(ndim());
-    Array1D<double, DIM_SPX, SPX_ALLOC> bary(nd + 1);
+    ndspan::Array1D<double, DIM_SPX, SPX_ALLOC> bary(nd + 1);
     compute_barycentric(bary.data(), simplex_idx, point);
     const int* vertices = get_simplex(simplex_idx);
 
-    View<const double, Layout::C, 0, 0> field_view(field, npoints(), n_fields);
+    ndspan::View<const double, ndspan::Layout::C, 0, 0> field_view(field, npoints(), n_fields);
     std::fill(out, out + n_fields, 0.0);
     for (int i=0; i <= ndim(); ++i){
         for (int f = 0; f < n_fields; ++f) {
@@ -264,7 +264,7 @@ double DelaunayTri<NDIM>::get_value(const double* point, const double* field, in
 }
 
 template<size_t NDIM>
-double DelaunayTri<NDIM>::volume(int simplex_idx, CArray2D<double, NDIM, NDIM>& worker) const {
+double DelaunayTri<NDIM>::volume(int simplex_idx, ndspan::CArray2D<double, NDIM, NDIM>& worker) const {
     // |det E| / nd!, E holding the edges from v0, the last vertex, to the others. From the vertices
     // rather than from invT: Qhull may keep flat simplices, whose invT is not finite but whose
     // volume is 0
@@ -301,7 +301,7 @@ double DelaunayTri<NDIM>::volume(int simplex_idx, CArray2D<double, NDIM, NDIM>& 
 }
 
 template<size_t NDIM>
-double DelaunayTri<NDIM>::total_volume(CArray2D<double, NDIM, NDIM>& worker) const{
+double DelaunayTri<NDIM>::total_volume(ndspan::CArray2D<double, NDIM, NDIM>& worker) const{
     double sum = 0;
     int n = this->nsimplices();
     for (int i=0; i<n; i++){
@@ -347,7 +347,7 @@ void DelaunayTri<NDIM>::compute_delaunay_nd() {
     int n = int(ndim());
     int num_points = npoints();
 
-    const CArray2D<double, 0, NDIM>& coords = get_points();
+    const ndspan::CArray2D<double, 0, NDIM>& coords = get_points();
 
     // Initialize Qhull
     qhT qh_qh;
@@ -402,7 +402,7 @@ void DelaunayTri<NDIM>::compute_delaunay_nd() {
     }
 
     int num_simplices = int(facet_list.size());
-    simplices_ = CArray2D<int, 0, DIM_SPX>(simplex_array.data(), num_simplices, n + 1);
+    simplices_ = ndspan::CArray2D<int, 0, DIM_SPX>(simplex_array.data(), num_simplices, n + 1);
 
     // Second pass: extract neighbors
     neighbors_.resize(num_simplices, n + 1);
@@ -448,7 +448,7 @@ void DelaunayTri<NDIM>::compute_delaunay() {
 
 
 template<size_t NDIM>
-void DelaunayTri<NDIM>::set_state(const CView2D<const double, 0, NDIM>& points, const CView2D<const int, 0, DIM_SPX>& simplices, const CView2D<const int, 0, DIM_SPX>& neighbors, const CView2D<const double, 0, NDIM>& v0, const CView3D<const double, 0, NDIM, NDIM>& invT){
+void DelaunayTri<NDIM>::set_state(const ndspan::CView2D<const double, 0, NDIM>& points, const ndspan::CView2D<const int, 0, DIM_SPX>& simplices, const ndspan::CView2D<const int, 0, DIM_SPX>& neighbors, const ndspan::CView2D<const double, 0, NDIM>& v0, const ndspan::CView3D<const double, 0, NDIM, NDIM>& invT){
     points_.resize(points.shape(), points.ndim());
     std::copy(points.data(), points.data() + points.size(), points_.data());
 
