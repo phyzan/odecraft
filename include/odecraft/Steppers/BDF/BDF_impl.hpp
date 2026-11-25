@@ -82,6 +82,8 @@ BDF<T, SD, OdeType, SP, Derived>::BDF(OdeType ode, T t0, State q0, RealState rto
         D.fill(q0);
     }
 
+    const T epsilon = std::numeric_limits<T>::epsilon();
+
     // The Newton tolerance follows the tightest relative tolerance, where a zero one counts as 100 eps
     const T rtol_floor = 100*std::numeric_limits<T>::epsilon();
     T rtol_min = inf<T>();
@@ -100,7 +102,7 @@ BDF<T, SD, OdeType, SP, Derived>::BDF(OdeType ode, T t0, State q0, RealState rto
         this->cerr(GetStr("Warning: rtol=0 not allowed in the BDF method. Setting rtol = ", rtol_floor));
     }
 #endif
-    newton_tol_ = ndspan::max<T>(10 * std::numeric_limits<T>::epsilon() / rtol_min, ndspan::min<T>(T(3)/100, pow(rtol_min, T(1)/T(2))));
+    newton_tol_ = std::max<T>(10*epsilon/rtol_min, std::min<T>(T(3)/100, pow(rtol_min, T(1)/2)));
 
     if (this->is_running()){
         if (BDF::ValidateICs(t0, q0)){
@@ -289,7 +291,7 @@ StepResult BDF<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_out, T& habs_out, S
         }, scale, work, atol, rtol, y_new, d);
         error_norm = rms_norm<SD, T>(work, scale);
         if (error_norm > 1){
-            factor = ndspan::max<T>(this->min_factor(), safety * pow(error_norm, T(-1)/(order_+1)));
+            factor = std::max<T>(this->min_factor(), safety * pow(error_norm, T(-1)/(order_+1)));
             habs *= factor;
             this->change_D(factor);
         } else {
@@ -351,7 +353,7 @@ StepResult BDF<T, SD, OdeType, SP, Derived>::adapt_impl(T& t_out, T& habs_out, S
     }
 
     order_ += delta_order;
-    factor = ndspan::min<T>(this->max_factor(), safety * best_factor);
+    factor = std::min<T>(this->max_factor(), safety * best_factor);
     habs *= factor;
     this->change_D(factor);
     valid_LU_ = false;

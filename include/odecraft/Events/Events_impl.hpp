@@ -317,7 +317,7 @@ std::vector<EventOptions> EventCollection<T, State>::validate_events(const std::
             if (option.name == this->event(i).name()){
                 found = true;
                 res[i] = option;
-                res[i].max_events = ndspan::max(option.max_events, -1);
+                res[i].max_events = std::max(option.max_events, -1);
                 break;
             }
         }

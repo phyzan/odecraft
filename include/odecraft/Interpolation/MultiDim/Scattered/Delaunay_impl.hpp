@@ -105,8 +105,8 @@ int DelaunayTri<NDIM>::find_simplex(const double* point, const int cached_simple
             const int* v = get_simplex(sidx);
             const double x0 = points_(v[0], 0);
             const double x1 = points_(v[1], 0);
-            const double xmin = ndspan::min<double>(x0, x1);
-            const double xmax = ndspan::max<double>(x0, x1);
+            const double xmin = std::min(x0, x1);
+            const double xmax = std::max(x0, x1);
             if (x >= xmin - EPS && x <= xmax + EPS) {
                 return sidx;
             }

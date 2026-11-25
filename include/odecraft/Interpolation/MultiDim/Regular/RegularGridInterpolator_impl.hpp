@@ -457,8 +457,8 @@ std::vector<ndspan::CArray2D<double, NDIM, 0>> RegularVectorField<NDIM, AS_VIRTU
     auto shell_level = [&N, this](const ndspan::Array1D<int, NDIM, InterpBase::ALLOC>& idx) -> int {
         int min_dist = std::numeric_limits<int>::max();
         for (int d = 0; d < this->ndim(); d++) {
-            int dist = ndspan::min<int>(int(idx[d]), N[d] - 1 - idx[d]);
-            min_dist = ndspan::min<int>(min_dist, dist);
+            int dist = std::min<int>(idx[d], N[d] - 1 - idx[d]);
+            min_dist = std::min<int>(min_dist, dist);
         }
         return min_dist;
     };

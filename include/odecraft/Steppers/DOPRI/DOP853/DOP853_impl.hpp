@@ -427,7 +427,9 @@ T dop853_error_norm(const std::array<state_t<T, SD>, DOP_COEFS<T>::N_STAGES_EXT>
     // E3 and E5 vanish but for the stages 0 and 5..11
     [&]<size_t... k>(std::index_sequence<k...>){
         SD::for_each([&](const S& q_j, const S& q_new_j, const T& rtol_j, const T& atol_j, const auto&... K_kj){
-            const T scale = atol_j + rtol_j * ndspan::max<T>(abs(q_j), abs(q_new_j));
+            const auto abs_qj = abs(q_j);
+            const auto abs_qj_new = abs(q_new_j);
+            const T scale = atol_j + rtol_j * std::max(abs_qj, abs_qj_new);
             const S err5 = (S(0) + ... + (K_kj * E5[k])) / scale;
             const S err3 = (S(0) + ... + (K_kj * E3[k])) / scale;
             err5_norm_2 += SD::norm_sqr(err5);

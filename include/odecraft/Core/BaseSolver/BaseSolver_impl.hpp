@@ -225,11 +225,11 @@ T BaseSolver<Derived, T, SD, OdeType, SP>::auto_step(const T& t, const State& q)
     
     d2 = rms_norm<SD, T>(tmp, scale) / h0;
     if (d1 <= 1e-15 && d2 <= 1e-15){
-        h1 = ndspan::max<T>(T(1)/1e6, h0/1e3);
+        h1 = std::max<T>(T(1e-6), h0*1e-3);
     }else{
-        h1 = pow(100*ndspan::max<T>(d1, d2), -T(1)/T(ERR_EST_ORDER+1));
+        h1 = pow(100*std::max(d1, d2), T(-1)/T(ERR_EST_ORDER+1));
     }
-    return ndspan::max<T>(ndspan::min_of_pack<T>(T(100*h0), h1, this->max_step()), this->min_step());
+    return std::clamp<T>(std::min<T>(100*h0, h1), min_step(), max_step());
 }
 
 template<typename Derived, typename T, typename SD, typename OdeType, SolverPolicy SP>
